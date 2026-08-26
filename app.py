@@ -591,26 +591,271 @@ st.markdown(
     }}
 
     /* ======================================================
-       MOBILE
+       MOBILE / RESPONSIVE
        ====================================================== */
 
     @media
     (max-width: 850px) {{
 
+        /* Pagina più compatta su smartphone */
+        .block-container {{
+            max-width: 100% !important;
+            padding-top: 0.10rem !important;
+            padding-bottom: 0.8rem !important;
+            padding-left: 0.55rem !important;
+            padding-right: 0.55rem !important;
+        }}
+
+        /* Header */
+        .fanta-header {{
+            padding: 9px 10px !important;
+            border-radius: 0 0 10px 10px !important;
+            margin-bottom: 5px !important;
+        }}
+
+        .fanta-brand {{
+            gap: 8px !important;
+        }}
+
+        .fanta-logo {{
+            width: 38px !important;
+            height: 38px !important;
+            min-width: 38px !important;
+            font-size: 21px !important;
+            border-radius: 10px !important;
+        }}
+
         .fanta-brand-title {{
-            font-size: 24px;
+            font-size: 19px !important;
+            line-height: 1.05 !important;
+        }}
+
+        .fanta-brand-subtitle {{
+            font-size: 10px !important;
+            margin-top: 2px !important;
+        }}
+
+        /* Navigazione e pulsanti */
+        .stButton > button,
+        .stDownloadButton > button {{
+            min-height: 46px !important;
+            height: auto !important;
+            padding: 0.35rem 0.5rem !important;
+            font-size: 12px !important;
+            line-height: 1.15 !important;
+            border-radius: 8px !important;
+            white-space: normal !important;
+        }}
+
+        div[data-testid="stHorizontalBlock"] {{
+            gap: 0.35rem !important;
+        }}
+
+        /* Tabs scorrevoli orizzontalmente */
+        div[data-baseweb="tab-list"] {{
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            white-space: nowrap !important;
+            flex-wrap: nowrap !important;
+            scrollbar-width: thin;
+        }}
+
+        button[data-baseweb="tab"] {{
+            min-width: max-content !important;
+            padding-left: 0.7rem !important;
+            padding-right: 0.7rem !important;
+            font-size: 12px !important;
+        }}
+
+        /* Metriche */
+        div[data-testid="stMetric"] {{
+            min-height: 62px !important;
+            padding: 6px 8px !important;
+        }}
+
+        div[data-testid="stMetricLabel"] {{
+            font-size: 11px !important;
+        }}
+
+        div[data-testid="stMetricValue"] {{
+            font-size: 17px !important;
+        }}
+
+        /* Titoli e testi */
+        h1 {{
+            font-size: 1.45rem !important;
+        }}
+
+        h2 {{
+            font-size: 1.25rem !important;
+        }}
+
+        h3 {{
+            font-size: 1.08rem !important;
+        }}
+
+        h4 {{
+            font-size: 0.98rem !important;
+        }}
+
+        p,
+        label,
+        .stMarkdown {{
+            line-height: 1.25 !important;
+        }}
+
+        /* Input */
+        div[data-baseweb="select"] > div,
+        input,
+        textarea {{
+            font-size: 16px !important;
+        }}
+
+        div[data-testid="stNumberInput"] input,
+        div[data-testid="stTextInput"] input {{
+            min-height: 42px !important;
+        }}
+
+        /* Tabelle/Dataframe: manteniamo tutti i dati,
+           ma consentiamo lo scorrimento orizzontale */
+        div[data-testid="stDataFrame"],
+        div[data-testid="stTable"] {{
+            overflow-x: auto !important;
+            max-width: 100% !important;
+        }}
+
+        div[data-testid="stDataFrame"] * {{
+            font-size: 11px !important;
+        }}
+
+        /* Schede e box */
+        .empty-card {{
+            padding: 18px 10px !important;
+        }}
+
+        .operation-info {{
+            min-height: 46px !important;
+            font-size: 10px !important;
+        }}
+
+        /* ==================================================
+           CAMPO MANTRA MOBILE
+           ================================================== */
+
+        .module-card {{
+            padding: 5px !important;
+            margin-bottom: 6px !important;
+        }}
+
+        .module-title,
+        .module-card-title {{
+            font-size: 16px !important;
+        }}
+
+        .module-summary,
+        .module-card-summary {{
+            font-size: 9px !important;
         }}
 
         .pitch {{
-            min-height: auto;
+            min-height: auto !important;
+            height: auto !important;
+            padding: 12px 5px !important;
+            border-width: 2px !important;
+        }}
+
+        .pitch:after {{
+            width: 54px !important;
+            height: 54px !important;
         }}
 
         .pitch-line {{
-            flex-wrap: wrap;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+            margin: 18px 0 !important;
+            justify-content: center !important;
         }}
 
         .player-slot {{
-            min-width: 130px;
+            min-width: 112px !important;
+            max-width: 155px !important;
+            flex: 1 1 112px !important;
+            padding: 6px 5px !important;
+            border-radius: 6px !important;
+        }}
+
+        .slot-code {{
+            font-size: 11px !important;
+            gap: 4px !important;
+            margin-bottom: 4px !important;
+        }}
+
+        .slot-coverage {{
+            font-size: 10px !important;
+        }}
+
+        .player-list {{
+            gap: 3px !important;
+        }}
+
+        .player-name {{
+            font-size: 11px !important;
+            line-height: 1.18 !important;
+            padding: 4px 5px !important;
+        }}
+
+        .slot-empty {{
+            font-size: 9px !important;
+            padding: 2px 5px !important;
+        }}
+
+        /* Dialog più adatti allo smartphone */
+        div[data-testid="stDialog"] > div {{
+            width: calc(100vw - 1rem) !important;
+            max-width: calc(100vw - 1rem) !important;
+        }}
+
+        /* File uploader */
+        section[data-testid="stFileUploaderDropzone"] {{
+            padding: 0.7rem !important;
+        }}
+
+        /* Footer */
+        .fanta-footer {{
+            padding: 8px 10px !important;
+            font-size: 9px !important;
+        }}
+    }}
+
+    @media
+    (max-width: 480px) {{
+
+        .fanta-brand-title {{
+            font-size: 17px !important;
+        }}
+
+        .fanta-brand-subtitle {{
+            font-size: 9px !important;
+        }}
+
+        .stButton > button,
+        .stDownloadButton > button {{
+            font-size: 11px !important;
+            min-height: 44px !important;
+        }}
+
+        .player-slot {{
+            min-width: 102px !important;
+            max-width: 145px !important;
+            flex-basis: 102px !important;
+        }}
+
+        .player-name {{
+            font-size: 10.5px !important;
+        }}
+
+        .pitch-line {{
+            margin: 15px 0 !important;
         }}
     }}
 
