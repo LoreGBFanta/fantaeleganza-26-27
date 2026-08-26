@@ -1017,6 +1017,89 @@ st.markdown(
             max-width: calc(100vw - 1rem) !important;
         }}
 
+        /* Popup/dialog mobile: sfondo chiaro e testo sempre leggibile */
+        div[data-testid="stDialog"],
+        div[data-testid="stDialog"] > div,
+        div[data-testid="stDialog"] section,
+        div[role="dialog"],
+        div[role="dialog"] > div {{
+            background: #ffffff !important;
+            color: #0f172a !important;
+        }}
+
+        div[data-testid="stDialog"] *,
+        div[role="dialog"] * {{
+            color: #0f172a !important;
+        }}
+
+        /* Titoli, testi, warning, info nei popup */
+        div[data-testid="stDialog"] h1,
+        div[data-testid="stDialog"] h2,
+        div[data-testid="stDialog"] h3,
+        div[data-testid="stDialog"] h4,
+        div[data-testid="stDialog"] p,
+        div[data-testid="stDialog"] label,
+        div[role="dialog"] h1,
+        div[role="dialog"] h2,
+        div[role="dialog"] h3,
+        div[role="dialog"] h4,
+        div[role="dialog"] p,
+        div[role="dialog"] label {{
+            color: #0f172a !important;
+        }}
+
+        /* Checkbox nei popup */
+        div[data-testid="stDialog"] input[type="checkbox"],
+        div[role="dialog"] input[type="checkbox"] {{
+            accent-color: #071a2f !important;
+        }}
+
+        /* Pulsanti popup normali */
+        div[data-testid="stDialog"] .stButton > button,
+        div[role="dialog"] .stButton > button {{
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #cbd5e1 !important;
+        }}
+
+        div[data-testid="stDialog"] .stButton > button *,
+        div[role="dialog"] .stButton > button * {{
+            color: inherit !important;
+        }}
+
+        /* Pulsante principale/conferma del popup */
+        div[data-testid="stDialog"] button[data-testid="stBaseButton-primary"],
+        div[role="dialog"] button[data-testid="stBaseButton-primary"] {{
+            background: #071a2f !important;
+            color: #ffffff !important;
+            border-color: #071a2f !important;
+        }}
+
+        div[data-testid="stDialog"] button[data-testid="stBaseButton-primary"] *,
+        div[role="dialog"] button[data-testid="stBaseButton-primary"] * {{
+            color: #ffffff !important;
+        }}
+
+        /* Warning/error/info interni al popup */
+        div[data-testid="stDialog"] div[data-testid="stAlert"],
+        div[role="dialog"] div[data-testid="stAlert"] {{
+            background: #f8fafc !important;
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+        }}
+
+        div[data-testid="stDialog"] div[data-testid="stAlert"] *,
+        div[role="dialog"] div[data-testid="stAlert"] * {{
+            color: #0f172a !important;
+        }}
+
+        /* Icona X chiusura dialog */
+        div[data-testid="stDialog"] button[aria-label="Close"],
+        div[role="dialog"] button[aria-label="Close"] {{
+            color: #0f172a !important;
+            background: #ffffff !important;
+        }}
+
         /* File uploader */
         section[data-testid="stFileUploaderDropzone"] {{
             padding: 0.7rem !important;
