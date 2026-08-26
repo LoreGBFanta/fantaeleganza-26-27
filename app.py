@@ -4,7 +4,6 @@ import io
 import json
 import os
 import sqlite3
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -1711,29 +1710,13 @@ def crea_backup_logico_bytes():
 # DATABASE
 # ============================================================
 
-@st.cache_resource(
-    show_spinner=False
-)
-def _crea_connessione_turso(
-    session_uid,
-    database_url,
-    auth_token
-):
-
-    import libsql
-
-    return libsql.connect(
-        database=database_url,
-        auth_token=auth_token
-    )
-
-
 def get_connection():
 
     if USA_DATABASE_CLOUD:
 
         try:
-            import libsql  # noqa: F401
+
+            import libsql
 
         except ImportError as errore:
 
@@ -1742,21 +1725,30 @@ def get_connection():
                 "Installa le dipendenze da requirements.txt."
             ) from errore
 
-        if "_db_session_uid" not in st.session_state:
+        # Riutilizza la stessa connessione durante tutta la sessione.
+        # Evita handshake/connessioni remote ripetute a ogni operazione.
+        chiave = "_turso_connessione"
 
-            st.session_state[
-                "_db_session_uid"
-            ] = str(
-                uuid.uuid4()
+        conn = st.session_state.get(
+            chiave
+        )
+
+        if conn is None:
+
+            conn = libsql.connect(
+                database=(
+                    TURSO_DATABASE_URL
+                ),
+                auth_token=(
+                    TURSO_AUTH_TOKEN
+                )
             )
 
-        return _crea_connessione_turso(
             st.session_state[
-                "_db_session_uid"
-            ],
-            TURSO_DATABASE_URL,
-            TURSO_AUTH_TOKEN
-        )
+                chiave
+            ] = conn
+
+        return conn
 
     return sqlite3.connect(
         DB_PATH
@@ -1767,17 +1759,18 @@ def chiudi_connessione(
     conn
 ):
 
-    # La connessione Cloud resta aperta e viene riutilizzata
-    # per tutta la sessione grazie a st.cache_resource.
+    # In Cloud la connessione viene mantenuta viva per la sessione.
+    # In locale continuiamo a chiuderla normalmente.
     if USA_DATABASE_CLOUD:
         return
 
     try:
-        conn.close()
+        chiudi_connessione(conn)
     except Exception:
         pass
 
 
+@st.cache_resource(show_spinner=False)
 def inizializza_database():
 
     conn = get_connection()
@@ -3753,647 +3746,6 @@ with st.expander(
 
 
 # ============================================================
-# FRAGMENT PRESTAZIONI ASTA / ROSA
-# ============================================================
-
-@st.fragment
-def render_asta_fragment():
-
-    # Il click sui controlli ASTA riesegue solo questa sezione,
-    # non l'intera applicazione.
-    df_corrente_fragment = (
-        carica_tutti_giocatori()
-    )
-
-    df_rosa_fragment = (
-        df_corrente_fragment[
-            df_corrente_fragment[
-                "Stato"
-            ]
-            == "MIO"
-        ]
-        .copy()
-    )
-
-    valore_attivi_fragment = round(
-        float(
-            pd.to_numeric(
-                df_rosa_fragment[
-                    "Prezzo"
-                ],
-                errors="coerce"
-            )
-            .fillna(0)
-            .sum()
-        ),
-        2
-    )
-
-    costi_svincoli_fragment = (
-        calcola_costi_svincoli()
-    )
-
-    valore_acquisti_fragment = round(
-        valore_attivi_fragment
-        + costi_svincoli_fragment,
-        2
-    )
-
-    spesa_effettiva_fragment = (
-        calcola_spesa_effettiva(
-            valore_acquisti_fragment
-        )
-    )
-
-
-    st.subheader(
-        "🔨 Asta"
-    )
-
-    df = (
-        carica_tutti_giocatori()
-    )
-
-    if df.empty:
-
-        st.info(
-            "Prima devi caricare il listone."
-        )
-
-    else:
-
-        tab1, tab2 = st.tabs(
-            [
-                "🟢 Disponibili",
-                "🔴 Venduti agli avversari"
-            ]
-        )
-
-        # ----------------------------------------------------
-        # DISPONIBILI
-        # ----------------------------------------------------
-
-        with tab1:
-
-            disponibili = (
-                df[
-                    df[
-                        "Stato"
-                    ]
-                    == "DISPONIBILE"
-                ]
-                .copy()
-            )
-
-            ricerca = st.text_input(
-                "🔎 Cerca giocatore o squadra",
-                key="search_asta"
-            )
-
-            if ricerca:
-
-                testo = (
-                    ricerca
-                    .lower()
-                    .strip()
-                )
-
-                disponibili = (
-                    disponibili[
-                        (
-                            disponibili[
-                                "Nome"
-                            ]
-                            .astype(str)
-                            .str.lower()
-                            .str.contains(
-                                testo,
-                                na=False
-                            )
-                        )
-                        |
-                        (
-                            disponibili[
-                                "Squadra"
-                            ]
-                            .astype(str)
-                            .str.lower()
-                            .str.contains(
-                                testo,
-                                na=False
-                            )
-                        )
-                    ]
-                )
-
-            disponibili = (
-                disponibili
-                .sort_values(
-                    "Nome"
-                )
-                .reset_index(
-                    drop=True
-                )
-            )
-
-            if disponibili.empty:
-
-                st.info(
-                    "Nessun giocatore disponibile."
-                )
-
-            else:
-
-                opzioni = (
-                    disponibili
-                    .apply(
-                        lambda r:
-                        f"{r['Nome']} — "
-                        f"{r['Squadra']} — "
-                        f"{r['RM']}",
-                        axis=1
-                    )
-                    .tolist()
-                )
-
-                scelta = (
-                    st.selectbox(
-                        "Giocatore",
-                        opzioni
-                    )
-                )
-
-                giocatore = (
-                    disponibili.iloc[
-                        opzioni.index(
-                            scelta
-                        )
-                    ]
-                )
-
-                g1, g2, g3, g4 = (
-                    st.columns(4)
-                )
-
-                g1.metric(
-                    "Giocatore",
-                    giocatore[
-                        "Nome"
-                    ]
-                )
-
-                g2.metric(
-                    "Squadra",
-                    giocatore[
-                        "Squadra"
-                    ]
-                )
-
-                g3.metric(
-                    "Ruolo",
-                    giocatore[
-                        "RM"
-                    ]
-                )
-
-                g4.metric(
-                    "FVM",
-                    giocatore[
-                        "FVM"
-                    ]
-                )
-
-                prezzo = (
-                    st.number_input(
-                        "Prezzo di acquisto",
-                        min_value=0.10,
-                        max_value=5000.00,
-                        value=1.00,
-                        step=0.10,
-                        format="%.2f"
-                    )
-                )
-
-                prezzo = round(
-                    float(
-                        prezzo
-                    ),
-                    2
-                )
-
-                nuovo_valore = round(
-                    valore_acquisti_fragment
-                    + prezzo,
-                    2
-                )
-
-                nuova_spesa = (
-                    calcola_spesa_effettiva_fragment(
-                        nuovo_valore
-                    )
-                )
-
-                incremento = round(
-                    nuova_spesa
-                    - spesa_effettiva_fragment,
-                    2
-                )
-
-                p1, p2, p3 = (
-                    st.columns(3)
-                )
-
-                p1.metric(
-                    "Prezzo",
-                    f"{formatta_crediti(prezzo)} €"
-                )
-
-                p2.metric(
-                    "Impatto effettivo",
-                    f"{formatta_crediti(incremento)} €"
-                )
-
-                p3.metric(
-                    "Nuova spesa",
-                    f"{formatta_crediti(nuova_spesa)} €"
-                )
-
-                valido, motivo = (
-                    verifica_acquisto_regole(
-                        df_rosa_fragment,
-                        giocatore[
-                            "RM"
-                        ]
-                    )
-                )
-
-                if not valido:
-
-                    st.error(
-                        "⛔ " + motivo
-                    )
-
-                a1, a2 = (
-                    st.columns(2)
-                )
-
-                with a1:
-
-                    if st.button(
-                        "✅ ACQUISTA",
-                        use_container_width=True,
-                        type="primary",
-                        disabled=(
-                            not valido
-                        ),
-                        key="btn_acquista"
-                    ):
-
-                        esegui_operazione(
-                            int(
-                                giocatore[
-                                    "Id"
-                                ]
-                            ),
-                            "ACQUISTO",
-                            "MIO",
-                            prezzo,
-                            0
-                        )
-
-                        st.rerun()
-
-                with a2:
-
-                    if st.button(
-                        "🔴 VENDUTO AD AVVERSARIO",
-                        use_container_width=True,
-                        key="btn_avversario"
-                    ):
-
-                        esegui_operazione(
-                            int(
-                                giocatore[
-                                    "Id"
-                                ]
-                            ),
-                            "VENDUTO AVVERSARIO",
-                            "AVVERSARIO",
-                            None,
-                            0
-                        )
-
-                        st.rerun()
-
-        # ----------------------------------------------------
-        # AVVERSARI
-        # ----------------------------------------------------
-
-        with tab2:
-
-            avversari = (
-                df[
-                    df[
-                        "Stato"
-                    ]
-                    == "AVVERSARIO"
-                ]
-                .copy()
-                .sort_values(
-                    "Nome"
-                )
-            )
-
-            if avversari.empty:
-
-                st.info(
-                    "Nessun giocatore venduto "
-                    "agli avversari."
-                )
-
-            else:
-
-                for _, riga in (
-                    avversari.iterrows()
-                ):
-
-                    cols = (
-                        st.columns(
-                            [
-                                4,
-                                2,
-                                2,
-                                1,
-                                0.7
-                            ]
-                        )
-                    )
-
-                    cols[0].write(
-                        riga[
-                            "Nome"
-                        ]
-                    )
-
-                    cols[1].write(
-                        riga[
-                            "Squadra"
-                        ]
-                    )
-
-                    cols[2].write(
-                        riga[
-                            "RM"
-                        ]
-                    )
-
-                    cols[3].write(
-                        riga[
-                            "FVM"
-                        ]
-                    )
-
-                    with cols[4]:
-
-                        if st.button(
-                            "↩️",
-                            key=(
-                                "ripristina_"
-                                f"{int(riga['Id'])}"
-                            ),
-                            help=(
-                                "Rendi nuovamente "
-                                "disponibile"
-                            )
-                        ):
-
-                            conferma_ripristino_avversario(
-                                int(
-                                    riga[
-                                        "Id"
-                                    ]
-                                ),
-                                riga[
-                                    "Nome"
-                                ]
-                            )
-
-@st.fragment
-def render_rosa_fragment():
-
-    df_corrente_fragment = (
-        carica_tutti_giocatori()
-    )
-
-    df_rosa_fragment = (
-        df_corrente_fragment[
-            df_corrente_fragment[
-                "Stato"
-            ]
-            == "MIO"
-        ]
-        .copy()
-    )
-
-
-    st.subheader(
-        "👕 La mia rosa"
-    )
-
-    df_rosa = (
-        df_rosa_fragment.copy()
-    )
-
-    if df_rosa.empty:
-
-        empty_html = (
-            '<div class="empty-card">'
-            '<div class="empty-icon">👕</div>'
-            '<div class="empty-title">'
-            'La rosa è ancora vuota'
-            '</div>'
-            '<div class="empty-text">'
-            'Vai nella sezione ASTA '
-            'per acquistare i primi giocatori.'
-            '</div>'
-            '</div>'
-        )
-
-        st.markdown(
-            empty_html,
-            unsafe_allow_html=True
-        )
-
-    else:
-
-        df_rosa[
-            "Priorita"
-        ] = (
-            df_rosa[
-                "RM"
-            ]
-            .apply(
-                priorita_ruolo
-            )
-        )
-
-        df_rosa = (
-            df_rosa
-            .sort_values(
-                [
-                    "Priorita",
-                    "Nome"
-                ]
-            )
-            .reset_index(
-                drop=True
-            )
-        )
-
-        intestazione = (
-            st.columns(
-                [
-                    4,
-                    2,
-                    2,
-                    1.2,
-                    1.2,
-                    1.5,
-                    0.7,
-                    0.7
-                ]
-            )
-        )
-
-        titoli = [
-            "Nome",
-            "Squadra",
-            "Ruolo",
-            "Qt.",
-            "FVM",
-            "Prezzo",
-            "🗑️",
-            "🔓"
-        ]
-
-        for col, titolo in zip(
-            intestazione,
-            titoli
-        ):
-
-            col.markdown(
-                f"**{titolo}**"
-            )
-
-        for _, giocatore in (
-            df_rosa.iterrows()
-        ):
-
-            cols = (
-                st.columns(
-                    [
-                        4,
-                        2,
-                        2,
-                        1.2,
-                        1.2,
-                        1.5,
-                        0.7,
-                        0.7
-                    ]
-                )
-            )
-
-            cols[0].write(
-                giocatore[
-                    "Nome"
-                ]
-            )
-
-            cols[1].write(
-                giocatore[
-                    "Squadra"
-                ]
-            )
-
-            cols[2].write(
-                giocatore[
-                    "RM"
-                ]
-            )
-
-            cols[3].write(
-                giocatore[
-                    "Qt.A"
-                ]
-            )
-
-            cols[4].write(
-                giocatore[
-                    "FVM"
-                ]
-            )
-
-            cols[5].write(
-                formatta_crediti(
-                    giocatore[
-                        "Prezzo"
-                    ]
-                )
-            )
-
-            with cols[6]:
-
-                if st.button(
-                    "🗑️",
-                    key=(
-                        "elimina_"
-                        f"{int(giocatore['Id'])}"
-                    ),
-                    help=(
-                        "Annulla acquisto"
-                    )
-                ):
-
-                    conferma_annullamento(
-                        int(
-                            giocatore[
-                                "Id"
-                            ]
-                        ),
-                        giocatore[
-                            "Nome"
-                        ]
-                    )
-
-            with cols[7]:
-
-                if st.button(
-                    "🔓",
-                    key=(
-                        "svincola_"
-                        f"{int(giocatore['Id'])}"
-                    ),
-                    help=(
-                        "Svincola giocatore"
-                    )
-                ):
-
-                    conferma_svincolo(
-                        int(
-                            giocatore[
-                                "Id"
-                            ]
-                        ),
-                        giocatore[
-                            "Nome"
-                        ],
-                        giocatore[
-                            "Prezzo"
-                        ]
-                    )
-
-# ============================================================
 # DASHBOARD
 # ============================================================
 
@@ -4922,7 +4274,377 @@ elif sezione == "LISTONE":
 
 elif sezione == "ASTA":
 
-    render_asta_fragment()
+    st.subheader(
+        "🔨 Asta"
+    )
+
+    df = (
+        df_completo.copy()
+    )
+
+    if df.empty:
+
+        st.info(
+            "Prima devi caricare il listone."
+        )
+
+    else:
+
+        tab1, tab2 = st.tabs(
+            [
+                "🟢 Disponibili",
+                "🔴 Venduti agli avversari"
+            ]
+        )
+
+        # ----------------------------------------------------
+        # DISPONIBILI
+        # ----------------------------------------------------
+
+        with tab1:
+
+            disponibili = (
+                df[
+                    df[
+                        "Stato"
+                    ]
+                    == "DISPONIBILE"
+                ]
+                .copy()
+            )
+
+            ricerca = st.text_input(
+                "🔎 Cerca giocatore o squadra",
+                key="search_asta"
+            )
+
+            if ricerca:
+
+                testo = (
+                    ricerca
+                    .lower()
+                    .strip()
+                )
+
+                disponibili = (
+                    disponibili[
+                        (
+                            disponibili[
+                                "Nome"
+                            ]
+                            .astype(str)
+                            .str.lower()
+                            .str.contains(
+                                testo,
+                                na=False
+                            )
+                        )
+                        |
+                        (
+                            disponibili[
+                                "Squadra"
+                            ]
+                            .astype(str)
+                            .str.lower()
+                            .str.contains(
+                                testo,
+                                na=False
+                            )
+                        )
+                    ]
+                )
+
+            disponibili = (
+                disponibili
+                .sort_values(
+                    "Nome"
+                )
+                .reset_index(
+                    drop=True
+                )
+            )
+
+            if disponibili.empty:
+
+                st.info(
+                    "Nessun giocatore disponibile."
+                )
+
+            else:
+
+                opzioni = (
+                    disponibili
+                    .apply(
+                        lambda r:
+                        f"{r['Nome']} — "
+                        f"{r['Squadra']} — "
+                        f"{r['RM']}",
+                        axis=1
+                    )
+                    .tolist()
+                )
+
+                scelta = (
+                    st.selectbox(
+                        "Giocatore",
+                        opzioni
+                    )
+                )
+
+                giocatore = (
+                    disponibili.iloc[
+                        opzioni.index(
+                            scelta
+                        )
+                    ]
+                )
+
+                g1, g2, g3, g4 = (
+                    st.columns(4)
+                )
+
+                g1.metric(
+                    "Giocatore",
+                    giocatore[
+                        "Nome"
+                    ]
+                )
+
+                g2.metric(
+                    "Squadra",
+                    giocatore[
+                        "Squadra"
+                    ]
+                )
+
+                g3.metric(
+                    "Ruolo",
+                    giocatore[
+                        "RM"
+                    ]
+                )
+
+                g4.metric(
+                    "FVM",
+                    giocatore[
+                        "FVM"
+                    ]
+                )
+
+                prezzo = (
+                    st.number_input(
+                        "Prezzo di acquisto",
+                        min_value=0.10,
+                        max_value=5000.00,
+                        value=1.00,
+                        step=0.10,
+                        format="%.2f"
+                    )
+                )
+
+                prezzo = round(
+                    float(
+                        prezzo
+                    ),
+                    2
+                )
+
+                nuovo_valore = round(
+                    valore_acquisti
+                    + prezzo,
+                    2
+                )
+
+                nuova_spesa = (
+                    calcola_spesa_effettiva(
+                        nuovo_valore
+                    )
+                )
+
+                incremento = round(
+                    nuova_spesa
+                    - spesa_effettiva,
+                    2
+                )
+
+                p1, p2, p3 = (
+                    st.columns(3)
+                )
+
+                p1.metric(
+                    "Prezzo",
+                    f"{formatta_crediti(prezzo)} €"
+                )
+
+                p2.metric(
+                    "Impatto effettivo",
+                    f"{formatta_crediti(incremento)} €"
+                )
+
+                p3.metric(
+                    "Nuova spesa",
+                    f"{formatta_crediti(nuova_spesa)} €"
+                )
+
+                valido, motivo = (
+                    verifica_acquisto_regole(
+                        df_rosa_globale,
+                        giocatore[
+                            "RM"
+                        ]
+                    )
+                )
+
+                if not valido:
+
+                    st.error(
+                        "⛔ " + motivo
+                    )
+
+                a1, a2 = (
+                    st.columns(2)
+                )
+
+                with a1:
+
+                    if st.button(
+                        "✅ ACQUISTA",
+                        use_container_width=True,
+                        type="primary",
+                        disabled=(
+                            not valido
+                        ),
+                        key="btn_acquista"
+                    ):
+
+                        esegui_operazione(
+                            int(
+                                giocatore[
+                                    "Id"
+                                ]
+                            ),
+                            "ACQUISTO",
+                            "MIO",
+                            prezzo,
+                            0
+                        )
+
+                        st.rerun()
+
+                with a2:
+
+                    if st.button(
+                        "🔴 VENDUTO AD AVVERSARIO",
+                        use_container_width=True,
+                        key="btn_avversario"
+                    ):
+
+                        esegui_operazione(
+                            int(
+                                giocatore[
+                                    "Id"
+                                ]
+                            ),
+                            "VENDUTO AVVERSARIO",
+                            "AVVERSARIO",
+                            None,
+                            0
+                        )
+
+                        st.rerun()
+
+        # ----------------------------------------------------
+        # AVVERSARI
+        # ----------------------------------------------------
+
+        with tab2:
+
+            avversari = (
+                df[
+                    df[
+                        "Stato"
+                    ]
+                    == "AVVERSARIO"
+                ]
+                .copy()
+                .sort_values(
+                    "Nome"
+                )
+            )
+
+            if avversari.empty:
+
+                st.info(
+                    "Nessun giocatore venduto "
+                    "agli avversari."
+                )
+
+            else:
+
+                for _, riga in (
+                    avversari.iterrows()
+                ):
+
+                    cols = (
+                        st.columns(
+                            [
+                                4,
+                                2,
+                                2,
+                                1,
+                                0.7
+                            ]
+                        )
+                    )
+
+                    cols[0].write(
+                        riga[
+                            "Nome"
+                        ]
+                    )
+
+                    cols[1].write(
+                        riga[
+                            "Squadra"
+                        ]
+                    )
+
+                    cols[2].write(
+                        riga[
+                            "RM"
+                        ]
+                    )
+
+                    cols[3].write(
+                        riga[
+                            "FVM"
+                        ]
+                    )
+
+                    with cols[4]:
+
+                        if st.button(
+                            "↩️",
+                            key=(
+                                "ripristina_"
+                                f"{int(riga['Id'])}"
+                            ),
+                            help=(
+                                "Rendi nuovamente "
+                                "disponibile"
+                            )
+                        ):
+
+                            conferma_ripristino_avversario(
+                                int(
+                                    riga[
+                                        "Id"
+                                    ]
+                                ),
+                                riga[
+                                    "Nome"
+                                ]
+                            )
 
 
 # ============================================================
@@ -4931,7 +4653,202 @@ elif sezione == "ASTA":
 
 elif sezione == "ROSA":
 
-    render_rosa_fragment()
+    st.subheader(
+        "👕 La mia rosa"
+    )
+
+    df_rosa = (
+        df_rosa_globale.copy()
+    )
+
+    if df_rosa.empty:
+
+        empty_html = (
+            '<div class="empty-card">'
+            '<div class="empty-icon">👕</div>'
+            '<div class="empty-title">'
+            'La rosa è ancora vuota'
+            '</div>'
+            '<div class="empty-text">'
+            'Vai nella sezione ASTA '
+            'per acquistare i primi giocatori.'
+            '</div>'
+            '</div>'
+        )
+
+        st.markdown(
+            empty_html,
+            unsafe_allow_html=True
+        )
+
+    else:
+
+        df_rosa[
+            "Priorita"
+        ] = (
+            df_rosa[
+                "RM"
+            ]
+            .apply(
+                priorita_ruolo
+            )
+        )
+
+        df_rosa = (
+            df_rosa
+            .sort_values(
+                [
+                    "Priorita",
+                    "Nome"
+                ]
+            )
+            .reset_index(
+                drop=True
+            )
+        )
+
+        intestazione = (
+            st.columns(
+                [
+                    4,
+                    2,
+                    2,
+                    1.2,
+                    1.2,
+                    1.5,
+                    0.7,
+                    0.7
+                ]
+            )
+        )
+
+        titoli = [
+            "Nome",
+            "Squadra",
+            "Ruolo",
+            "Qt.",
+            "FVM",
+            "Prezzo",
+            "🗑️",
+            "🔓"
+        ]
+
+        for col, titolo in zip(
+            intestazione,
+            titoli
+        ):
+
+            col.markdown(
+                f"**{titolo}**"
+            )
+
+        for _, giocatore in (
+            df_rosa.iterrows()
+        ):
+
+            cols = (
+                st.columns(
+                    [
+                        4,
+                        2,
+                        2,
+                        1.2,
+                        1.2,
+                        1.5,
+                        0.7,
+                        0.7
+                    ]
+                )
+            )
+
+            cols[0].write(
+                giocatore[
+                    "Nome"
+                ]
+            )
+
+            cols[1].write(
+                giocatore[
+                    "Squadra"
+                ]
+            )
+
+            cols[2].write(
+                giocatore[
+                    "RM"
+                ]
+            )
+
+            cols[3].write(
+                giocatore[
+                    "Qt.A"
+                ]
+            )
+
+            cols[4].write(
+                giocatore[
+                    "FVM"
+                ]
+            )
+
+            cols[5].write(
+                formatta_crediti(
+                    giocatore[
+                        "Prezzo"
+                    ]
+                )
+            )
+
+            with cols[6]:
+
+                if st.button(
+                    "🗑️",
+                    key=(
+                        "elimina_"
+                        f"{int(giocatore['Id'])}"
+                    ),
+                    help=(
+                        "Annulla acquisto"
+                    )
+                ):
+
+                    conferma_annullamento(
+                        int(
+                            giocatore[
+                                "Id"
+                            ]
+                        ),
+                        giocatore[
+                            "Nome"
+                        ]
+                    )
+
+            with cols[7]:
+
+                if st.button(
+                    "🔓",
+                    key=(
+                        "svincola_"
+                        f"{int(giocatore['Id'])}"
+                    ),
+                    help=(
+                        "Svincola giocatore"
+                    )
+                ):
+
+                    conferma_svincolo(
+                        int(
+                            giocatore[
+                                "Id"
+                            ]
+                        ),
+                        giocatore[
+                            "Nome"
+                        ],
+                        giocatore[
+                            "Prezzo"
+                        ]
+                    )
 
 
 # ============================================================
