@@ -4403,12 +4403,42 @@ elif sezione == "ASTA":
                     st.columns(4)
                 )
 
-                g1.metric(
-                    "Giocatore",
-                    giocatore[
-                        "Nome"
-                    ]
+                colore_nome_asta = (
+                    colore_fvm_mantra(
+                        giocatore.get(
+                            "RM",
+                            ""
+                        ),
+                        giocatore.get(
+                            "FVM M"
+                        )
+                    )
                 )
+
+                with g1:
+
+                    st.markdown(
+                        f"""
+                        <div style="
+                            font-size:0.875rem;
+                            color:rgba(49,51,63,0.6);
+                            margin-bottom:0.15rem;
+                        ">
+                            Giocatore
+                        </div>
+                        <div style="
+                            font-size:1.75rem;
+                            line-height:1.2;
+                            font-weight:600;
+                            color:{colore_nome_asta};
+                            white-space:normal;
+                            overflow-wrap:anywhere;
+                        ">
+                            {html.escape(str(giocatore["Nome"]))}
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
                 g2.metric(
                     "Squadra",
