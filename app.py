@@ -645,6 +645,50 @@ st.markdown(
             line-height: 1.15 !important;
             border-radius: 8px !important;
             white-space: normal !important;
+
+            /* Mobile: contrasto sempre leggibile */
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #cbd5e1 !important;
+        }}
+
+        /* Anche il testo interno dei pulsanti deve ereditare
+           il colore corretto prima del click */
+        .stButton > button *,
+        .stDownloadButton > button * {{
+            color: inherit !important;
+        }}
+
+        /* Pulsanti principali: NAV selezionata, ACQUISTA,
+           conferme, modulo attivo, ecc. */
+        button[data-testid="stBaseButton-primary"],
+        .stButton > button[kind="primary"] {{
+            background: #071a2f !important;
+            color: #ffffff !important;
+            border-color: #071a2f !important;
+        }}
+
+        button[data-testid="stBaseButton-primary"] *,
+        .stButton > button[kind="primary"] * {{
+            color: #ffffff !important;
+        }}
+
+        /* Pulsanti secondari / normali */
+        button[data-testid="stBaseButton-secondary"] {{
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+        }}
+
+        button[data-testid="stBaseButton-secondary"] * {{
+            color: #0f172a !important;
+        }}
+
+        .stButton > button:disabled,
+        .stDownloadButton > button:disabled {{
+            background: #e2e8f0 !important;
+            color: #64748b !important;
+            opacity: 1 !important;
         }}
 
         div[data-testid="stHorizontalBlock"] {{
@@ -665,6 +709,18 @@ st.markdown(
             padding-left: 0.7rem !important;
             padding-right: 0.7rem !important;
             font-size: 12px !important;
+            color: #0f172a !important;
+            background: #ffffff !important;
+        }}
+
+        button[data-baseweb="tab"] * {{
+            color: inherit !important;
+        }}
+
+        button[data-baseweb="tab"][aria-selected="true"] {{
+            color: #071a2f !important;
+            background: #f8fafc !important;
+            font-weight: 800 !important;
         }}
 
         /* Metriche */
@@ -711,9 +767,61 @@ st.markdown(
             font-size: 16px !important;
         }}
 
+        /* Ricerca giocatore, prezzo, filtri:
+           sfondo chiaro e testo scuro sempre visibile */
+        div[data-testid="stTextInput"] input,
         div[data-testid="stNumberInput"] input,
-        div[data-testid="stTextInput"] input {{
+        textarea {{
             min-height: 42px !important;
+            background: #ffffff !important;
+            color: #0f172a !important;
+            -webkit-text-fill-color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+            caret-color: #0f172a !important;
+        }}
+
+        div[data-testid="stTextInput"] input::placeholder,
+        div[data-testid="stNumberInput"] input::placeholder,
+        textarea::placeholder {{
+            color: #64748b !important;
+            -webkit-text-fill-color: #64748b !important;
+            opacity: 1 !important;
+        }}
+
+        /* Selectbox: giocatore, filtri, ecc. */
+        div[data-baseweb="select"] > div {{
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+        }}
+
+        div[data-baseweb="select"] span,
+        div[data-baseweb="select"] div {{
+            color: #0f172a !important;
+        }}
+
+        div[data-baseweb="select"] svg {{
+            fill: #0f172a !important;
+            color: #0f172a !important;
+        }}
+
+        /* Menu a tendina aperto */
+        ul[role="listbox"],
+        div[role="listbox"] {{
+            background: #ffffff !important;
+            color: #0f172a !important;
+        }}
+
+        li[role="option"],
+        div[role="option"] {{
+            background: #ffffff !important;
+            color: #0f172a !important;
+        }}
+
+        li[role="option"]:hover,
+        div[role="option"]:hover {{
+            background: #f1f5f9 !important;
+            color: #0f172a !important;
         }}
 
         /* Tabelle/Dataframe: manteniamo tutti i dati,
@@ -818,6 +926,24 @@ st.markdown(
         /* File uploader */
         section[data-testid="stFileUploaderDropzone"] {{
             padding: 0.7rem !important;
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+        }}
+
+        section[data-testid="stFileUploaderDropzone"] *,
+        div[data-testid="stFileUploader"] * {{
+            color: #0f172a !important;
+        }}
+
+        section[data-testid="stFileUploaderDropzone"] button {{
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #cbd5e1 !important;
+        }}
+
+        section[data-testid="stFileUploaderDropzone"] button * {{
+            color: #0f172a !important;
         }}
 
         /* Footer */
