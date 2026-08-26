@@ -900,17 +900,11 @@ st.markdown(
         }}
 
         .rosa-mobile-table th:nth-child(1),
-        .rosa-mobile-table td:nth-child(1) {{ width: 28% !important; }}
+        .rosa-mobile-table td:nth-child(1) {{ width: 52% !important; }}
         .rosa-mobile-table th:nth-child(2),
-        .rosa-mobile-table td:nth-child(2) {{ width: 18% !important; }}
+        .rosa-mobile-table td:nth-child(2) {{ width: 24% !important; text-align:center !important; }}
         .rosa-mobile-table th:nth-child(3),
-        .rosa-mobile-table td:nth-child(3) {{ width: 16% !important; }}
-        .rosa-mobile-table th:nth-child(4),
-        .rosa-mobile-table td:nth-child(4) {{ width: 16% !important; text-align:center !important; }}
-        .rosa-mobile-table th:nth-child(5),
-        .rosa-mobile-table td:nth-child(5) {{ width: 11% !important; text-align:center !important; }}
-        .rosa-mobile-table th:nth-child(6),
-        .rosa-mobile-table td:nth-child(6) {{ width: 11% !important; text-align:center !important; }}
+        .rosa-mobile-table td:nth-child(3) {{ width: 24% !important; text-align:center !important; }}
 
         .rosa-mobile-annulla {{
             display: inline-block !important;
@@ -6402,126 +6396,85 @@ elif sezione == "ROSA":
         )
 
         # ----------------------------------------------------
-        # VISTA MOBILE - tabella essenziale
+        # VISTA MOBILE - tabella semplice
         # ----------------------------------------------------
         with st.container(
             key="rosa_mobile_view"
         ):
 
-            intestazione_mobile = st.columns(
-                [
-                    3.0,
-                    1.9,
-                    1.7,
-                    1.6,
-                    1.0,
-                    1.0
-                ]
-            )
-
-            titoli_mobile = [
-                "NOME",
-                "SQUADRA",
-                "RUOLO",
-                "PREZZO",
-                "ANNULLA",
-                "SVINCOLA"
-            ]
-
-            for col, titolo in zip(
-                intestazione_mobile,
-                titoli_mobile
-            ):
-                col.markdown(
-                    f"<div style='font-size:9px;font-weight:800;"
-                    f"color:#071a2f;line-height:1.05'>{titolo}</div>",
-                    unsafe_allow_html=True
-                )
-
-            st.markdown(
-                "<div style='height:2px;background:#071a2f;"
-                "margin:3px 0 5px 0'></div>",
-                unsafe_allow_html=True
-            )
+            righe_mobile = []
 
             for _, giocatore in df_rosa.iterrows():
 
-                cols_mobile = st.columns(
-                    [
-                        3.0,
-                        1.9,
-                        1.7,
-                        1.6,
-                        1.0,
-                        1.0
-                    ]
+                nome = html.escape(
+                    str(
+                        giocatore[
+                            "Nome"
+                        ]
+                    )
                 )
 
-                cols_mobile[0].markdown(
-                    f"<div style='font-size:10px;font-weight:700;"
-                    f"line-height:1.1'>{html.escape(str(giocatore['Nome']))}</div>",
-                    unsafe_allow_html=True
+                ruolo = html.escape(
+                    str(
+                        giocatore[
+                            "RM"
+                        ]
+                    )
                 )
 
-                cols_mobile[1].markdown(
-                    f"<div style='font-size:10px;line-height:1.1'>"
-                    f"{html.escape(str(giocatore['Squadra']))}</div>",
-                    unsafe_allow_html=True
+                prezzo = (
+                    formatta_crediti(
+                        giocatore[
+                            "Prezzo"
+                        ]
+                    )
                 )
 
-                cols_mobile[2].markdown(
-                    f"<div style='font-size:10px;line-height:1.1'>"
-                    f"{html.escape(str(giocatore['RM']))}</div>",
-                    unsafe_allow_html=True
-                )
-
-                cols_mobile[3].markdown(
-                    f"<div style='font-size:10px;font-weight:700;"
-                    f"text-align:center;line-height:1.1'>"
-                    f"{formatta_crediti(giocatore['Prezzo'])}</div>",
-                    unsafe_allow_html=True
-                )
-
-                with cols_mobile[4]:
-
-                    if st.button(
-                        "🗑️",
-                        key=(
-                            "mobile_elimina_"
-                            f"{int(giocatore['Id'])}"
+                colore_nome = (
+                    colore_fvm_mantra(
+                        giocatore.get(
+                            "RM",
+                            ""
                         ),
-                        help="Annulla acquisto"
-                    ):
-                        conferma_annullamento(
-                            int(
-                                giocatore["Id"]
-                            ),
-                            giocatore["Nome"]
+                        giocatore.get(
+                            "FVM M"
                         )
-
-                with cols_mobile[5]:
-
-                    if st.button(
-                        "🔓",
-                        key=(
-                            "mobile_svincola_"
-                            f"{int(giocatore['Id'])}"
-                        ),
-                        help="Svincola giocatore"
-                    ):
-                        conferma_svincolo(
-                            int(
-                                giocatore["Id"]
-                            ),
-                            giocatore["Nome"],
-                            giocatore["Prezzo"]
-                        )
-
-                st.markdown(
-                    "<div style='height:1px;background:#e2e8f0;"
-                    "margin:2px 0 4px 0'></div>",
-                    unsafe_allow_html=True
+                    )
                 )
+
+                righe_mobile.append(
+                    "<tr>"
+                    f"<td><span style='color:{colore_nome};font-weight:800;'>"
+                    f"{nome}</span></td>"
+                    f"<td>{ruolo}</td>"
+                    f"<td>{prezzo}</td>"
+                    "</tr>"
+                )
+
+            tabella_mobile_html = (
+                "<div class='rosa-mobile-view'>"
+                "<table class='rosa-mobile-table'>"
+                "<thead>"
+                "<tr>"
+                "<th>NOME GIOCATORE</th>"
+                "<th>RUOLO</th>"
+                "<th>PREZZO ACQUISTO</th>"
+                "</tr>"
+                "</thead>"
+                "<tbody>"
+                + "".join(
+                    righe_mobile
+                )
+                + "</tbody>"
+                "</table>"
+                "</div>"
+            )
+
+            st.markdown(
+                tabella_mobile_html,
+                unsafe_allow_html=True
+            )
+
 
         # ----------------------------------------------------
         # VISTA DESKTOP - invariata
