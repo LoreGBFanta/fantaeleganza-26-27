@@ -1459,7 +1459,7 @@ def crea_snapshot_database(
 
     finally:
 
-        conn.close()
+        chiudi_connessione(conn)
 
 
 @st.cache_data(show_spinner=False)
@@ -1555,7 +1555,7 @@ def elenco_snapshot():
 
     finally:
 
-        conn.close()
+        chiudi_connessione(conn)
 
 
 def ripristina_snapshot_database(
@@ -1682,7 +1682,7 @@ def ripristina_snapshot_database(
 
     finally:
 
-        conn.close()
+        chiudi_connessione(conn)
 
 
 def crea_backup_logico_bytes():
@@ -1703,7 +1703,7 @@ def crea_backup_logico_bytes():
 
     finally:
 
-        conn.close()
+        chiudi_connessione(conn)
 
 
 # ============================================================
@@ -1725,18 +1725,49 @@ def get_connection():
                 "Installa le dipendenze da requirements.txt."
             ) from errore
 
-        return libsql.connect(
-            database=(
-                TURSO_DATABASE_URL
-            ),
-            auth_token=(
-                TURSO_AUTH_TOKEN
-            )
+        # Riutilizza la stessa connessione durante tutta la sessione.
+        # Evita handshake/connessioni remote ripetute a ogni operazione.
+        chiave = "_turso_connessione"
+
+        conn = st.session_state.get(
+            chiave
         )
+
+        if conn is None:
+
+            conn = libsql.connect(
+                database=(
+                    TURSO_DATABASE_URL
+                ),
+                auth_token=(
+                    TURSO_AUTH_TOKEN
+                )
+            )
+
+            st.session_state[
+                chiave
+            ] = conn
+
+        return conn
 
     return sqlite3.connect(
         DB_PATH
     )
+
+
+def chiudi_connessione(
+    conn
+):
+
+    # In Cloud la connessione viene mantenuta viva per la sessione.
+    # In locale continuiamo a chiuderla normalmente.
+    if USA_DATABASE_CLOUD:
+        return
+
+    try:
+        chiudi_connessione(conn)
+    except Exception:
+        pass
 
 
 @st.cache_resource(show_spinner=False)
@@ -1837,6 +1868,41 @@ def inizializza_database():
         )
     """)
 
+
+    cur.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_operazioni_post_insert
+
+        AFTER INSERT ON operazioni
+
+        BEGIN
+
+            INSERT INTO costi_svincoli (
+                operazione_id,
+                giocatore_id,
+                nome_giocatore,
+                importo
+            )
+
+            SELECT
+                NEW.id,
+                NEW.giocatore_id,
+                NEW.nome_giocatore,
+                NEW.costo_svincolo
+
+            WHERE NEW.costo_svincolo > 0;
+
+            DELETE FROM operazioni
+
+            WHERE id NOT IN (
+                SELECT id
+                FROM operazioni
+                ORDER BY id DESC
+                LIMIT 10
+            );
+
+        END
+    """)
+
     colonne = {
         r[1]
         for r in cur.execute(
@@ -1870,7 +1936,7 @@ def inizializza_database():
     """)
 
     conn.commit()
-    conn.close()
+    chiudi_connessione(conn)
 
 
 # ============================================================
@@ -1991,7 +2057,7 @@ def importa_listone_nel_database(df):
         conn.commit()
 
     finally:
-        conn.close()
+        chiudi_connessione(conn)
 
     invalida_cache_dati()
 
@@ -2005,8 +2071,17 @@ def importa_listone_nel_database(df):
 # LETTURA DATABASE
 # ============================================================
 
-@st.cache_data(show_spinner=False)
 def carica_tutti_giocatori():
+
+    chiave = "_df_giocatori_sessione"
+
+    if chiave in st.session_state:
+
+        return (
+            st.session_state[
+                chiave
+            ].copy()
+        )
 
     conn = get_connection()
 
@@ -2052,7 +2127,13 @@ def carica_tutti_giocatori():
         FROM giocatori
     """, conn)
 
-    conn.close()
+    chiudi_connessione(
+        conn
+    )
+
+    st.session_state[
+        chiave
+    ] = df.copy()
 
     return df
 
@@ -2069,55 +2150,46 @@ def esegui_operazione(
     costo_svincolo=0
 ):
 
-    # Le operazioni ordinarie sono già protette dalla cronologia
-    # delle ultime 10 operazioni (UNDO). Evitiamo qui uno snapshot
-    # completo del database, molto costoso su un DB remoto.
+    # Recupera lo stato precedente dalla copia già in memoria.
+    # Nessuna SELECT remota aggiuntiva.
+    df_corrente = (
+        carica_tutti_giocatori()
+    )
+
+    riga = df_corrente[
+        df_corrente["Id"]
+        == int(
+            giocatore_id
+        )
+    ]
+
+    if riga.empty:
+        return
+
+    precedente = riga.iloc[0]
+
+    nome = precedente[
+        "Nome"
+    ]
+
+    stato_prima = precedente[
+        "Stato"
+    ]
+
+    prezzo_prima = precedente[
+        "Prezzo"
+    ]
+
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT
-            nome,
-            stato,
-            prezzo_acquisto
-
-        FROM giocatori
-
-        WHERE id = ?
-    """, (
-        giocatore_id,
-    ))
-
-    precedente = cur.fetchone()
-
-    if precedente is None:
-
-        conn.close()
-        return
-
-    nome = precedente[0]
-    stato_prima = precedente[1]
-    prezzo_prima = precedente[2]
-
-    cur.execute("""
-        UPDATE giocatori
-
-        SET
-            stato = ?,
-            prezzo_acquisto = ?
-
-        WHERE id = ?
-    """, (
-        nuovo_stato,
-        nuovo_prezzo,
-        giocatore_id
-    ))
-
+    # Prima registriamo la cronologia:
+    # il trigger gestisce automaticamente
+    # eventuale costo svincolo e limite 10 operazioni.
     cur.execute("""
         INSERT INTO operazioni (
 
             tipo,
-
             giocatore_id,
             nome_giocatore,
 
@@ -2138,11 +2210,21 @@ def esegui_operazione(
         )
     """, (
         tipo,
-        giocatore_id,
+        int(
+            giocatore_id
+        ),
         nome,
 
         stato_prima,
-        prezzo_prima,
+        (
+            None
+            if pd.isna(
+                prezzo_prima
+            )
+            else float(
+                prezzo_prima
+            )
+        ),
 
         nuovo_stato,
         nuovo_prezzo,
@@ -2153,60 +2235,66 @@ def esegui_operazione(
         )
     ))
 
-    operazione_id = (
-        cur.lastrowid
-    )
-
-    if float(
-        costo_svincolo
-        or 0
-    ) > 0:
-
-        cur.execute("""
-            INSERT INTO costi_svincoli (
-
-                operazione_id,
-
-                giocatore_id,
-
-                nome_giocatore,
-
-                importo
-            )
-
-            VALUES (
-                ?, ?, ?, ?
-            )
-        """, (
-            operazione_id,
-            giocatore_id,
-            nome,
-            float(
-                costo_svincolo
-            )
-        ))
-
     cur.execute("""
-        DELETE FROM operazioni
+        UPDATE giocatori
 
-        WHERE id NOT IN (
+        SET
+            stato = ?,
+            prezzo_acquisto = ?
 
-            SELECT id
-
-            FROM operazioni
-
-            ORDER BY id DESC
-
-            LIMIT ?
-        )
+        WHERE id = ?
     """, (
-        MAX_UNDO,
+        nuovo_stato,
+        nuovo_prezzo,
+        int(
+            giocatore_id
+        )
     ))
 
     conn.commit()
-    conn.close()
 
-    invalida_cache_dati()
+    chiudi_connessione(
+        conn
+    )
+
+    # Aggiorna subito la copia locale:
+    # il rerun non deve rileggere tutti i 500+ giocatori da Turso.
+    maschera = (
+        st.session_state[
+            "_df_giocatori_sessione"
+        ]["Id"]
+        == int(
+            giocatore_id
+        )
+    )
+
+    st.session_state[
+        "_df_giocatori_sessione"
+    ].loc[
+        maschera,
+        "Stato"
+    ] = nuovo_stato
+
+    st.session_state[
+        "_df_giocatori_sessione"
+    ].loc[
+        maschera,
+        "Prezzo"
+    ] = nuovo_prezzo
+
+    # Aggiorniamo soltanto le cache secondarie.
+    try:
+        carica_ultime_operazioni.clear()
+    except Exception:
+        pass
+
+    try:
+        calcola_costi_svincoli.clear()
+    except Exception:
+        pass
+
+    if "backup_cloud_bytes" in st.session_state:
+        st.session_state.backup_cloud_bytes = None
 
 
 @st.cache_data(show_spinner=False)
@@ -2252,56 +2340,47 @@ def carica_ultime_operazioni():
         LIMIT 10
     """, conn)
 
-    conn.close()
+    chiudi_connessione(conn)
 
     return df
 
 
 def annulla_ultima_operazione():
 
-    # L'UNDO lavora direttamente sulla cronologia operazioni.
-    # Non crea uno snapshot completo prima di annullare,
-    # per mantenere la risposta immediata anche sul Cloud.
-    conn = get_connection()
-    cur = conn.cursor()
+    operazioni = (
+        carica_ultime_operazioni()
+    )
 
-    cur.execute("""
-        SELECT
-
-            id,
-
-            giocatore_id,
-
-            stato_prima,
-
-            prezzo_prima,
-
-            costo_svincolo
-
-        FROM operazioni
-
-        ORDER BY id DESC
-
-        LIMIT 1
-    """)
-
-    operazione = cur.fetchone()
-
-    if operazione is None:
-
-        conn.close()
-
+    if operazioni.empty:
         return False
 
-    operazione_id = operazione[0]
-    giocatore_id = operazione[1]
-    stato_prima = operazione[2]
-    prezzo_prima = operazione[3]
+    ultima = operazioni.iloc[0]
+
+    operazione_id = int(
+        ultima["Id"]
+    )
+
+    giocatore_id = int(
+        ultima["GiocatoreId"]
+    )
+
+    stato_prima = ultima[
+        "StatoPrima"
+    ]
+
+    prezzo_prima = ultima[
+        "PrezzoPrima"
+    ]
 
     costo_svincolo = float(
-        operazione[4]
+        ultima[
+            "CostoSvincolo"
+        ]
         or 0
     )
+
+    conn = get_connection()
+    cur = conn.cursor()
 
     cur.execute("""
         UPDATE giocatori
@@ -2313,7 +2392,15 @@ def annulla_ultima_operazione():
         WHERE id = ?
     """, (
         stato_prima,
-        prezzo_prima,
+        (
+            None
+            if pd.isna(
+                prezzo_prima
+            )
+            else float(
+                prezzo_prima
+            )
+        ),
         giocatore_id
     ))
 
@@ -2336,9 +2423,55 @@ def annulla_ultima_operazione():
     ))
 
     conn.commit()
-    conn.close()
 
-    invalida_cache_dati()
+    chiudi_connessione(
+        conn
+    )
+
+    # Aggiorna subito la copia in memoria.
+    df_sessione = (
+        carica_tutti_giocatori()
+    )
+
+    maschera = (
+        df_sessione["Id"]
+        == giocatore_id
+    )
+
+    df_sessione.loc[
+        maschera,
+        "Stato"
+    ] = stato_prima
+
+    df_sessione.loc[
+        maschera,
+        "Prezzo"
+    ] = (
+        None
+        if pd.isna(
+            prezzo_prima
+        )
+        else float(
+            prezzo_prima
+        )
+    )
+
+    st.session_state[
+        "_df_giocatori_sessione"
+    ] = df_sessione
+
+    try:
+        carica_ultime_operazioni.clear()
+    except Exception:
+        pass
+
+    try:
+        calcola_costi_svincoli.clear()
+    except Exception:
+        pass
+
+    if "backup_cloud_bytes" in st.session_state:
+        st.session_state.backup_cloud_bytes = None
 
     return True
 
@@ -2390,7 +2523,7 @@ def calcola_costi_svincoli():
         FROM costi_svincoli
     """, conn)
 
-    conn.close()
+    chiudi_connessione(conn)
 
     return round(
         float(
@@ -2419,10 +2552,10 @@ def invalida_cache_dati():
     if "backup_cloud_bytes" in st.session_state:
         st.session_state.backup_cloud_bytes = None
 
-    try:
-        carica_tutti_giocatori.clear()
-    except Exception:
-        pass
+    if "_df_giocatori_sessione" in st.session_state:
+        del st.session_state[
+            "_df_giocatori_sessione"
+        ]
 
     try:
         carica_ultime_operazioni.clear()
