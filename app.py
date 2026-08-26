@@ -2476,6 +2476,47 @@ def annulla_ultima_operazione():
     return True
 
 
+def elimina_tutta_la_rosa():
+    df_corrente = carica_tutti_giocatori()
+    rosa = df_corrente[df_corrente["Stato"] == "MIO"].copy()
+    if rosa.empty:
+        return 0
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE giocatori
+        SET stato = 'DISPONIBILE',
+            prezzo_acquisto = NULL
+        WHERE stato = 'MIO'
+    """)
+    cur.execute("DELETE FROM costi_svincoli")
+    cur.execute("DELETE FROM operazioni")
+    conn.commit()
+    chiudi_connessione(conn)
+
+    if "_df_giocatori_sessione" in st.session_state:
+        df_sessione = st.session_state["_df_giocatori_sessione"]
+        mask = df_sessione["Stato"] == "MIO"
+        df_sessione.loc[mask, "Stato"] = "DISPONIBILE"
+        df_sessione.loc[mask, "Prezzo"] = None
+        st.session_state["_df_giocatori_sessione"] = df_sessione
+
+    try:
+        carica_ultime_operazioni.clear()
+    except Exception:
+        pass
+    try:
+        calcola_costi_svincoli.clear()
+    except Exception:
+        pass
+
+    if "backup_cloud_bytes" in st.session_state:
+        st.session_state.backup_cloud_bytes = None
+
+    return int(len(rosa))
+
+
 # ============================================================
 # ECONOMIA DATABASE
 # ============================================================
@@ -3745,6 +3786,38 @@ with st.expander(
         )
 
 
+@st.dialog("Elimina tutta la rosa")
+def conferma_elimina_tutta_rosa():
+    df_corrente = carica_tutti_giocatori()
+    numero = int((df_corrente["Stato"] == "MIO").sum())
+
+    st.warning(
+        f"Stai per eliminare tutti i {numero} giocatori presenti nella rosa. "
+        "Torneranno DISPONIBILI e i prezzi di acquisto verranno azzerati."
+    )
+    st.caption(
+        "Verranno azzerati anche i costi di svincolo e la cronologia UNDO."
+    )
+
+    conferma = st.checkbox(
+        "Confermo di voler eliminare tutta la rosa",
+        key="conferma_reset_totale_rosa"
+    )
+
+    if st.button(
+        "🗑️ ELIMINA TUTTA LA ROSA",
+        type="primary",
+        use_container_width=True,
+        disabled=not conferma,
+        key="esegui_reset_totale_rosa"
+    ):
+        eliminati = elimina_tutta_la_rosa()
+        st.session_state["messaggio_reset_rosa"] = (
+            f"Rosa eliminata: {eliminati} giocatori sono tornati disponibili."
+        )
+        st.rerun()
+
+
 # ============================================================
 # DASHBOARD
 # ============================================================
@@ -4687,9 +4760,23 @@ elif sezione == "ROSA":
         "👕 La mia rosa"
     )
 
+    if "messaggio_reset_rosa" in st.session_state:
+        st.success(
+            st.session_state.pop(
+                "messaggio_reset_rosa"
+            )
+        )
+
     df_rosa = (
         df_rosa_globale.copy()
     )
+
+    if not df_rosa.empty:
+        if st.button(
+            "🗑️ ELIMINA TUTTA LA ROSA",
+            key="btn_reset_tutta_rosa"
+        ):
+            conferma_elimina_tutta_rosa()
 
     if df_rosa.empty:
 
