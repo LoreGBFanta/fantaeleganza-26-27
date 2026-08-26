@@ -594,6 +594,23 @@ st.markdown(
        MOBILE / RESPONSIVE
        ====================================================== */
 
+    /* Vista ROSA desktop/mobile */
+    .rosa-mobile-view {{
+        display: none;
+    }}
+
+    .rosa-desktop-view {{
+        display: block;
+    }}
+
+    div[class*="st-key-rosa_mobile_view"] {{
+        display: none;
+    }}
+
+    div[class*="st-key-rosa_desktop_view"] {{
+        display: block;
+    }}
+
     @media
     (max-width: 850px) {{
 
@@ -723,6 +740,17 @@ st.markdown(
             font-weight: 800 !important;
         }}
 
+        /* ASTA: il nome giocatore personalizzato deve avere
+           spazio sufficiente prima del riquadro sottostante */
+        .asta-player-mobile-fix {{
+            min-height: 96px !important;
+            padding-bottom: 18px !important;
+            margin-bottom: 10px !important;
+            position: relative !important;
+            z-index: 2 !important;
+            overflow: visible !important;
+        }}
+
         /* Metriche */
         div[data-testid="stMetric"] {{
             min-height: 62px !important;
@@ -822,6 +850,78 @@ st.markdown(
         div[role="option"]:hover {{
             background: #f1f5f9 !important;
             color: #0f172a !important;
+        }}
+
+        /* ROSA: su mobile nascondiamo la griglia desktop e
+           mostriamo la tabella compatta dedicata */
+        .rosa-desktop-view {{
+            display: none !important;
+        }}
+
+        div[class*="st-key-rosa_mobile_view"] {{
+            display: block !important;
+        }}
+
+        div[class*="st-key-rosa_desktop_view"] {{
+            display: none !important;
+        }}
+
+        .rosa-mobile-view {{
+            display: block !important;
+            width: 100% !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+        }}
+
+        .rosa-mobile-table {{
+            width: 100% !important;
+            border-collapse: collapse !important;
+            table-layout: fixed !important;
+            font-size: 10px !important;
+            background: #ffffff !important;
+        }}
+
+        .rosa-mobile-table th {{
+            background: #071a2f !important;
+            color: #ffffff !important;
+            padding: 7px 3px !important;
+            border: 1px solid #cbd5e1 !important;
+            font-size: 9px !important;
+            line-height: 1.1 !important;
+        }}
+
+        .rosa-mobile-table td {{
+            color: #0f172a !important;
+            padding: 7px 3px !important;
+            border: 1px solid #e2e8f0 !important;
+            vertical-align: middle !important;
+            overflow-wrap: anywhere !important;
+            line-height: 1.15 !important;
+        }}
+
+        .rosa-mobile-table th:nth-child(1),
+        .rosa-mobile-table td:nth-child(1) {{ width: 28% !important; }}
+        .rosa-mobile-table th:nth-child(2),
+        .rosa-mobile-table td:nth-child(2) {{ width: 18% !important; }}
+        .rosa-mobile-table th:nth-child(3),
+        .rosa-mobile-table td:nth-child(3) {{ width: 16% !important; }}
+        .rosa-mobile-table th:nth-child(4),
+        .rosa-mobile-table td:nth-child(4) {{ width: 16% !important; text-align:center !important; }}
+        .rosa-mobile-table th:nth-child(5),
+        .rosa-mobile-table td:nth-child(5) {{ width: 11% !important; text-align:center !important; }}
+        .rosa-mobile-table th:nth-child(6),
+        .rosa-mobile-table td:nth-child(6) {{ width: 11% !important; text-align:center !important; }}
+
+        .rosa-mobile-annulla {{
+            display: inline-block !important;
+            min-width: 30px !important;
+            padding: 5px 6px !important;
+            border-radius: 6px !important;
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            color: #0f172a !important;
+            font-weight: 800 !important;
+            text-align: center !important;
         }}
 
         /* Tabelle/Dataframe: manteniamo tutti i dati,
@@ -5969,22 +6069,24 @@ elif sezione == "ASTA":
 
                     st.markdown(
                         f"""
-                        <div style="
-                            font-size:0.875rem;
-                            color:rgba(49,51,63,0.6);
-                            margin-bottom:0.15rem;
-                        ">
-                            Giocatore
-                        </div>
-                        <div style="
-                            font-size:1.75rem;
-                            line-height:1.2;
-                            font-weight:600;
-                            color:{colore_nome_asta};
-                            white-space:normal;
-                            overflow-wrap:anywhere;
-                        ">
-                            {html.escape(str(giocatore["Nome"]))}
+                        <div class="asta-player-mobile-fix">
+                            <div style="
+                                font-size:0.875rem;
+                                color:rgba(49,51,63,0.6);
+                                margin-bottom:0.15rem;
+                            ">
+                                Giocatore
+                            </div>
+                            <div style="
+                                font-size:1.75rem;
+                                line-height:1.2;
+                                font-weight:600;
+                                color:{colore_nome_asta};
+                                white-space:normal;
+                                overflow-wrap:anywhere;
+                            ">
+                                {html.escape(str(giocatore["Nome"]))}
+                            </div>
                         </div>
                         """,
                         unsafe_allow_html=True
@@ -6280,9 +6382,7 @@ elif sezione == "ROSA":
         df_rosa[
             "Priorita"
         ] = (
-            df_rosa[
-                "RM"
-            ]
+            df_rosa["RM"]
             .apply(
                 priorita_ruolo
             )
@@ -6301,46 +6401,136 @@ elif sezione == "ROSA":
             )
         )
 
-        intestazione = (
-            st.columns(
+        # ----------------------------------------------------
+        # VISTA MOBILE - tabella essenziale
+        # ----------------------------------------------------
+        with st.container(
+            key="rosa_mobile_view"
+        ):
+
+            intestazione_mobile = st.columns(
                 [
-                    4,
-                    2,
-                    2,
-                    1.2,
-                    1.2,
-                    1.5,
-                    0.7,
-                    0.7
+                    3.0,
+                    1.9,
+                    1.7,
+                    1.6,
+                    1.0,
+                    1.0
                 ]
             )
-        )
 
-        titoli = [
-            "Nome",
-            "Squadra",
-            "Ruolo",
-            "Qt.",
-            "FVM",
-            "Prezzo",
-            "🗑️",
-            "🔓"
-        ]
+            titoli_mobile = [
+                "NOME",
+                "SQUADRA",
+                "RUOLO",
+                "PREZZO",
+                "ANNULLA",
+                "SVINCOLA"
+            ]
 
-        for col, titolo in zip(
-            intestazione,
-            titoli
-        ):
+            for col, titolo in zip(
+                intestazione_mobile,
+                titoli_mobile
+            ):
+                col.markdown(
+                    f"<div style='font-size:9px;font-weight:800;"
+                    f"color:#071a2f;line-height:1.05'>{titolo}</div>",
+                    unsafe_allow_html=True
+                )
 
-            col.markdown(
-                f"**{titolo}**"
+            st.markdown(
+                "<div style='height:2px;background:#071a2f;"
+                "margin:3px 0 5px 0'></div>",
+                unsafe_allow_html=True
             )
 
-        for _, giocatore in (
-            df_rosa.iterrows()
+            for _, giocatore in df_rosa.iterrows():
+
+                cols_mobile = st.columns(
+                    [
+                        3.0,
+                        1.9,
+                        1.7,
+                        1.6,
+                        1.0,
+                        1.0
+                    ]
+                )
+
+                cols_mobile[0].markdown(
+                    f"<div style='font-size:10px;font-weight:700;"
+                    f"line-height:1.1'>{html.escape(str(giocatore['Nome']))}</div>",
+                    unsafe_allow_html=True
+                )
+
+                cols_mobile[1].markdown(
+                    f"<div style='font-size:10px;line-height:1.1'>"
+                    f"{html.escape(str(giocatore['Squadra']))}</div>",
+                    unsafe_allow_html=True
+                )
+
+                cols_mobile[2].markdown(
+                    f"<div style='font-size:10px;line-height:1.1'>"
+                    f"{html.escape(str(giocatore['RM']))}</div>",
+                    unsafe_allow_html=True
+                )
+
+                cols_mobile[3].markdown(
+                    f"<div style='font-size:10px;font-weight:700;"
+                    f"text-align:center;line-height:1.1'>"
+                    f"{formatta_crediti(giocatore['Prezzo'])}</div>",
+                    unsafe_allow_html=True
+                )
+
+                with cols_mobile[4]:
+
+                    if st.button(
+                        "🗑️",
+                        key=(
+                            "mobile_elimina_"
+                            f"{int(giocatore['Id'])}"
+                        ),
+                        help="Annulla acquisto"
+                    ):
+                        conferma_annullamento(
+                            int(
+                                giocatore["Id"]
+                            ),
+                            giocatore["Nome"]
+                        )
+
+                with cols_mobile[5]:
+
+                    if st.button(
+                        "🔓",
+                        key=(
+                            "mobile_svincola_"
+                            f"{int(giocatore['Id'])}"
+                        ),
+                        help="Svincola giocatore"
+                    ):
+                        conferma_svincolo(
+                            int(
+                                giocatore["Id"]
+                            ),
+                            giocatore["Nome"],
+                            giocatore["Prezzo"]
+                        )
+
+                st.markdown(
+                    "<div style='height:1px;background:#e2e8f0;"
+                    "margin:2px 0 4px 0'></div>",
+                    unsafe_allow_html=True
+                )
+
+        # ----------------------------------------------------
+        # VISTA DESKTOP - invariata
+        # ----------------------------------------------------
+        with st.container(
+            key="rosa_desktop_view"
         ):
 
-            cols = (
+            intestazione = (
                 st.columns(
                     [
                         4,
@@ -6355,94 +6545,95 @@ elif sezione == "ROSA":
                 )
             )
 
-            cols[0].write(
-                giocatore[
-                    "Nome"
-                ]
-            )
+            titoli = [
+                "Nome",
+                "Squadra",
+                "Ruolo",
+                "Qt.",
+                "FVM",
+                "Prezzo",
+                "🗑️",
+                "🔓"
+            ]
 
-            cols[1].write(
-                giocatore[
-                    "Squadra"
-                ]
-            )
-
-            cols[2].write(
-                giocatore[
-                    "RM"
-                ]
-            )
-
-            cols[3].write(
-                giocatore[
-                    "Qt.A"
-                ]
-            )
-
-            cols[4].write(
-                giocatore[
-                    "FVM"
-                ]
-            )
-
-            cols[5].write(
-                formatta_crediti(
-                    giocatore[
-                        "Prezzo"
-                    ]
+            for col, titolo in zip(
+                intestazione,
+                titoli
+            ):
+                col.markdown(
+                    f"**{titolo}**"
                 )
-            )
 
-            with cols[6]:
+            for _, giocatore in df_rosa.iterrows():
 
-                if st.button(
-                    "🗑️",
-                    key=(
-                        "elimina_"
-                        f"{int(giocatore['Id'])}"
-                    ),
-                    help=(
-                        "Annulla acquisto"
-                    )
-                ):
-
-                    conferma_annullamento(
-                        int(
-                            giocatore[
-                                "Id"
-                            ]
-                        ),
-                        giocatore[
-                            "Nome"
+                cols = (
+                    st.columns(
+                        [
+                            4,
+                            2,
+                            2,
+                            1.2,
+                            1.2,
+                            1.5,
+                            0.7,
+                            0.7
                         ]
                     )
+                )
 
-            with cols[7]:
-
-                if st.button(
-                    "🔓",
-                    key=(
-                        "svincola_"
-                        f"{int(giocatore['Id'])}"
-                    ),
-                    help=(
-                        "Svincola giocatore"
+                cols[0].write(
+                    giocatore["Nome"]
+                )
+                cols[1].write(
+                    giocatore["Squadra"]
+                )
+                cols[2].write(
+                    giocatore["RM"]
+                )
+                cols[3].write(
+                    giocatore["Qt.A"]
+                )
+                cols[4].write(
+                    giocatore["FVM"]
+                )
+                cols[5].write(
+                    formatta_crediti(
+                        giocatore["Prezzo"]
                     )
-                ):
+                )
 
-                    conferma_svincolo(
-                        int(
-                            giocatore[
-                                "Id"
-                            ]
+                with cols[6]:
+                    if st.button(
+                        "🗑️",
+                        key=(
+                            "elimina_"
+                            f"{int(giocatore['Id'])}"
                         ),
-                        giocatore[
-                            "Nome"
-                        ],
-                        giocatore[
-                            "Prezzo"
-                        ]
-                    )
+                        help="Annulla acquisto"
+                    ):
+                        conferma_annullamento(
+                            int(
+                                giocatore["Id"]
+                            ),
+                            giocatore["Nome"]
+                        )
+
+                with cols[7]:
+                    if st.button(
+                        "🔓",
+                        key=(
+                            "svincola_"
+                            f"{int(giocatore['Id'])}"
+                        ),
+                        help="Svincola giocatore"
+                    ):
+                        conferma_svincolo(
+                            int(
+                                giocatore["Id"]
+                            ),
+                            giocatore["Nome"],
+                            giocatore["Prezzo"]
+                        )
 
 
 # ============================================================
