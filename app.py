@@ -1450,6 +1450,11 @@ def crea_snapshot_database(
             conn
         )
 
+        try:
+            elenco_snapshot.clear()
+        except Exception:
+            pass
+
         return True
 
     finally:
@@ -1457,6 +1462,7 @@ def crea_snapshot_database(
         conn.close()
 
 
+@st.cache_data(show_spinner=False)
 def elenco_snapshot():
 
     conn = get_connection()
@@ -1670,6 +1676,8 @@ def ripristina_snapshot_database(
 
         conn.commit()
 
+        invalida_cache_dati()
+
         return True
 
     finally:
@@ -1731,6 +1739,7 @@ def get_connection():
     )
 
 
+@st.cache_resource(show_spinner=False)
 def inizializza_database():
 
     conn = get_connection()
@@ -1873,151 +1882,112 @@ def importa_listone_nel_database(df):
     conn = get_connection()
     cur = conn.cursor()
 
-    nuovi = 0
-    aggiornati = 0
-
-    for _, row in df.iterrows():
-
-        try:
-
-            giocatore_id = int(
-                row["Id"]
-            )
-
-        except Exception:
-
-            continue
-
-        nome = str(
-            row.get(
-                "Nome",
-                ""
-            )
-        ).strip()
-
-        if not nome:
-
-            continue
+    try:
 
         cur.execute(
-            """
-            SELECT id
-            FROM giocatori
-            WHERE id = ?
-            """,
-            (
+            "SELECT id FROM giocatori"
+        )
+
+        ids_esistenti = {
+            int(riga[0])
+            for riga in cur.fetchall()
+        }
+
+        valori_batch = []
+        nuovi = 0
+        aggiornati = 0
+
+        for _, row in df.iterrows():
+
+            try:
+                giocatore_id = int(
+                    row["Id"]
+                )
+            except Exception:
+                continue
+
+            nome = str(
+                row.get(
+                    "Nome",
+                    ""
+                )
+            ).strip()
+
+            if not nome:
+                continue
+
+            if giocatore_id in ids_esistenti:
+                aggiornati += 1
+            else:
+                nuovi += 1
+
+            valori_batch.append((
                 giocatore_id,
-            )
-        )
+                str(row.get("R", "")).strip(),
+                str(row.get("RM", "")).strip(),
+                nome,
+                str(row.get("Squadra", "")).strip(),
+                row.get("Qt.A"),
+                row.get("Qt.I"),
+                row.get("Diff."),
+                row.get("Qt.A M"),
+                row.get("Qt.I M"),
+                row.get("Diff.M"),
+                row.get("FVM"),
+                row.get("FVM M")
+            ))
 
-        esiste = cur.fetchone()
+        if valori_batch:
 
-        valori = (
-            str(
-                row.get(
-                    "R",
-                    ""
-                )
-            ).strip(),
-
-            str(
-                row.get(
-                    "RM",
-                    ""
-                )
-            ).strip(),
-
-            nome,
-
-            str(
-                row.get(
-                    "Squadra",
-                    ""
-                )
-            ).strip(),
-
-            row.get("Qt.A"),
-            row.get("Qt.I"),
-            row.get("Diff."),
-
-            row.get("Qt.A M"),
-            row.get("Qt.I M"),
-            row.get("Diff.M"),
-
-            row.get("FVM"),
-            row.get("FVM M"),
-
-            giocatore_id
-        )
-
-        if esiste:
-
-            cur.execute("""
-                UPDATE giocatori
-
-                SET
-                    ruolo_classico = ?,
-                    ruolo_mantra = ?,
-
-                    nome = ?,
-                    squadra = ?,
-
-                    quotazione_attuale = ?,
-                    quotazione_iniziale = ?,
-                    differenza = ?,
-
-                    quotazione_attuale_mantra = ?,
-                    quotazione_iniziale_mantra = ?,
-                    differenza_mantra = ?,
-
-                    fvm = ?,
-                    fvm_mantra = ?,
-
-                    ultimo_aggiornamento =
-                        CURRENT_TIMESTAMP
-
-                WHERE id = ?
-            """, valori)
-
-            aggiornati += 1
-
-        else:
-
-            cur.execute("""
+            sql = """
                 INSERT INTO giocatori (
-
+                    id,
                     ruolo_classico,
                     ruolo_mantra,
-
                     nome,
                     squadra,
-
                     quotazione_attuale,
                     quotazione_iniziale,
                     differenza,
-
                     quotazione_attuale_mantra,
                     quotazione_iniziale_mantra,
                     differenza_mantra,
-
                     fvm,
-                    fvm_mantra,
-
-                    id
+                    fvm_mantra
                 )
-
                 VALUES (
-                    ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
                     ?, ?, ?,
                     ?, ?, ?,
-                    ?, ?, ?
+                    ?, ?
                 )
-            """, valori)
+                ON CONFLICT(id) DO UPDATE SET
+                    ruolo_classico = excluded.ruolo_classico,
+                    ruolo_mantra = excluded.ruolo_mantra,
+                    nome = excluded.nome,
+                    squadra = excluded.squadra,
+                    quotazione_attuale = excluded.quotazione_attuale,
+                    quotazione_iniziale = excluded.quotazione_iniziale,
+                    differenza = excluded.differenza,
+                    quotazione_attuale_mantra = excluded.quotazione_attuale_mantra,
+                    quotazione_iniziale_mantra = excluded.quotazione_iniziale_mantra,
+                    differenza_mantra = excluded.differenza_mantra,
+                    fvm = excluded.fvm,
+                    fvm_mantra = excluded.fvm_mantra,
+                    ultimo_aggiornamento = CURRENT_TIMESTAMP
+            """
 
-            nuovi += 1
+            cur.executemany(
+                sql,
+                valori_batch
+            )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+
+    finally:
+        conn.close()
+
+    invalida_cache_dati()
 
     return (
         nuovi,
@@ -2029,6 +1999,7 @@ def importa_listone_nel_database(df):
 # LETTURA DATABASE
 # ============================================================
 
+@st.cache_data(show_spinner=False)
 def carica_tutti_giocatori():
 
     conn = get_connection()
@@ -2230,7 +2201,10 @@ def esegui_operazione(
     conn.commit()
     conn.close()
 
+    invalida_cache_dati()
 
+
+@st.cache_data(show_spinner=False)
 def carica_ultime_operazioni():
 
     conn = get_connection()
@@ -2360,6 +2334,8 @@ def annulla_ultima_operazione():
     conn.commit()
     conn.close()
 
+    invalida_cache_dati()
+
     return True
 
 
@@ -2369,31 +2345,33 @@ def annulla_ultima_operazione():
 
 def calcola_valore_acquisti_attivi():
 
-    conn = get_connection()
+    df = carica_tutti_giocatori()
 
-    risultato = pd.read_sql_query("""
-        SELECT
-            COALESCE(
-                SUM(prezzo_acquisto),
-                0
-            ) AS totale
+    if (
+        df is None
+        or df.empty
+        or "Stato" not in df.columns
+        or "Prezzo" not in df.columns
+    ):
+        return 0.0
 
-        FROM giocatori
-
-        WHERE stato = 'MIO'
-    """, conn)
-
-    conn.close()
+    prezzi = pd.to_numeric(
+        df.loc[
+            df["Stato"] == "MIO",
+            "Prezzo"
+        ],
+        errors="coerce"
+    ).fillna(0)
 
     return round(
         float(
-            risultato.iloc[0]["totale"]
-            or 0
+            prezzi.sum()
         ),
         2
     )
 
 
+@st.cache_data(show_spinner=False)
 def calcola_costi_svincoli():
 
     conn = get_connection()
@@ -2426,6 +2404,36 @@ def calcola_valore_acquisti_totale():
         + calcola_costi_svincoli(),
         2
     )
+
+
+# ============================================================
+# CACHE DATI CLOUD
+# ============================================================
+
+def invalida_cache_dati():
+
+    if "backup_cloud_bytes" in st.session_state:
+        st.session_state.backup_cloud_bytes = None
+
+    try:
+        carica_tutti_giocatori.clear()
+    except Exception:
+        pass
+
+    try:
+        carica_ultime_operazioni.clear()
+    except Exception:
+        pass
+
+    try:
+        calcola_costi_svincoli.clear()
+    except Exception:
+        pass
+
+    try:
+        elenco_snapshot.clear()
+    except Exception:
+        pass
 
 
 # ============================================================
@@ -3157,6 +3165,74 @@ def gestisci_snapshot():
 
 
 # ============================================================
+# POPUP BACKUP CLOUD
+# ============================================================
+
+@st.dialog(
+    "Backup database"
+)
+def gestisci_backup_cloud():
+
+    st.caption(
+        "Il backup viene generato solo quando lo richiedi, "
+        "così la normale navigazione dell'app non interroga "
+        "inutilmente il database Cloud."
+    )
+
+    if "backup_cloud_bytes" not in st.session_state:
+        st.session_state.backup_cloud_bytes = None
+
+    if st.session_state.backup_cloud_bytes is None:
+
+        if st.button(
+            "☁ PREPARA BACKUP",
+            use_container_width=True,
+            type="primary",
+            key="prepara_backup_cloud"
+        ):
+
+            with st.spinner(
+                "Preparazione backup..."
+            ):
+
+                st.session_state.backup_cloud_bytes = (
+                    crea_backup_logico_bytes()
+                )
+
+            st.rerun()
+
+    else:
+
+        st.success(
+            "Backup pronto."
+        )
+
+        st.download_button(
+            "⬇ SCARICA BACKUP",
+            data=(
+                st.session_state.backup_cloud_bytes
+            ),
+            file_name=(
+                "fantaeleganza_backup_cloud.json"
+            ),
+            mime=(
+                "application/json"
+            ),
+            use_container_width=True,
+            key="scarica_backup_cloud"
+        )
+
+        if st.button(
+            "🔄 GENERA NUOVO BACKUP",
+            use_container_width=True,
+            key="rigenera_backup_cloud"
+        ):
+
+            st.session_state.backup_cloud_bytes = None
+            st.rerun()
+
+
+# ============================================================
 # INIZIALIZZAZIONE
 # ============================================================
 
@@ -3182,8 +3258,10 @@ costi_svincoli = (
     calcola_costi_svincoli()
 )
 
-valore_acquisti = (
-    calcola_valore_acquisti_totale()
+valore_acquisti = round(
+    valore_attivi
+    + costi_svincoli,
+    2
 )
 
 spesa_effettiva = (
@@ -3272,6 +3350,7 @@ with head_refresh:
         key="btn_aggiorna_app"
     ):
 
+        invalida_cache_dati()
         st.rerun()
 
 
@@ -3290,32 +3369,13 @@ with head_backup:
 
     if USA_DATABASE_CLOUD:
 
-        try:
+        if st.button(
+            "☁ Backup",
+            use_container_width=True,
+            key="btn_backup_cloud"
+        ):
 
-            backup_bytes = (
-                crea_backup_logico_bytes()
-            )
-
-            st.download_button(
-                "☁ Backup",
-                data=backup_bytes,
-                file_name=(
-                    "fantaeleganza_backup_cloud.json"
-                ),
-                mime=(
-                    "application/json"
-                ),
-                use_container_width=True
-            )
-
-        except Exception:
-
-            st.button(
-                "☁ Backup",
-                disabled=True,
-                use_container_width=True,
-                key="backup_cloud_non_disponibile"
-            )
+            gestisci_backup_cloud()
 
     elif DB_PATH.exists():
 
@@ -3867,7 +3927,7 @@ elif sezione == "LISTONE":
             )
 
     df = (
-        carica_tutti_giocatori()
+        df_completo.copy()
     )
 
     if df.empty:
@@ -4081,7 +4141,7 @@ elif sezione == "ASTA":
     )
 
     df = (
-        carica_tutti_giocatori()
+        df_completo.copy()
     )
 
     if df.empty:
