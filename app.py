@@ -5108,6 +5108,15 @@ elif sezione == "MODULI":
                             )
                         )
 
+                        ruoli_giocatore_testo = html.escape(
+                            str(
+                                giocatore.get(
+                                    "RM",
+                                    ""
+                                )
+                            ).strip()
+                        )
+
                         colore = (
                             colore_fvm_mantra(
                                 giocatore.get(
@@ -5120,10 +5129,17 @@ elif sezione == "MODULI":
                             )
                         )
 
+                        nome_con_ruoli = (
+                            f"{nome} "
+                            f"({ruoli_giocatore_testo})"
+                            if ruoli_giocatore_testo
+                            else nome
+                        )
+
                         html_campo += (
                             '<div class="player-name" '
                             f'style="color:{colore};">'
-                            f'{nome}'
+                            f'{nome_con_ruoli}'
                             '</div>'
                         )
 
