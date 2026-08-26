@@ -1879,6 +1879,12 @@ def inizializza_database():
 
 def importa_listone_nel_database(df):
 
+    # L'import del listone è un'operazione massiva:
+    # qui manteniamo lo snapshot automatico di sicurezza.
+    crea_snapshot_database(
+        "PRIMA_IMPORT_LISTONE"
+    )
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -2063,10 +2069,9 @@ def esegui_operazione(
     costo_svincolo=0
 ):
 
-    crea_snapshot_database(
-        f"PRIMA_{tipo}"
-    )
-
+    # Le operazioni ordinarie sono già protette dalla cronologia
+    # delle ultime 10 operazioni (UNDO). Evitiamo qui uno snapshot
+    # completo del database, molto costoso su un DB remoto.
     conn = get_connection()
     cur = conn.cursor()
 
@@ -2254,10 +2259,9 @@ def carica_ultime_operazioni():
 
 def annulla_ultima_operazione():
 
-    crea_snapshot_database(
-        "PRIMA_UNDO"
-    )
-
+    # L'UNDO lavora direttamente sulla cronologia operazioni.
+    # Non crea uno snapshot completo prima di annullare,
+    # per mantenere la risposta immediata anche sul Cloud.
     conn = get_connection()
     cur = conn.cursor()
 
@@ -3041,11 +3045,11 @@ def conferma_undo():
 def gestisci_snapshot():
 
     st.caption(
-        "FANTAELEGANZA salva automaticamente "
-        "uno snapshot prima delle operazioni "
-        "che modificano l'asta. "
-        f"Vengono conservati gli ultimi "
-        f"{MAX_SNAPSHOT} snapshot."
+        "FANTAELEGANZA usa la cronologia UNDO per le normali "
+        "operazioni di asta e conserva gli snapshot completi "
+        "per i passaggi più delicati, come import listone e ripristino. "
+        f"Puoi inoltre crearli manualmente. "
+        f"Vengono conservati gli ultimi {MAX_SNAPSHOT} snapshot."
     )
 
     c1, c2 = st.columns(
@@ -3623,9 +3627,10 @@ if sezione == "DASHBOARD":
     )
 
     st.caption(
-        f"💾 Protezione automatica attiva — "
+        f"💾 Protezione attiva — "
         f"{len(snapshot_disponibili)} snapshot disponibili "
-        f"(massimo {MAX_SNAPSHOT}). "
+        f"(massimo {MAX_SNAPSHOT}) · "
+        f"UNDO fino a {MAX_UNDO} operazioni. "
         + (
             "🌐 Database Cloud persistente attivo."
             if USA_DATABASE_CLOUD
