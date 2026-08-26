@@ -2593,6 +2593,9 @@ def invalida_cache_dati():
     if "backup_cloud_bytes" in st.session_state:
         st.session_state.backup_cloud_bytes = None
 
+    if "pdf_rosa_moduli" in st.session_state:
+        st.session_state.pdf_rosa_moduli = None
+
     if "_df_giocatori_sessione" in st.session_state:
         del st.session_state[
             "_df_giocatori_sessione"
@@ -2612,6 +2615,1029 @@ def invalida_cache_dati():
         elenco_snapshot.clear()
     except Exception:
         pass
+
+
+# ============================================================
+# PDF - ROSA E MODULI
+# ============================================================
+
+def genera_pdf_rosa_e_moduli(
+    df_rosa,
+    valore_attivi,
+    costi_svincoli,
+    valore_acquisti,
+    spesa_effettiva
+):
+    """
+    Genera un PDF scaricabile con:
+    - rosa completa e tutti i dati disponibili;
+    - riepilogo economico;
+    - classifica dei moduli;
+    - tutti i moduli Mantra con ruoli, copertura e giocatori compatibili.
+    """
+
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (
+            SimpleDocTemplate,
+            Paragraph,
+            Spacer,
+            Table,
+            TableStyle,
+            PageBreak,
+            KeepTogether
+        )
+    except ImportError as errore:
+        raise RuntimeError(
+            "Per creare il PDF è necessario il pacchetto reportlab. "
+            "Aggiungi 'reportlab>=4.0,<5' al file requirements.txt."
+        ) from errore
+
+    buffer = io.BytesIO()
+
+    pagina = landscape(
+        A4
+    )
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=pagina,
+        rightMargin=10 * mm,
+        leftMargin=10 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+        title="FANTAELEGANZA 26/27 - Rosa e Moduli",
+        author="FANTAELEGANZA 26/27"
+    )
+
+    styles = getSampleStyleSheet()
+
+    stile_titolo = ParagraphStyle(
+        "TitoloFanta",
+        parent=styles["Title"],
+        fontName="Helvetica-Bold",
+        fontSize=20,
+        leading=23,
+        textColor=colors.HexColor("#071a2f"),
+        alignment=TA_CENTER,
+        spaceAfter=7
+    )
+
+    stile_sottotitolo = ParagraphStyle(
+        "SottotitoloFanta",
+        parent=styles["Heading2"],
+        fontName="Helvetica-Bold",
+        fontSize=12,
+        leading=14,
+        textColor=colors.HexColor("#071a2f"),
+        spaceBefore=4,
+        spaceAfter=5
+    )
+
+    stile_testo = ParagraphStyle(
+        "TestoFanta",
+        parent=styles["BodyText"],
+        fontName="Helvetica",
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor("#111827")
+    )
+
+    stile_piccolo = ParagraphStyle(
+        "PiccoloFanta",
+        parent=stile_testo,
+        fontSize=6.7,
+        leading=8
+    )
+
+    stile_slot = ParagraphStyle(
+        "SlotFanta",
+        parent=stile_piccolo,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#111827")
+    )
+
+    elementi = []
+
+    # --------------------------------------------------------
+    # TESTATA
+    # --------------------------------------------------------
+
+    elementi.append(
+        Paragraph(
+            "FANTAELEGANZA 26/27",
+            stile_titolo
+        )
+    )
+
+    elementi.append(
+        Paragraph(
+            "Rosa e moduli Mantra",
+            ParagraphStyle(
+                "SubTitle",
+                parent=stile_testo,
+                alignment=TA_CENTER,
+                fontSize=10,
+                leading=12,
+                textColor=colors.HexColor("#64748b")
+            )
+        )
+    )
+
+    elementi.append(
+        Paragraph(
+            "Generato il "
+            + datetime.now().strftime(
+                "%d/%m/%Y alle %H:%M"
+            ),
+            ParagraphStyle(
+                "DataPDF",
+                parent=stile_piccolo,
+                alignment=TA_CENTER,
+                textColor=colors.HexColor("#64748b")
+            )
+        )
+    )
+
+    elementi.append(
+        Spacer(
+            1,
+            5 * mm
+        )
+    )
+
+    # --------------------------------------------------------
+    # RIEPILOGO ECONOMICO
+    # --------------------------------------------------------
+
+    elementi.append(
+        Paragraph(
+            "Riepilogo economico",
+            stile_sottotitolo
+        )
+    )
+
+    dati_economia = [
+        [
+            "Giocatori in rosa",
+            "Valore acquisti attivi",
+            "Costi svincoli",
+            "Valore totale asta",
+            "Spesa effettiva"
+        ],
+        [
+            str(
+                len(
+                    df_rosa
+                )
+            ),
+            f"{formatta_crediti(valore_attivi)} EUR",
+            f"{formatta_crediti(costi_svincoli)} EUR",
+            f"{formatta_crediti(valore_acquisti)} EUR",
+            f"{formatta_crediti(spesa_effettiva)} EUR"
+        ]
+    ]
+
+    tab_economia = Table(
+        dati_economia,
+        colWidths=[
+            40 * mm,
+            40 * mm,
+            40 * mm,
+            40 * mm,
+            40 * mm
+        ]
+    )
+
+    tab_economia.setStyle(
+        TableStyle([
+            (
+                "BACKGROUND",
+                (0, 0),
+                (-1, 0),
+                colors.HexColor("#071a2f")
+            ),
+            (
+                "TEXTCOLOR",
+                (0, 0),
+                (-1, 0),
+                colors.white
+            ),
+            (
+                "FONTNAME",
+                (0, 0),
+                (-1, 0),
+                "Helvetica-Bold"
+            ),
+            (
+                "FONTNAME",
+                (0, 1),
+                (-1, 1),
+                "Helvetica-Bold"
+            ),
+            (
+                "FONTSIZE",
+                (0, 0),
+                (-1, -1),
+                7
+            ),
+            (
+                "ALIGN",
+                (0, 0),
+                (-1, -1),
+                "CENTER"
+            ),
+            (
+                "VALIGN",
+                (0, 0),
+                (-1, -1),
+                "MIDDLE"
+            ),
+            (
+                "GRID",
+                (0, 0),
+                (-1, -1),
+                0.4,
+                colors.HexColor("#cbd5e1")
+            ),
+            (
+                "BACKGROUND",
+                (0, 1),
+                (-1, 1),
+                colors.HexColor("#f8fafc")
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                5
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                5
+            )
+        ])
+    )
+
+    elementi.append(
+        tab_economia
+    )
+
+    elementi.append(
+        Spacer(
+            1,
+            5 * mm
+        )
+    )
+
+    # --------------------------------------------------------
+    # ROSA COMPLETA
+    # --------------------------------------------------------
+
+    elementi.append(
+        Paragraph(
+            "Rosa - dati completi",
+            stile_sottotitolo
+        )
+    )
+
+    colonne_pdf = [
+        "Id",
+        "R",
+        "RM",
+        "Nome",
+        "Squadra",
+        "Qt.A",
+        "Qt.I",
+        "Diff.",
+        "Qt.A M",
+        "Qt.I M",
+        "Diff.M",
+        "FVM",
+        "FVM M",
+        "Prezzo"
+    ]
+
+    intestazioni = [
+        "ID",
+        "R",
+        "RM",
+        "NOME",
+        "SQUADRA",
+        "QT.A",
+        "QT.I",
+        "DIFF",
+        "QT.A M",
+        "QT.I M",
+        "DIFF.M",
+        "FVM",
+        "FVM M",
+        "PREZZO"
+    ]
+
+    dati_rosa = [
+        intestazioni
+    ]
+
+    if not df_rosa.empty:
+
+        rosa_pdf = (
+            df_rosa.copy()
+        )
+
+        rosa_pdf[
+            "_ordine_ruolo"
+        ] = (
+            rosa_pdf["RM"]
+            .apply(
+                priorita_ruolo
+            )
+        )
+
+        rosa_pdf = (
+            rosa_pdf
+            .sort_values(
+                [
+                    "_ordine_ruolo",
+                    "Nome"
+                ]
+            )
+        )
+
+        for _, riga in (
+            rosa_pdf.iterrows()
+        ):
+
+            riga_pdf = []
+
+            for colonna in (
+                colonne_pdf
+            ):
+
+                valore = (
+                    riga.get(
+                        colonna,
+                        ""
+                    )
+                )
+
+                if pd.isna(
+                    valore
+                ):
+                    valore = ""
+
+                if colonna == "Prezzo":
+                    valore = (
+                        formatta_crediti(
+                            valore
+                        )
+                        if valore != ""
+                        else ""
+                    )
+
+                elif colonna in (
+                    "Qt.A",
+                    "Qt.I",
+                    "Diff.",
+                    "Qt.A M",
+                    "Qt.I M",
+                    "Diff.M",
+                    "FVM",
+                    "FVM M"
+                ):
+
+                    try:
+                        valore = (
+                            f"{float(valore):g}"
+                            if valore != ""
+                            else ""
+                        )
+                    except Exception:
+                        pass
+
+                riga_pdf.append(
+                    Paragraph(
+                        html.escape(
+                            str(
+                                valore
+                            )
+                        ),
+                        stile_piccolo
+                    )
+                )
+
+            dati_rosa.append(
+                riga_pdf
+            )
+
+    larghezze = [
+        9 * mm,
+        10 * mm,
+        18 * mm,
+        31 * mm,
+        23 * mm,
+        14 * mm,
+        14 * mm,
+        13 * mm,
+        16 * mm,
+        16 * mm,
+        14 * mm,
+        14 * mm,
+        16 * mm,
+        18 * mm
+    ]
+
+    tab_rosa = Table(
+        dati_rosa,
+        colWidths=larghezze,
+        repeatRows=1
+    )
+
+    tab_rosa.setStyle(
+        TableStyle([
+            (
+                "BACKGROUND",
+                (0, 0),
+                (-1, 0),
+                colors.HexColor("#071a2f")
+            ),
+            (
+                "TEXTCOLOR",
+                (0, 0),
+                (-1, 0),
+                colors.white
+            ),
+            (
+                "FONTNAME",
+                (0, 0),
+                (-1, 0),
+                "Helvetica-Bold"
+            ),
+            (
+                "FONTSIZE",
+                (0, 0),
+                (-1, 0),
+                6
+            ),
+            (
+                "ALIGN",
+                (0, 0),
+                (-1, 0),
+                "CENTER"
+            ),
+            (
+                "VALIGN",
+                (0, 0),
+                (-1, -1),
+                "MIDDLE"
+            ),
+            (
+                "GRID",
+                (0, 0),
+                (-1, -1),
+                0.25,
+                colors.HexColor("#cbd5e1")
+            ),
+            (
+                "ROWBACKGROUNDS",
+                (0, 1),
+                (-1, -1),
+                [
+                    colors.white,
+                    colors.HexColor("#f8fafc")
+                ]
+            ),
+            (
+                "LEFTPADDING",
+                (0, 0),
+                (-1, -1),
+                2
+            ),
+            (
+                "RIGHTPADDING",
+                (0, 0),
+                (-1, -1),
+                2
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                3
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                3
+            )
+        ])
+    )
+
+    elementi.append(
+        tab_rosa
+    )
+
+    # --------------------------------------------------------
+    # CLASSIFICA MODULI
+    # --------------------------------------------------------
+
+    elementi.append(
+        PageBreak()
+    )
+
+    elementi.append(
+        Paragraph(
+            "Classifica moduli",
+            stile_titolo
+        )
+    )
+
+    classifica = (
+        classifica_moduli(
+            df_rosa
+        )
+    )
+
+    dati_classifica = [[
+        "POS.",
+        "MODULO",
+        "PUNTEGGIO",
+        "COPERTURA MEDIA",
+        "SCOPERTI",
+        "SOTTO 60%",
+        "AL 100%"
+    ]]
+
+    for riga in classifica:
+
+        dati_classifica.append([
+            riga[
+                "Posizione"
+            ],
+            riga[
+                "Modulo"
+            ],
+            f"{riga['Punteggio']}/100",
+            f"{riga['Copertura media']}%",
+            riga[
+                "Scoperti"
+            ],
+            riga[
+                "Sotto 60%"
+            ],
+            riga[
+                "Al 100%"
+            ]
+        ])
+
+    tab_classifica = Table(
+        dati_classifica,
+        colWidths=[
+            18 * mm,
+            30 * mm,
+            32 * mm,
+            38 * mm,
+            27 * mm,
+            30 * mm,
+            27 * mm
+        ]
+    )
+
+    tab_classifica.setStyle(
+        TableStyle([
+            (
+                "BACKGROUND",
+                (0, 0),
+                (-1, 0),
+                colors.HexColor("#071a2f")
+            ),
+            (
+                "TEXTCOLOR",
+                (0, 0),
+                (-1, 0),
+                colors.white
+            ),
+            (
+                "FONTNAME",
+                (0, 0),
+                (-1, 0),
+                "Helvetica-Bold"
+            ),
+            (
+                "FONTNAME",
+                (0, 1),
+                (-1, 1),
+                "Helvetica-Bold"
+            ),
+            (
+                "BACKGROUND",
+                (0, 1),
+                (-1, 1),
+                colors.HexColor("#fef3c7")
+            ),
+            (
+                "ALIGN",
+                (0, 0),
+                (-1, -1),
+                "CENTER"
+            ),
+            (
+                "FONTSIZE",
+                (0, 0),
+                (-1, -1),
+                8
+            ),
+            (
+                "GRID",
+                (0, 0),
+                (-1, -1),
+                0.4,
+                colors.HexColor("#cbd5e1")
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                5
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                5
+            )
+        ])
+    )
+
+    elementi.append(
+        tab_classifica
+    )
+
+    # --------------------------------------------------------
+    # TUTTI I MODULI
+    # --------------------------------------------------------
+
+    for nome_modulo in (
+        MODULI.keys()
+    ):
+
+        elementi.append(
+            PageBreak()
+        )
+
+        analisi = (
+            analizza_modulo(
+                df_rosa,
+                nome_modulo
+            )
+        )
+
+        ruoli_al_100, totale_slot, copertura_media = (
+            calcola_copertura_modulo(
+                df_rosa,
+                nome_modulo
+            )
+        )
+
+        elementi.append(
+            Paragraph(
+                f"Modulo {html.escape(nome_modulo)}",
+                stile_titolo
+            )
+        )
+
+        elementi.append(
+            Paragraph(
+                (
+                    f"Punteggio strategico: "
+                    f"<b>{analisi['Punteggio']}/100</b> &nbsp;&nbsp; "
+                    f"Copertura media: "
+                    f"<b>{round(copertura_media)}%</b> &nbsp;&nbsp; "
+                    f"Ruoli al 100%: "
+                    f"<b>{ruoli_al_100}/{totale_slot}</b> &nbsp;&nbsp; "
+                    f"Slot scoperti: "
+                    f"<b>{analisi['Scoperti']}</b>"
+                ),
+                ParagraphStyle(
+                    "ModuloSummary",
+                    parent=stile_testo,
+                    alignment=TA_CENTER,
+                    fontSize=8.5,
+                    leading=11,
+                    spaceAfter=5
+                )
+            )
+        )
+
+        contenuto_campo = []
+
+        righe_modulo = (
+            MODULI[
+                nome_modulo
+            ]
+        )
+
+        # Attacco in alto, portiere in basso.
+        for _, posizioni in reversed(
+            righe_modulo
+        ):
+
+            celle = []
+
+            numero_posizioni = (
+                len(
+                    posizioni
+                )
+            )
+
+            larghezza_cella = (
+                247 * mm
+                / max(
+                    1,
+                    numero_posizioni
+                )
+            )
+
+            for _, ruolo_slot in (
+                posizioni
+            ):
+
+                possibili = (
+                    giocatori_compatibili(
+                        df_rosa,
+                        ruolo_slot
+                    )
+                )
+
+                _, percentuale_ruolo = (
+                    percentuale_copertura_ruolo(
+                        df_rosa,
+                        ruolo_slot
+                    )
+                )
+
+                colore_percentuale = (
+                    "#dc2626"
+                    if percentuale_ruolo < 60
+                    else "#111827"
+                )
+
+                parti = [
+                    (
+                        f"<b>{html.escape(str(ruolo_slot))}</b> "
+                        f"<font color='{colore_percentuale}'>"
+                        f"<b>{round(percentuale_ruolo)}%</b>"
+                        f"</font>"
+                    )
+                ]
+
+                if possibili.empty:
+
+                    parti.append(
+                        "<font color='#dc2626'>-</font>"
+                    )
+
+                else:
+
+                    for _, giocatore in (
+                        possibili.iterrows()
+                    ):
+
+                        nome = html.escape(
+                            str(
+                                giocatore.get(
+                                    "Nome",
+                                    ""
+                                )
+                            )
+                        )
+
+                        ruoli_testo = html.escape(
+                            str(
+                                giocatore.get(
+                                    "RM",
+                                    ""
+                                )
+                            )
+                        )
+
+                        colore_nome = (
+                            colore_fvm_mantra(
+                                giocatore.get(
+                                    "RM",
+                                    ""
+                                ),
+                                giocatore.get(
+                                    "FVM M"
+                                )
+                            )
+                        )
+
+                        parti.append(
+                            (
+                                f"<font color='{colore_nome}'>"
+                                f"{nome} ({ruoli_testo})"
+                                f"</font>"
+                            )
+                        )
+
+                celle.append(
+                    Paragraph(
+                        "<br/>".join(
+                            parti
+                        ),
+                        stile_slot
+                    )
+                )
+
+            tab_linea = Table(
+                [
+                    celle
+                ],
+                colWidths=[
+                    larghezza_cella
+                    for _ in celle
+                ]
+            )
+
+            tab_linea.setStyle(
+                TableStyle([
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, -1),
+                        colors.HexColor("#ffffff")
+                    ),
+                    (
+                        "BOX",
+                        (0, 0),
+                        (-1, -1),
+                        0.7,
+                        colors.HexColor("#e2e8f0")
+                    ),
+                    (
+                        "INNERGRID",
+                        (0, 0),
+                        (-1, -1),
+                        0.4,
+                        colors.HexColor("#e2e8f0")
+                    ),
+                    (
+                        "VALIGN",
+                        (0, 0),
+                        (-1, -1),
+                        "TOP"
+                    ),
+                    (
+                        "ALIGN",
+                        (0, 0),
+                        (-1, -1),
+                        "CENTER"
+                    ),
+                    (
+                        "LEFTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        4
+                    ),
+                    (
+                        "RIGHTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        4
+                    ),
+                    (
+                        "TOPPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        5
+                    ),
+                    (
+                        "BOTTOMPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        5
+                    )
+                ])
+            )
+
+            contenuto_campo.append(
+                tab_linea
+            )
+
+            contenuto_campo.append(
+                Spacer(
+                    1,
+                    3 * mm
+                )
+            )
+
+        campo = Table(
+            [
+                [
+                    contenuto_campo
+                ]
+            ],
+            colWidths=[
+                260 * mm
+            ]
+        )
+
+        campo.setStyle(
+            TableStyle([
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, -1),
+                    colors.HexColor("#16833a")
+                ),
+                (
+                    "BOX",
+                    (0, 0),
+                    (-1, -1),
+                    1.2,
+                    colors.white
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    7 * mm
+                ),
+                (
+                    "RIGHTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    7 * mm
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    7 * mm
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4 * mm
+                )
+            ])
+        )
+
+        elementi.append(
+            campo
+        )
+
+    # --------------------------------------------------------
+    # NUMERO PAGINA
+    # --------------------------------------------------------
+
+    def aggiungi_numero_pagina(
+        canvas,
+        documento
+    ):
+
+        canvas.saveState()
+
+        canvas.setFont(
+            "Helvetica",
+            7
+        )
+
+        canvas.setFillColor(
+            colors.HexColor(
+                "#64748b"
+            )
+        )
+
+        canvas.drawRightString(
+            pagina[0]
+            - 10 * mm,
+            5 * mm,
+            f"FANTAELEGANZA 26/27 - Pagina {documento.page}"
+        )
+
+        canvas.restoreState()
+
+    doc.build(
+        elementi,
+        onFirstPage=aggiungi_numero_pagina,
+        onLaterPages=aggiungi_numero_pagina
+    )
+
+    buffer.seek(
+        0
+    )
+
+    return buffer.getvalue()
 
 
 # ============================================================
@@ -3843,6 +4869,86 @@ if sezione == "DASHBOARD":
             else "💻 Database locale attivo."
         )
     )
+
+
+    # --------------------------------------------------------
+    # STAMPA ROSA E MODULI
+    # --------------------------------------------------------
+
+    stampa_col1, stampa_col2 = st.columns(
+        [
+            1.6,
+            4.4
+        ]
+    )
+
+    with stampa_col1:
+
+        if st.button(
+            "🖨️ STAMPA ROSA E MODULI",
+            use_container_width=True,
+            disabled=(
+                numero_rosa == 0
+            ),
+            key="btn_genera_pdf_rosa_moduli"
+        ):
+
+            with st.spinner(
+                "Creazione PDF..."
+            ):
+
+                try:
+
+                    st.session_state[
+                        "pdf_rosa_moduli"
+                    ] = (
+                        genera_pdf_rosa_e_moduli(
+                            df_rosa_globale,
+                            valore_attivi,
+                            costi_svincoli,
+                            valore_acquisti,
+                            spesa_effettiva
+                        )
+                    )
+
+                except Exception as errore:
+
+                    st.session_state[
+                        "pdf_rosa_moduli"
+                    ] = None
+
+                    st.error(
+                        f"Errore durante la creazione del PDF: {errore}"
+                    )
+
+    with stampa_col2:
+
+        if st.session_state.get(
+            "pdf_rosa_moduli"
+        ):
+
+            st.download_button(
+                "⬇️ SCARICA PDF ROSA E MODULI",
+                data=(
+                    st.session_state[
+                        "pdf_rosa_moduli"
+                    ]
+                ),
+                file_name=(
+                    "FANTAELEGANZA_26-27_ROSA_E_MODULI.pdf"
+                ),
+                mime=(
+                    "application/pdf"
+                ),
+                use_container_width=True,
+                key="download_pdf_rosa_moduli"
+            )
+
+        elif numero_rosa > 0:
+
+            st.caption(
+                "Premi STAMPA ROSA E MODULI per preparare il PDF scaricabile."
+            )
 
     if numero_rosa == 0:
 
