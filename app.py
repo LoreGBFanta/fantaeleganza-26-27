@@ -2604,12 +2604,36 @@ def salva_budget_asta(
 
 def aggiorna_budget_da_widget():
 
-    nuovo_budget = (
-        st.session_state.get(
-            "budget_asta_input",
+    try:
+
+        nuovo_budget = round(
+            float(
+                st.session_state.get(
+                    "budget_asta_input",
+                    SOGLIA_BASE
+                )
+            ),
+            2
+        )
+
+    except Exception:
+
+        nuovo_budget = float(
             SOGLIA_BASE
         )
+
+    budget_corrente = round(
+        float(
+            st.session_state.get(
+                "budget_asta_corrente",
+                SOGLIA_BASE
+            )
+        ),
+        2
     )
+
+    if nuovo_budget == budget_corrente:
+        return
 
     st.session_state[
         "budget_asta_corrente"
@@ -3165,13 +3189,13 @@ def chiudi_connessione(
     conn
 ):
 
-    # In Cloud la connessione viene mantenuta viva per la sessione.
-    # In locale continuiamo a chiuderla normalmente.
+    # In Cloud la connessione viene mantenuta viva per tutta
+    # la sessione: evita handshake e riconnessioni ripetute.
     if USA_DATABASE_CLOUD:
         return
 
     try:
-        chiudi_connessione(conn)
+        conn.close()
     except Exception:
         pass
 
@@ -3786,11 +3810,12 @@ def carica_tutti_giocatori():
 
     if chiave in st.session_state:
 
-        return (
-            st.session_state[
-                chiave
-            ].copy()
-        )
+        # Il DataFrame è già mantenuto coerente dalle operazioni.
+        # Restituiamo il riferimento per evitare copie da 500+ righe
+        # a ogni rerun; le funzioni che devono modificarlo usano .copy().
+        return st.session_state[
+            chiave
+        ]
 
     conn = get_connection()
 
@@ -3944,6 +3969,12 @@ def esegui_operazione(
         )
     ))
 
+    operazione_id = getattr(
+        cur,
+        "lastrowid",
+        0
+    )
+
     cur.execute("""
         UPDATE giocatori
 
@@ -3991,23 +4022,61 @@ def esegui_operazione(
         "Prezzo"
     ] = nuovo_prezzo
 
-    # Aggiorniamo soltanto le cache secondarie.
-    try:
-        carica_ultime_operazioni.clear()
-    except Exception:
-        pass
+    # Aggiornamento locale immediato: il rerun successivo
+    # non deve rileggere cronologia e costi da Turso.
+    aggiorna_cronologia_locale_dopo_operazione(
+        operazione_id,
+        tipo,
+        giocatore_id,
+        nome,
+        stato_prima,
+        (
+            None
+            if pd.isna(
+                prezzo_prima
+            )
+            else float(
+                prezzo_prima
+            )
+        ),
+        nuovo_stato,
+        nuovo_prezzo,
+        costo_svincolo
+    )
 
-    try:
-        calcola_costi_svincoli.clear()
-    except Exception:
-        pass
+    if float(
+        costo_svincolo
+        or 0
+    ) > 0:
+
+        st.session_state[
+            "_costi_svincoli_sessione"
+        ] = round(
+            calcola_costi_svincoli()
+            + float(
+                costo_svincolo
+            ),
+            2
+        )
 
     if "backup_cloud_bytes" in st.session_state:
         st.session_state.backup_cloud_bytes = None
 
+    if "pdf_rosa_moduli" in st.session_state:
+        st.session_state.pdf_rosa_moduli = None
 
-@st.cache_data(show_spinner=False)
+
 def carica_ultime_operazioni():
+
+    chiave = "_ultime_operazioni_sessione"
+
+    if chiave in st.session_state:
+
+        return (
+            st.session_state[
+                chiave
+            ].copy()
+        )
 
     conn = get_connection()
 
@@ -4049,10 +4118,104 @@ def carica_ultime_operazioni():
         LIMIT 10
     """, conn)
 
-    chiudi_connessione(conn)
+    chiudi_connessione(
+        conn
+    )
+
+    st.session_state[
+        chiave
+    ] = df.copy()
 
     return df
 
+
+def aggiorna_cronologia_locale_dopo_operazione(
+    operazione_id,
+    tipo,
+    giocatore_id,
+    nome,
+    stato_prima,
+    prezzo_prima,
+    stato_dopo,
+    prezzo_dopo,
+    costo_svincolo
+):
+
+    chiave = "_ultime_operazioni_sessione"
+
+    colonne = [
+        "Id",
+        "Operazione",
+        "GiocatoreId",
+        "Giocatore",
+        "StatoPrima",
+        "PrezzoPrima",
+        "StatoDopo",
+        "PrezzoDopo",
+        "CostoSvincolo",
+        "Data"
+    ]
+
+    nuova = pd.DataFrame(
+        [
+            {
+                "Id": int(
+                    operazione_id
+                    or 0
+                ),
+                "Operazione": tipo,
+                "GiocatoreId": int(
+                    giocatore_id
+                ),
+                "Giocatore": nome,
+                "StatoPrima": stato_prima,
+                "PrezzoPrima": prezzo_prima,
+                "StatoDopo": stato_dopo,
+                "PrezzoDopo": prezzo_dopo,
+                "CostoSvincolo": float(
+                    costo_svincolo
+                    or 0
+                ),
+                "Data": datetime.now(
+                    ZoneInfo(
+                        "Europe/Rome"
+                    )
+                ).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            }
+        ],
+        columns=colonne
+    )
+
+    precedente = (
+        st.session_state.get(
+            chiave
+        )
+    )
+
+    if (
+        precedente is None
+        or precedente.empty
+    ):
+
+        storico = nuova
+
+    else:
+
+        storico = pd.concat(
+            [
+                nuova,
+                precedente
+            ],
+            ignore_index=True
+        ).head(
+            MAX_UNDO
+        )
+
+    st.session_state[
+        chiave
+    ] = storico
 
 def annulla_ultima_operazione():
 
@@ -4169,18 +4332,46 @@ def annulla_ultima_operazione():
         "_df_giocatori_sessione"
     ] = df_sessione
 
-    try:
-        carica_ultime_operazioni.clear()
-    except Exception:
-        pass
+    # Rimuove localmente l'operazione appena annullata.
+    storico = st.session_state.get(
+        "_ultime_operazioni_sessione"
+    )
 
-    try:
-        calcola_costi_svincoli.clear()
-    except Exception:
-        pass
+    if (
+        storico is not None
+        and not storico.empty
+    ):
+
+        st.session_state[
+            "_ultime_operazioni_sessione"
+        ] = (
+            storico[
+                storico["Id"]
+                != operazione_id
+            ]
+            .reset_index(
+                drop=True
+            )
+        )
+
+    if costo_svincolo > 0:
+
+        st.session_state[
+            "_costi_svincoli_sessione"
+        ] = round(
+            max(
+                0.0,
+                calcola_costi_svincoli()
+                - costo_svincolo
+            ),
+            2
+        )
 
     if "backup_cloud_bytes" in st.session_state:
         st.session_state.backup_cloud_bytes = None
+
+    if "pdf_rosa_moduli" in st.session_state:
+        st.session_state.pdf_rosa_moduli = None
 
     return True
 
@@ -4258,31 +4449,58 @@ def calcola_valore_acquisti_attivi():
     )
 
 
-@st.cache_data(show_spinner=False)
 def calcola_costi_svincoli():
 
-    conn = get_connection()
+    chiave = "_costi_svincoli_sessione"
 
-    risultato = pd.read_sql_query("""
+    if chiave in st.session_state:
+
+        return round(
+            float(
+                st.session_state[
+                    chiave
+                ]
+                or 0
+            ),
+            2
+        )
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
         SELECT
             COALESCE(
                 SUM(importo),
                 0
-            ) AS totale
+            )
 
         FROM costi_svincoli
-    """, conn)
+    """)
 
-    chiudi_connessione(conn)
+    riga = cur.fetchone()
 
-    return round(
+    chiudi_connessione(
+        conn
+    )
+
+    totale = round(
         float(
-            risultato.iloc[0]["totale"]
+            (
+                riga[0]
+                if riga
+                else 0
+            )
             or 0
         ),
         2
     )
 
+    st.session_state[
+        chiave
+    ] = totale
+
+    return totale
 
 def calcola_valore_acquisti_totale():
 
@@ -4299,26 +4517,32 @@ def calcola_valore_acquisti_totale():
 
 def invalida_cache_dati():
 
-    if "backup_cloud_bytes" in st.session_state:
-        st.session_state.backup_cloud_bytes = None
+    chiavi_sessione = [
+        "backup_cloud_bytes",
+        "pdf_rosa_moduli",
+        "_df_giocatori_sessione",
+        "_ultime_operazioni_sessione",
+        "_costi_svincoli_sessione"
+    ]
 
-    if "pdf_rosa_moduli" in st.session_state:
-        st.session_state.pdf_rosa_moduli = None
+    for chiave in chiavi_sessione:
 
-    if "_df_giocatori_sessione" in st.session_state:
-        del st.session_state[
-            "_df_giocatori_sessione"
-        ]
+        if chiave in st.session_state:
 
-    try:
-        carica_ultime_operazioni.clear()
-    except Exception:
-        pass
+            if chiave in (
+                "backup_cloud_bytes",
+                "pdf_rosa_moduli"
+            ):
 
-    try:
-        calcola_costi_svincoli.clear()
-    except Exception:
-        pass
+                st.session_state[
+                    chiave
+                ] = None
+
+            else:
+
+                del st.session_state[
+                    chiave
+                ]
 
     try:
         elenco_snapshot.clear()
