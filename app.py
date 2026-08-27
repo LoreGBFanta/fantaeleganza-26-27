@@ -1739,6 +1739,296 @@ def colore_fvm_mantra(ruolo_mantra, valore_fvm_m):
     return COLORE_NERO_FVM
 
 
+
+# ============================================================
+# IQR - INDICE QUALITÀ ROSA
+# ============================================================
+
+def punteggio_qualita_giocatore(
+    ruolo_mantra,
+    valore_fvm_m,
+    massimo_ruolo
+):
+    """
+    Trasforma FVM M in un punteggio 0-100 usando le stesse
+    fasce ruolo-specifiche dei colori.
+
+    Ancore:
+    FVM M = 1              -> 0 punti
+    soglia ROSSA           -> 25 punti
+    soglia BLU             -> 50 punti
+    soglia VERDE           -> 75 punti
+    massimo FVM M del ruolo-> 100 punti
+
+    Per i doppi/tripli ruoli vale sempre il primo ruolo Mantra.
+    """
+
+    ruolo = primo_ruolo(
+        ruolo_mantra
+    ).upper()
+
+    soglie = SOGLIE_FVM_M.get(
+        ruolo
+    )
+
+    if soglie is None:
+        return 0.0
+
+    try:
+        valore = float(
+            valore_fvm_m
+        )
+
+        massimo = float(
+            massimo_ruolo
+        )
+
+    except Exception:
+        return 0.0
+
+    if pd.isna(
+        valore
+    ):
+        return 0.0
+
+    verde, blu, rosso = soglie
+
+    # IQR minimo esplicitamente fissato a FVM M = 1.
+    if valore <= 1:
+        return 0.0
+
+    # Se per qualche motivo il massimo del listone non supera
+    # la soglia verde, la soglia più alta disponibile vale 100.
+    massimo = max(
+        massimo,
+        float(
+            verde
+        )
+    )
+
+    def interpola(
+        x,
+        x1,
+        y1,
+        x2,
+        y2
+    ):
+
+        if x2 <= x1:
+            return float(
+                y2
+            )
+
+        quota = (
+            (x - x1)
+            / (x2 - x1)
+        )
+
+        quota = max(
+            0.0,
+            min(
+                1.0,
+                quota
+            )
+        )
+
+        return (
+            y1
+            + quota
+            * (y2 - y1)
+        )
+
+    if valore < rosso:
+
+        punteggio = interpola(
+            valore,
+            1.0,
+            0.0,
+            float(
+                rosso
+            ),
+            25.0
+        )
+
+    elif valore < blu:
+
+        punteggio = interpola(
+            valore,
+            float(
+                rosso
+            ),
+            25.0,
+            float(
+                blu
+            ),
+            50.0
+        )
+
+    elif valore < verde:
+
+        punteggio = interpola(
+            valore,
+            float(
+                blu
+            ),
+            50.0,
+            float(
+                verde
+            ),
+            75.0
+        )
+
+    else:
+
+        punteggio = interpola(
+            valore,
+            float(
+                verde
+            ),
+            75.0,
+            massimo,
+            100.0
+        )
+
+    return round(
+        max(
+            0.0,
+            min(
+                100.0,
+                punteggio
+            )
+        ),
+        2
+    )
+
+
+def calcola_iqr(
+    df_rosa,
+    df_listone,
+    max_giocatori=MAX_GIOCATORI
+):
+    """
+    IQR = somma dei punteggi qualità dei giocatori / 30.
+
+    Gli slot non ancora occupati valgono 0.
+    Quindi:
+    - 30 giocatori con il massimo FVM M del proprio primo ruolo = 100%
+    - 30 giocatori con FVM M = 1 = 0%
+    """
+
+    if (
+        df_rosa is None
+        or df_rosa.empty
+        or df_listone is None
+        or df_listone.empty
+    ):
+        return 0.0
+
+    massimi_ruolo = {}
+
+    for _, giocatore in (
+        df_listone.iterrows()
+    ):
+
+        ruolo = primo_ruolo(
+            giocatore.get(
+                "RM",
+                ""
+            )
+        ).upper()
+
+        if (
+            not ruolo
+            or ruolo
+            not in SOGLIE_FVM_M
+        ):
+            continue
+
+        try:
+            valore = float(
+                giocatore.get(
+                    "FVM M"
+                )
+            )
+        except Exception:
+            continue
+
+        if pd.isna(
+            valore
+        ):
+            continue
+
+        massimi_ruolo[
+            ruolo
+        ] = max(
+            valore,
+            massimi_ruolo.get(
+                ruolo,
+                valore
+            )
+        )
+
+    totale_punti = 0.0
+
+    for _, giocatore in (
+        df_rosa.iterrows()
+    ):
+
+        ruolo = primo_ruolo(
+            giocatore.get(
+                "RM",
+                ""
+            )
+        ).upper()
+
+        massimo_ruolo = (
+            massimi_ruolo.get(
+                ruolo
+            )
+        )
+
+        if massimo_ruolo is None:
+            continue
+
+        totale_punti += (
+            punteggio_qualita_giocatore(
+                giocatore.get(
+                    "RM",
+                    ""
+                ),
+                giocatore.get(
+                    "FVM M"
+                ),
+                massimo_ruolo
+            )
+        )
+
+    denominatore = max(
+        1,
+        int(
+            max_giocatori
+        )
+        * 100
+    )
+
+    iqr = (
+        totale_punti
+        / denominatore
+        * 100
+    )
+
+    return round(
+        max(
+            0.0,
+            min(
+                100.0,
+                iqr
+            )
+        ),
+        1
+    )
+
+
 # ============================================================
 # FORMATTAZIONE
 # ============================================================
@@ -5342,6 +5632,16 @@ slot_liberi = max(
 )
 
 
+
+iqr = (
+    calcola_iqr(
+        df_rosa_globale,
+        df_completo,
+        MAX_GIOCATORI
+    )
+)
+
+
 # ============================================================
 # HEADER COMPATTO
 # ============================================================
@@ -5480,8 +5780,8 @@ with head_theme:
 # RIEPILOGO COMPATTO
 # ============================================================
 
-m1, m2, m3, m4, m5, m6, m7 = (
-    st.columns(7)
+m1, m2, m3, m4, m5, m6, m7, m8 = (
+    st.columns(8)
 )
 
 m1.metric(
@@ -5517,6 +5817,21 @@ m6.metric(
 m7.metric(
     "👕 Slot liberi",
     slot_liberi
+)
+
+
+
+m8.metric(
+    "⭐ IQR",
+    f"{iqr:.1f}%",
+    help=(
+        "Indice Qualità Rosa. "
+        "Ogni giocatore riceve un punteggio 0-100 in base a FVM M "
+        "e alle soglie del suo primo ruolo Mantra: "
+        "FVM M 1 = 0, soglia rossa = 25, blu = 50, verde = 75, "
+        "massimo FVM M del ruolo nel listone = 100. "
+        "L'IQR divide la somma per 30 giocatori: gli slot vuoti valgono 0."
+    )
 )
 
 
