@@ -1746,21 +1746,19 @@ def colore_fvm_mantra(ruolo_mantra, valore_fvm_m):
 
 def punteggio_qualita_giocatore(
     ruolo_mantra,
-    valore_fvm_m,
-    massimo_ruolo
+    valore_fvm_m
 ):
     """
-    Trasforma FVM M in un punteggio 0-100 usando le stesse
-    fasce ruolo-specifiche dei colori.
+    Punteggio individuale IQR basato sulle fasce colore FVM M.
 
-    Ancore:
-    FVM M = 1              -> 0 punti
-    soglia ROSSA           -> 25 punti
-    soglia BLU             -> 50 punti
-    soglia VERDE           -> 75 punti
-    massimo FVM M del ruolo-> 100 punti
+    Fasce:
+    - Verde = 100
+    - Blu   = 70
+    - Rosso = 40
+    - Nero  = da 0 a 20 in funzione del FVM M
 
-    Per i doppi/tripli ruoli vale sempre il primo ruolo Mantra.
+    FVM M = 1 vale sempre 0.
+    Per doppi/tripli ruoli vale il primo ruolo Mantra.
     """
 
     ruolo = primo_ruolo(
@@ -1778,11 +1776,6 @@ def punteggio_qualita_giocatore(
         valore = float(
             valore_fvm_m
         )
-
-        massimo = float(
-            massimo_ruolo
-        )
-
     except Exception:
         return 0.0
 
@@ -1793,228 +1786,327 @@ def punteggio_qualita_giocatore(
 
     verde, blu, rosso = soglie
 
-    # IQR minimo esplicitamente fissato a FVM M = 1.
     if valore <= 1:
         return 0.0
 
-    # Se per qualche motivo il massimo del listone non supera
-    # la soglia verde, la soglia più alta disponibile vale 100.
-    massimo = max(
-        massimo,
-        float(
-            verde
-        )
+    if valore >= verde:
+        return 100.0
+
+    if valore >= blu:
+        return 70.0
+
+    if valore >= rosso:
+        return 40.0
+
+    # Fascia nera:
+    # crescita progressiva da 0 (FVM M = 1)
+    # a 20 immediatamente sotto la soglia rossa.
+    if rosso <= 1:
+        return 0.0
+
+    punteggio_nero = (
+        (valore - 1.0)
+        / (float(rosso) - 1.0)
+        * 20.0
     )
-
-    def interpola(
-        x,
-        x1,
-        y1,
-        x2,
-        y2
-    ):
-
-        if x2 <= x1:
-            return float(
-                y2
-            )
-
-        quota = (
-            (x - x1)
-            / (x2 - x1)
-        )
-
-        quota = max(
-            0.0,
-            min(
-                1.0,
-                quota
-            )
-        )
-
-        return (
-            y1
-            + quota
-            * (y2 - y1)
-        )
-
-    if valore < rosso:
-
-        punteggio = interpola(
-            valore,
-            1.0,
-            0.0,
-            float(
-                rosso
-            ),
-            25.0
-        )
-
-    elif valore < blu:
-
-        punteggio = interpola(
-            valore,
-            float(
-                rosso
-            ),
-            25.0,
-            float(
-                blu
-            ),
-            50.0
-        )
-
-    elif valore < verde:
-
-        punteggio = interpola(
-            valore,
-            float(
-                blu
-            ),
-            50.0,
-            float(
-                verde
-            ),
-            75.0
-        )
-
-    else:
-
-        punteggio = interpola(
-            valore,
-            float(
-                verde
-            ),
-            75.0,
-            massimo,
-            100.0
-        )
 
     return round(
         max(
             0.0,
             min(
-                100.0,
-                punteggio
+                20.0,
+                punteggio_nero
             )
         ),
         2
     )
 
 
+def fascia_iqr_giocatore(
+    ruolo_mantra,
+    valore_fvm_m
+):
+    """
+    Restituisce la fascia IQR del giocatore:
+    VERDE / BLU / ROSSO / NERO.
+    """
+
+    ruolo = primo_ruolo(
+        ruolo_mantra
+    ).upper()
+
+    soglie = SOGLIE_FVM_M.get(
+        ruolo
+    )
+
+    if soglie is None:
+        return "NERO"
+
+    try:
+        valore = float(
+            valore_fvm_m
+        )
+    except Exception:
+        return "NERO"
+
+    if pd.isna(
+        valore
+    ):
+        return "NERO"
+
+    verde, blu, rosso = soglie
+
+    if valore >= verde:
+        return "VERDE"
+
+    if valore >= blu:
+        return "BLU"
+
+    if valore >= rosso:
+        return "ROSSO"
+
+    return "NERO"
+
+
+def descrizione_iqr(
+    valore
+):
+    """
+    Etichetta qualitativa dell'Indice Qualità Rosa.
+    """
+
+    try:
+        valore = float(
+            valore
+        )
+    except Exception:
+        return "Rosa debole"
+
+    if valore >= 95:
+        return "Rosa eccezionale"
+
+    if valore >= 85:
+        return "Rosa eccellente"
+
+    if valore >= 75:
+        return "Rosa molto forte"
+
+    if valore >= 60:
+        return "Rosa buona"
+
+    if valore >= 40:
+        return "Rosa discreta"
+
+    return "Rosa debole"
+
+
 def calcola_iqr(
     df_rosa,
-    df_listone,
+    df_listone=None,
     max_giocatori=MAX_GIOCATORI
 ):
     """
-    IQR = somma dei punteggi qualità dei giocatori / 30.
+    IQR V2 - Indice Qualità Rosa.
 
-    Gli slot non ancora occupati valgono 0.
-    Quindi:
-    - 30 giocatori con il massimo FVM M del proprio primo ruolo = 100%
+    La formula ha tre passaggi:
+
+    1) QUALITÀ BASE
+       Ogni giocatore vale:
+       Verde 100 / Blu 70 / Rosso 40 / Nero 0..20.
+       Gli slot vuoti valgono 0.
+       La qualità è calcolata su una rosa completa di 30 giocatori.
+
+    2) DENSITÀ DI FASCE ALTE
+       Premia una rosa che contiene un numero elevato di giocatori
+       Verdi e Blu, con riferimenti realistici per una lega a 12:
+       - 8 Verdi = obiettivo massimo della componente Verdi
+       - 12 Verdi+Blu = obiettivo massimo della componente Top
+       La densità pesa nella formula base per il 20%.
+
+    3) BONUS OFFENSIVO
+       I ruoli offensivi sono Pc, A, W, T e C.
+       La presenza di molti Verdi/Blu offensivi chiude fino al 35%
+       della distanza residua verso 100.
+       Riferimenti:
+       - 5 Verdi offensivi
+       - 8 Verdi+Blu offensivi
+
+    Proprietà:
+    - 30 giocatori Verdi = 100%
     - 30 giocatori con FVM M = 1 = 0%
+    - il 100% non viene raggiunto tramite il solo bonus offensivo:
+      è necessario che la qualità base sia già 100.
     """
 
     if (
         df_rosa is None
         or df_rosa.empty
-        or df_listone is None
-        or df_listone.empty
     ):
         return 0.0
 
-    massimi_ruolo = {}
-
-    for _, giocatore in (
-        df_listone.iterrows()
-    ):
-
-        ruolo = primo_ruolo(
-            giocatore.get(
-                "RM",
-                ""
-            )
-        ).upper()
-
-        if (
-            not ruolo
-            or ruolo
-            not in SOGLIE_FVM_M
-        ):
-            continue
-
-        try:
-            valore = float(
-                giocatore.get(
-                    "FVM M"
-                )
-            )
-        except Exception:
-            continue
-
-        if pd.isna(
-            valore
-        ):
-            continue
-
-        massimi_ruolo[
-            ruolo
-        ] = max(
-            valore,
-            massimi_ruolo.get(
-                ruolo,
-                valore
-            )
+    max_giocatori = max(
+        1,
+        int(
+            max_giocatori
         )
+    )
 
     totale_punti = 0.0
+
+    numero_verdi = 0
+    numero_blu = 0
+
+    numero_verdi_offensivi = 0
+    numero_blu_offensivi = 0
+
+    RUOLI_OFFENSIVI_IQR = {
+        "PC",
+        "A",
+        "W",
+        "T",
+        "C"
+    }
 
     for _, giocatore in (
         df_rosa.iterrows()
     ):
 
-        ruolo = primo_ruolo(
-            giocatore.get(
-                "RM",
-                ""
-            )
-        ).upper()
-
-        massimo_ruolo = (
-            massimi_ruolo.get(
-                ruolo
-            )
+        ruolo_mantra = giocatore.get(
+            "RM",
+            ""
         )
 
-        if massimo_ruolo is None:
-            continue
+        valore_fvm_m = giocatore.get(
+            "FVM M"
+        )
+
+        ruolo = primo_ruolo(
+            ruolo_mantra
+        ).upper()
+
+        fascia = fascia_iqr_giocatore(
+            ruolo_mantra,
+            valore_fvm_m
+        )
 
         totale_punti += (
             punteggio_qualita_giocatore(
-                giocatore.get(
-                    "RM",
-                    ""
-                ),
-                giocatore.get(
-                    "FVM M"
-                ),
-                massimo_ruolo
+                ruolo_mantra,
+                valore_fvm_m
             )
         )
 
-    denominatore = max(
-        1,
-        int(
+        if fascia == "VERDE":
+
+            numero_verdi += 1
+
+            if ruolo in RUOLI_OFFENSIVI_IQR:
+                numero_verdi_offensivi += 1
+
+        elif fascia == "BLU":
+
+            numero_blu += 1
+
+            if ruolo in RUOLI_OFFENSIVI_IQR:
+                numero_blu_offensivi += 1
+
+    # --------------------------------------------------------
+    # 1) QUALITÀ MEDIA SU 30 SLOT
+    # --------------------------------------------------------
+
+    qualita_base = (
+        totale_punti
+        / (
             max_giocatori
+            * 100.0
         )
-        * 100
+        * 100.0
     )
 
-    iqr = (
-        totale_punti
-        / denominatore
-        * 100
+    # --------------------------------------------------------
+    # 2) DENSITÀ FASCE ALTE - LEGA A 12
+    # --------------------------------------------------------
+
+    quota_verdi = min(
+        1.0,
+        numero_verdi
+        / 8.0
+    )
+
+    quota_top = min(
+        1.0,
+        (
+            numero_verdi
+            + numero_blu
+        )
+        / 12.0
+    )
+
+    densita_alta_qualita = (
+        quota_verdi
+        * 70.0
+        + quota_top
+        * 30.0
+    )
+
+    iqr_base = (
+        qualita_base
+        * 0.80
+        + densita_alta_qualita
+        * 0.20
+    )
+
+    # --------------------------------------------------------
+    # 3) PREMIO OFFENSIVO
+    # --------------------------------------------------------
+    #
+    # Il bonus non è una semplice somma di punti.
+    # Chiude una parte della distanza tra l'IQR base e 100,
+    # così:
+    # - premia le rose con tanti top offensivi;
+    # - non permette di superare 100;
+    # - 30 Verdi restano esattamente 100.
+
+    quota_verdi_offensivi = min(
+        1.0,
+        numero_verdi_offensivi
+        / 5.0
+    )
+
+    quota_top_offensivi = min(
+        1.0,
+        (
+            numero_verdi_offensivi
+            + numero_blu_offensivi
+        )
+        / 8.0
+    )
+
+    forza_offensiva = (
+        quota_verdi_offensivi
+        * 70.0
+        + quota_top_offensivi
+        * 30.0
+    )
+
+    distanza_da_100 = max(
+        0.0,
+        100.0
+        - iqr_base
+    )
+
+    bonus_offensivo = (
+        distanza_da_100
+        * 0.35
+        * (
+            forza_offensiva
+            / 100.0
+        )
+    )
+
+    iqr_finale = (
+        iqr_base
+        + bonus_offensivo
     )
 
     return round(
@@ -2022,11 +2114,12 @@ def calcola_iqr(
             0.0,
             min(
                 100.0,
-                iqr
+                iqr_finale
             )
         ),
         1
     )
+
 
 
 # ============================================================
@@ -5824,13 +5917,19 @@ m7.metric(
 m8.metric(
     "⭐ IQR",
     f"{iqr:.1f}%",
+    delta=descrizione_iqr(
+        iqr
+    ),
+    delta_color="off",
     help=(
         "Indice Qualità Rosa. "
-        "Ogni giocatore riceve un punteggio 0-100 in base a FVM M "
-        "e alle soglie del suo primo ruolo Mantra: "
-        "FVM M 1 = 0, soglia rossa = 25, blu = 50, verde = 75, "
-        "massimo FVM M del ruolo nel listone = 100. "
-        "L'IQR divide la somma per 30 giocatori: gli slot vuoti valgono 0."
+        "Verde = 100, Blu = 70, Rosso = 40, Nero = 0-20; "
+        "gli slot vuoti valgono 0. "
+        "L'indice premia inoltre la densità di giocatori Verdi/Blu "
+        "con riferimenti calibrati per una lega a 12. "
+        "Bonus aggiuntivo per Verdi/Blu nei ruoli offensivi "
+        "Pc, A, W, T e C. "
+        "30 giocatori Verdi = 100%; 30 giocatori con FVM M = 1 = 0%."
     )
 )
 
