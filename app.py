@@ -2891,6 +2891,13 @@ def importa_listone_nel_database(df):
     # Ricaricheremo i dati una sola volta dopo l'import.
     invalida_cache_dati()
 
+    # Memorizza data e ora dell'ultimo upload completato con successo.
+    st.session_state[
+        "ultimo_upload_listone"
+    ] = datetime.now().strftime(
+        "%d/%m/%Y alle %H:%M:%S"
+    )
+
     return (
         nuovi,
         aggiornati
@@ -6062,7 +6069,8 @@ elif sezione == "LISTONE":
                     )
 
                     st.success(
-                        "Listone importato. "
+                        "✅ Listone importato con successo — "
+                        f"{st.session_state.get('ultimo_upload_listone', '')}. "
                         f"Nuovi: {nuovi} — "
                         f"Aggiornati: {aggiornati}. "
                         "I giocatori invariati non sono stati riscritti."
