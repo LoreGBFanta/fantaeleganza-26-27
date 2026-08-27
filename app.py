@@ -2502,6 +2502,125 @@ def formatta_crediti(valore):
 
 
 # ============================================================
+# BUDGET ASTA
+# ============================================================
+
+def leggi_budget_asta():
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute("""
+            SELECT valore
+            FROM configurazione_app
+            WHERE chiave = 'budget_asta'
+        """)
+
+        riga = cur.fetchone()
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+    if not riga:
+
+        return float(
+            SOGLIA_BASE
+        )
+
+    try:
+
+        return float(
+            riga[0]
+        )
+
+    except Exception:
+
+        return float(
+            SOGLIA_BASE
+        )
+
+
+def salva_budget_asta(
+    valore
+):
+
+    try:
+
+        valore = round(
+            max(
+                0.0,
+                float(
+                    valore
+                )
+            ),
+            2
+        )
+
+    except Exception:
+
+        valore = float(
+            SOGLIA_BASE
+        )
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute("""
+            INSERT INTO configurazione_app (
+                chiave,
+                valore
+            )
+            VALUES (
+                'budget_asta',
+                ?
+            )
+
+            ON CONFLICT(chiave)
+            DO UPDATE SET
+                valore = excluded.valore
+        """, (
+            str(
+                valore
+            ),
+        ))
+
+        conn.commit()
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+    return valore
+
+
+def aggiorna_budget_da_widget():
+
+    nuovo_budget = (
+        st.session_state.get(
+            "budget_asta_input",
+            SOGLIA_BASE
+        )
+    )
+
+    st.session_state[
+        "budget_asta_corrente"
+    ] = (
+        salva_budget_asta(
+            nuovo_budget
+        )
+    )
+
+
+# ============================================================
 # ECONOMIA
 # ============================================================
 
@@ -3152,6 +3271,16 @@ def inizializza_database():
 
             data_creazione TEXT
                 DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS configurazione_app (
+
+            chiave TEXT PRIMARY KEY,
+
+            valore TEXT
         )
     """)
 
@@ -6133,6 +6262,24 @@ def gestisci_backup_cloud():
 
 inizializza_database()
 
+if "budget_asta_corrente" not in st.session_state:
+
+    st.session_state[
+        "budget_asta_corrente"
+    ] = (
+        leggi_budget_asta()
+    )
+
+if "budget_asta_input" not in st.session_state:
+
+    st.session_state[
+        "budget_asta_input"
+    ] = (
+        st.session_state[
+            "budget_asta_corrente"
+        ]
+    )
+
 df_completo = (
     carica_tutti_giocatori()
 )
@@ -6190,6 +6337,18 @@ slot_liberi = max(
     - numero_rosa
 )
 
+budget_asta = float(
+    st.session_state.get(
+        "budget_asta_corrente",
+        SOGLIA_BASE
+    )
+)
+
+budget_rimanente = round(
+    budget_asta
+    - spesa_effettiva,
+    2
+)
 
 
 iqr = (
@@ -6460,37 +6619,61 @@ m1.metric(
     f"{formatta_crediti(SOGLIA_BASE)} €"
 )
 
-m2.metric(
-    "🛒 Valore acquisti",
-    f"{formatta_crediti(valore_acquisti)} €"
-)
+with m2:
+
+    st.number_input(
+        "💰 Budget",
+        min_value=0.0,
+        step=10.0,
+        format="%.2f",
+        key="budget_asta_input",
+        on_change=aggiorna_budget_da_widget,
+        help=(
+            "Budget totale che hai deciso di destinare all'asta. "
+            "Il valore viene salvato nel database Cloud e resta "
+            "disponibile anche da altri dispositivi."
+        )
+    )
 
 m3.metric(
+    "💵 Budget rimanente",
+    f"{formatta_crediti(budget_rimanente)} €",
+    delta=(
+        "Disponibile"
+        if budget_rimanente >= 0
+        else "Budget superato"
+    ),
+    delta_color=(
+        "off"
+        if budget_rimanente >= 0
+        else "inverse"
+    ),
+    help=(
+        "Budget impostato meno Spesa effettiva. "
+        "La Spesa effettiva include la maggiorazione prevista "
+        "oltre la soglia base."
+    )
+)
+
+m4.metric(
     "🪙 Spesa effettiva",
     f"{formatta_crediti(spesa_effettiva)} €"
 )
 
-m4.metric(
+m5.metric(
     "⚡ Oltre soglia",
     f"{formatta_crediti(oltre_soglia)} €"
 )
 
-m5.metric(
+m6.metric(
     "👥 Giocatori",
     f"{numero_rosa}/{MAX_GIOCATORI}"
 )
 
-m6.metric(
+m7.metric(
     "🧤 Portieri",
     f"{numero_portieri}/{MIN_PORTIERI}"
 )
-
-m7.metric(
-    "👕 Slot liberi",
-    slot_liberi
-)
-
-
 
 with m8:
 
