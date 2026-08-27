@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import pandas as pd
@@ -2894,7 +2895,11 @@ def importa_listone_nel_database(df):
     # Memorizza data e ora dell'ultimo upload completato con successo.
     st.session_state[
         "ultimo_upload_listone"
-    ] = datetime.now().strftime(
+    ] = datetime.now(
+        ZoneInfo(
+            "Europe/Rome"
+        )
+    ).strftime(
         "%d/%m/%Y alle %H:%M:%S"
     )
 
