@@ -2493,37 +2493,170 @@ def inizializza_database():
 
 def importa_listone_nel_database(df):
 
-    # L'import del listone è un'operazione massiva:
-    # qui manteniamo lo snapshot automatico di sicurezza.
-    crea_snapshot_database(
-        "PRIMA_IMPORT_LISTONE"
-    )
+    """
+    Importazione ottimizzata per database Cloud.
+
+    Obiettivi:
+    - evitare centinaia di round-trip verso Turso;
+    - aggiornare solo i giocatori realmente cambiati;
+    - eseguire UPSERT multi-riga a blocchi;
+    - mantenere stato e prezzo dei giocatori già presenti.
+    """
+
+    # L'import del listone può coinvolgere centinaia di righe.
+    # Per mantenere l'operazione veloce sul Cloud NON creiamo
+    # automaticamente uno snapshot completo qui.
+    #
+    # Se serve un punto di sicurezza, usa il pulsante Snapshot
+    # prima di caricare il nuovo listone.
 
     conn = get_connection()
     cur = conn.cursor()
 
-    try:
+    def pulisci_valore(
+        valore
+    ):
 
-        cur.execute(
-            "SELECT id FROM giocatori"
+        if valore is None:
+            return None
+
+        try:
+            if pd.isna(
+                valore
+            ):
+                return None
+        except Exception:
+            pass
+
+        return valore
+
+    def normalizza_numero(
+        valore
+    ):
+
+        valore = pulisci_valore(
+            valore
         )
 
-        ids_esistenti = {
-            int(riga[0])
-            for riga in cur.fetchall()
-        }
+        if valore is None:
+            return None
 
-        valori_batch = []
+        try:
+            return float(
+                valore
+            )
+        except Exception:
+            return valore
+
+    try:
+
+        # ----------------------------------------------------
+        # 1. UNA SOLA LETTURA DELLO STATO ATTUALE
+        # ----------------------------------------------------
+
+        cur.execute("""
+            SELECT
+                id,
+                ruolo_classico,
+                ruolo_mantra,
+                nome,
+                squadra,
+                quotazione_attuale,
+                quotazione_iniziale,
+                differenza,
+                quotazione_attuale_mantra,
+                quotazione_iniziale_mantra,
+                differenza_mantra,
+                fvm,
+                fvm_mantra
+
+            FROM giocatori
+        """)
+
+        esistenti = {}
+
+        for riga in cur.fetchall():
+
+            giocatore_id = int(
+                riga[0]
+            )
+
+            esistenti[
+                giocatore_id
+            ] = (
+                str(
+                    riga[1]
+                    or ""
+                ).strip(),
+
+                str(
+                    riga[2]
+                    or ""
+                ).strip(),
+
+                str(
+                    riga[3]
+                    or ""
+                ).strip(),
+
+                str(
+                    riga[4]
+                    or ""
+                ).strip(),
+
+                normalizza_numero(
+                    riga[5]
+                ),
+
+                normalizza_numero(
+                    riga[6]
+                ),
+
+                normalizza_numero(
+                    riga[7]
+                ),
+
+                normalizza_numero(
+                    riga[8]
+                ),
+
+                normalizza_numero(
+                    riga[9]
+                ),
+
+                normalizza_numero(
+                    riga[10]
+                ),
+
+                normalizza_numero(
+                    riga[11]
+                ),
+
+                normalizza_numero(
+                    riga[12]
+                )
+            )
+
+        # ----------------------------------------------------
+        # 2. PREPARAZIONE LOCALE: NESSUNA QUERY PER GIOCATORE
+        # ----------------------------------------------------
+
+        da_scrivere = []
         nuovi = 0
         aggiornati = 0
 
         for _, row in df.iterrows():
 
             try:
+
                 giocatore_id = int(
-                    row["Id"]
+                    row[
+                        "Id"
+                    ]
                 )
+
             except Exception:
+
                 continue
 
             nome = str(
@@ -2531,82 +2664,231 @@ def importa_listone_nel_database(df):
                     "Nome",
                     ""
                 )
+                or ""
             ).strip()
 
             if not nome:
                 continue
 
-            if giocatore_id in ids_esistenti:
-                aggiornati += 1
-            else:
-                nuovi += 1
+            dati_confronto = (
+                str(
+                    row.get(
+                        "R",
+                        ""
+                    )
+                    or ""
+                ).strip(),
 
-            valori_batch.append((
-                giocatore_id,
-                str(row.get("R", "")).strip(),
-                str(row.get("RM", "")).strip(),
+                str(
+                    row.get(
+                        "RM",
+                        ""
+                    )
+                    or ""
+                ).strip(),
+
                 nome,
-                str(row.get("Squadra", "")).strip(),
-                row.get("Qt.A"),
-                row.get("Qt.I"),
-                row.get("Diff."),
-                row.get("Qt.A M"),
-                row.get("Qt.I M"),
-                row.get("Diff.M"),
-                row.get("FVM"),
-                row.get("FVM M")
-            ))
 
-        if valori_batch:
+                str(
+                    row.get(
+                        "Squadra",
+                        ""
+                    )
+                    or ""
+                ).strip(),
 
-            sql = """
-                INSERT INTO giocatori (
-                    id,
-                    ruolo_classico,
-                    ruolo_mantra,
-                    nome,
-                    squadra,
-                    quotazione_attuale,
-                    quotazione_iniziale,
-                    differenza,
-                    quotazione_attuale_mantra,
-                    quotazione_iniziale_mantra,
-                    differenza_mantra,
-                    fvm,
-                    fvm_mantra
+                normalizza_numero(
+                    row.get(
+                        "Qt.A"
+                    )
+                ),
+
+                normalizza_numero(
+                    row.get(
+                        "Qt.I"
+                    )
+                ),
+
+                normalizza_numero(
+                    row.get(
+                        "Diff."
+                    )
+                ),
+
+                normalizza_numero(
+                    row.get(
+                        "Qt.A M"
+                    )
+                ),
+
+                normalizza_numero(
+                    row.get(
+                        "Qt.I M"
+                    )
+                ),
+
+                normalizza_numero(
+                    row.get(
+                        "Diff.M"
+                    )
+                ),
+
+                normalizza_numero(
+                    row.get(
+                        "FVM"
+                    )
+                ),
+
+                normalizza_numero(
+                    row.get(
+                        "FVM M"
+                    )
                 )
-                VALUES (
-                    ?, ?, ?, ?, ?,
-                    ?, ?, ?,
-                    ?, ?, ?,
-                    ?, ?
-                )
-                ON CONFLICT(id) DO UPDATE SET
-                    ruolo_classico = excluded.ruolo_classico,
-                    ruolo_mantra = excluded.ruolo_mantra,
-                    nome = excluded.nome,
-                    squadra = excluded.squadra,
-                    quotazione_attuale = excluded.quotazione_attuale,
-                    quotazione_iniziale = excluded.quotazione_iniziale,
-                    differenza = excluded.differenza,
-                    quotazione_attuale_mantra = excluded.quotazione_attuale_mantra,
-                    quotazione_iniziale_mantra = excluded.quotazione_iniziale_mantra,
-                    differenza_mantra = excluded.differenza_mantra,
-                    fvm = excluded.fvm,
-                    fvm_mantra = excluded.fvm_mantra,
-                    ultimo_aggiornamento = CURRENT_TIMESTAMP
-            """
-
-            cur.executemany(
-                sql,
-                valori_batch
             )
 
+            precedente = (
+                esistenti.get(
+                    giocatore_id
+                )
+            )
+
+            if precedente is None:
+
+                nuovi += 1
+
+            elif precedente == dati_confronto:
+
+                # Giocatore identico: nessuna scrittura Cloud.
+                continue
+
+            else:
+
+                aggiornati += 1
+
+            da_scrivere.append(
+                (
+                    giocatore_id,
+                    *dati_confronto
+                )
+            )
+
+        # ----------------------------------------------------
+        # 3. UPSERT MULTI-RIGA A BLOCCHI
+        # ----------------------------------------------------
+        #
+        # 13 parametri per giocatore.
+        # 50 giocatori = 650 parametri per query:
+        # abbastanza piccolo per restare compatibile e riduce
+        # enormemente i round-trip verso Turso.
+
+        DIMENSIONE_BLOCCO = 50
+
+        colonne = """
+            id,
+            ruolo_classico,
+            ruolo_mantra,
+            nome,
+            squadra,
+            quotazione_attuale,
+            quotazione_iniziale,
+            differenza,
+            quotazione_attuale_mantra,
+            quotazione_iniziale_mantra,
+            differenza_mantra,
+            fvm,
+            fvm_mantra
+        """
+
+        update_sql = """
+            ruolo_classico = excluded.ruolo_classico,
+            ruolo_mantra = excluded.ruolo_mantra,
+            nome = excluded.nome,
+            squadra = excluded.squadra,
+            quotazione_attuale = excluded.quotazione_attuale,
+            quotazione_iniziale = excluded.quotazione_iniziale,
+            differenza = excluded.differenza,
+            quotazione_attuale_mantra = excluded.quotazione_attuale_mantra,
+            quotazione_iniziale_mantra = excluded.quotazione_iniziale_mantra,
+            differenza_mantra = excluded.differenza_mantra,
+            fvm = excluded.fvm,
+            fvm_mantra = excluded.fvm_mantra,
+            ultimo_aggiornamento = CURRENT_TIMESTAMP
+        """
+
+        for inizio in range(
+            0,
+            len(
+                da_scrivere
+            ),
+            DIMENSIONE_BLOCCO
+        ):
+
+            blocco = da_scrivere[
+                inizio:
+                inizio
+                + DIMENSIONE_BLOCCO
+            ]
+
+            if not blocco:
+                continue
+
+            placeholders_riga = (
+                "("
+                + ", ".join(
+                    [
+                        "?"
+                        for _ in range(
+                            13
+                        )
+                    ]
+                )
+                + ")"
+            )
+
+            placeholders = ", ".join(
+                [
+                    placeholders_riga
+                    for _ in blocco
+                ]
+            )
+
+            parametri = []
+
+            for valori in blocco:
+
+                parametri.extend(
+                    valori
+                )
+
+            query = f"""
+                INSERT INTO giocatori (
+                    {colonne}
+                )
+
+                VALUES
+                    {placeholders}
+
+                ON CONFLICT(id) DO UPDATE SET
+                    {update_sql}
+            """
+
+            cur.execute(
+                query,
+                tuple(
+                    parametri
+                )
+            )
+
+        # Un solo commit finale.
         conn.commit()
 
     finally:
-        chiudi_connessione(conn)
 
+        chiudi_connessione(
+            conn
+        )
+
+    # Ricaricheremo i dati una sola volta dopo l'import.
     invalida_cache_dati()
 
     return (
@@ -5782,7 +6064,8 @@ elif sezione == "LISTONE":
                     st.success(
                         "Listone importato. "
                         f"Nuovi: {nuovi} — "
-                        f"Aggiornati: {aggiornati}"
+                        f"Aggiornati: {aggiornati}. "
+                        "I giocatori invariati non sono stati riscritti."
                     )
 
         except Exception as errore:
