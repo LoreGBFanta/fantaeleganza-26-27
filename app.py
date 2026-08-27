@@ -24,6 +24,36 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+
+st.markdown("""
+<style>
+/* ============================================================
+   NAVIGAZIONE COMPATTA
+   Pulsanti più piccoli senza sacrificare la leggibilità
+   ============================================================ */
+
+div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button {
+    min-height: 34px !important;
+    height: 34px !important;
+    padding: 0.20rem 0.60rem !important;
+    font-size: 0.88rem !important;
+    line-height: 1.15 !important;
+    border-radius: 7px !important;
+}
+
+/* Mobile: leggermente più alti per facilitare il tap */
+@media (max-width: 768px) {
+    div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button {
+        min-height: 36px !important;
+        height: 36px !important;
+        padding: 0.22rem 0.45rem !important;
+        font-size: 0.86rem !important;
+        line-height: 1.15 !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
 SOGLIA_BASE = 500.00
 MAX_GIOCATORI = 30
 MIN_PORTIERI = 2
