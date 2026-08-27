@@ -2,6 +2,7 @@
 import html
 import io
 import json
+import math
 import os
 import sqlite3
 from datetime import datetime
@@ -2120,6 +2121,360 @@ def calcola_iqr(
         1
     )
 
+
+
+
+def colore_iqr(
+    valore
+):
+    """
+    Colore sintetico dell'indicatore IQR.
+    Scala richiesta: NERO -> ROSSO -> BLU -> VERDE.
+    """
+
+    try:
+        valore = float(
+            valore
+        )
+    except Exception:
+        valore = 0.0
+
+    if valore >= 85:
+        return "#16a34a"
+
+    if valore >= 60:
+        return "#2563eb"
+
+    if valore >= 40:
+        return "#dc2626"
+
+    return "#111827"
+
+
+def genera_html_gauge_iqr(
+    valore
+):
+    """
+    Crea il tachimetro semicircolare IQR in puro SVG/HTML.
+    """
+
+    try:
+        valore = float(
+            valore
+        )
+    except Exception:
+        valore = 0.0
+
+    valore = max(
+        0.0,
+        min(
+            100.0,
+            valore
+        )
+    )
+
+    cx = 120.0
+    cy = 108.0
+    r = 86.0
+
+    segmenti = [
+        (0.0, 40.0, "#111827"),
+        (40.0, 60.0, "#dc2626"),
+        (60.0, 85.0, "#2563eb"),
+        (85.0, 100.0, "#16a34a")
+    ]
+
+    polilinee = []
+
+    for inizio, fine, colore in segmenti:
+
+        punti = []
+
+        passi = 18
+
+        for indice in range(
+            passi + 1
+        ):
+
+            quota = (
+                inizio
+                + (
+                    fine
+                    - inizio
+                )
+                * indice
+                / passi
+            )
+
+            angolo = (
+                math.pi
+                - quota
+                / 100.0
+                * math.pi
+            )
+
+            x = (
+                cx
+                + r
+                * math.cos(
+                    angolo
+                )
+            )
+
+            y = (
+                cy
+                - r
+                * math.sin(
+                    angolo
+                )
+            )
+
+            punti.append(
+                f"{x:.1f},{y:.1f}"
+            )
+
+        polilinee.append(
+            (
+                f'<polyline points="{" ".join(punti)}" '
+                f'fill="none" stroke="{colore}" '
+                f'stroke-width="18" stroke-linecap="butt"/>'
+            )
+        )
+
+    angolo_indicatore = (
+        math.pi
+        - valore
+        / 100.0
+        * math.pi
+    )
+
+    lunghezza = 66.0
+
+    x2 = (
+        cx
+        + lunghezza
+        * math.cos(
+            angolo_indicatore
+        )
+    )
+
+    y2 = (
+        cy
+        - lunghezza
+        * math.sin(
+            angolo_indicatore
+        )
+    )
+
+    descrizione = html.escape(
+        descrizione_iqr(
+            valore
+        )
+    )
+
+    colore_descrizione = (
+        colore_iqr(
+            valore
+        )
+    )
+
+    return (
+        '<div class="iqr-gauge-card">'
+        '<div class="iqr-gauge-title">⭐ IQR</div>'
+        '<svg viewBox="0 0 240 128" class="iqr-gauge-svg" '
+        'role="img" aria-label="Indice Qualità Rosa">'
+        + "".join(
+            polilinee
+        )
+        + (
+            f'<line x1="{cx:.1f}" y1="{cy:.1f}" '
+            f'x2="{x2:.1f}" y2="{y2:.1f}" '
+            'stroke="#0f172a" stroke-width="5" '
+            'stroke-linecap="round"/>'
+        )
+        + (
+            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="9" '
+            'fill="#0f172a"/>'
+        )
+        + '</svg>'
+        + (
+            f'<div class="iqr-gauge-value">{valore:.1f}%</div>'
+        )
+        + (
+            f'<div class="iqr-gauge-description" '
+            f'style="background:{colore_descrizione};">'
+            f'{descrizione}</div>'
+        )
+        + '<div class="iqr-gauge-hint">Tocca / clicca per i dettagli</div>'
+        + '</div>'
+    )
+
+
+def dettaglio_iqr_per_ruolo(
+    df_rosa
+):
+    """
+    Costruisce la tabella di dettaglio IQR ruolo per ruolo.
+    Il ruolo di riferimento è sempre il primo ruolo Mantra.
+    """
+
+    colonne = [
+        "Ruolo",
+        "Giocatori",
+        "Verdi",
+        "Blu",
+        "Rossi",
+        "Neri",
+        "FVM M medio",
+        "Qualità media",
+        "Offensivo"
+    ]
+
+    if (
+        df_rosa is None
+        or df_rosa.empty
+    ):
+        return pd.DataFrame(
+            columns=colonne
+        )
+
+    ruoli_offensivi = {
+        "PC",
+        "A",
+        "W",
+        "T",
+        "C"
+    }
+
+    righe = []
+
+    for ruolo in SOGLIE_FVM_M.keys():
+
+        selezione = []
+
+        for _, giocatore in (
+            df_rosa.iterrows()
+        ):
+
+            ruolo_giocatore = primo_ruolo(
+                giocatore.get(
+                    "RM",
+                    ""
+                )
+            ).upper()
+
+            if ruolo_giocatore == ruolo:
+                selezione.append(
+                    giocatore
+                )
+
+        if not selezione:
+            continue
+
+        verdi = 0
+        blu = 0
+        rossi = 0
+        neri = 0
+        valori_fvm = []
+        punti = []
+
+        for giocatore in selezione:
+
+            fascia = fascia_iqr_giocatore(
+                giocatore.get(
+                    "RM",
+                    ""
+                ),
+                giocatore.get(
+                    "FVM M"
+                )
+            )
+
+            if fascia == "VERDE":
+                verdi += 1
+            elif fascia == "BLU":
+                blu += 1
+            elif fascia == "ROSSO":
+                rossi += 1
+            else:
+                neri += 1
+
+            try:
+                valore_fvm = float(
+                    giocatore.get(
+                        "FVM M"
+                    )
+                )
+
+                if not pd.isna(
+                    valore_fvm
+                ):
+                    valori_fvm.append(
+                        valore_fvm
+                    )
+
+            except Exception:
+                pass
+
+            punti.append(
+                punteggio_qualita_giocatore(
+                    giocatore.get(
+                        "RM",
+                        ""
+                    ),
+                    giocatore.get(
+                        "FVM M"
+                    )
+                )
+            )
+
+        media_fvm = (
+            sum(
+                valori_fvm
+            )
+            / len(
+                valori_fvm
+            )
+            if valori_fvm
+            else 0.0
+        )
+
+        qualita_media = (
+            sum(
+                punti
+            )
+            / len(
+                punti
+            )
+            if punti
+            else 0.0
+        )
+
+        righe.append({
+            "Ruolo": ruolo,
+            "Giocatori": len(
+                selezione
+            ),
+            "Verdi": verdi,
+            "Blu": blu,
+            "Rossi": rossi,
+            "Neri": neri,
+            "FVM M medio": round(
+                media_fvm,
+                1
+            ),
+            "Qualità media": f"{qualita_media:.1f}%",
+            "Offensivo": (
+                "Sì"
+                if ruolo in ruoli_offensivi
+                else "No"
+            )
+        })
+
+    return pd.DataFrame(
+        righe,
+        columns=colonne
+    )
 
 
 # ============================================================
@@ -5210,6 +5565,117 @@ def classifica_moduli(
     return risultati
 
 
+
+# ============================================================
+# POPUP IQR - INDICE QUALITÀ ROSA
+# ============================================================
+
+@st.dialog(
+    "IQR - Indice Qualità Rosa",
+    width="large"
+)
+def mostra_dettaglio_iqr(
+    valore_iqr,
+    df_rosa
+):
+
+    st.markdown(
+        genera_html_gauge_iqr(
+            valore_iqr
+        ),
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        "### Come viene calcolato l'IQR"
+    )
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+
+        st.markdown(
+            "**1. Qualità della rosa**"
+        )
+
+        st.caption(
+            "Ogni giocatore vale in base alla fascia FVM M "
+            "del primo ruolo Mantra: Verde 100, Blu 70, "
+            "Rosso 40, Nero 0–20. Gli slot vuoti valgono 0."
+        )
+
+    with c2:
+
+        st.markdown(
+            "**2. Densità fasce alte**"
+        )
+
+        st.caption(
+            "Premia il numero di giocatori Verdi e Blu. "
+            "Riferimenti calibrati per una lega a 12: "
+            "8 Verdi e 12 Verdi+Blu."
+        )
+
+    with c3:
+
+        st.markdown(
+            "**3. Bonus ruoli offensivi**"
+        )
+
+        st.caption(
+            "Premia la presenza di Verdi/Blu nei ruoli "
+            "Pc, A, W, T e C. Riferimenti: "
+            "5 Verdi offensivi e 8 Verdi+Blu offensivi."
+        )
+
+    st.markdown(
+        "### Dettaglio qualità per ruolo"
+    )
+
+    dettaglio = (
+        dettaglio_iqr_per_ruolo(
+            df_rosa
+        )
+    )
+
+    if dettaglio.empty:
+
+        st.info(
+            "La rosa è ancora vuota."
+        )
+
+    else:
+
+        st.dataframe(
+            dettaglio,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    st.markdown(
+        "### Scala qualitativa"
+    )
+
+    st.markdown(
+        """
+- **0–39%** — Rosa debole
+- **40–59%** — Rosa discreta
+- **60–74%** — Rosa buona
+- **75–84%** — Rosa molto forte
+- **85–94%** — Rosa eccellente
+- **95–100%** — Rosa eccezionale
+        """
+    )
+
+    st.info(
+        "L'IQR è un indicatore sintetico pensato per una lega a 12: "
+        "combina qualità complessiva, densità di fasce alte e "
+        "forza dei ruoli offensivi. "
+        "30 giocatori Verdi = 100%; "
+        "30 giocatori con FVM M = 1 = 0%."
+    )
+
+
 # ============================================================
 # POPUP REGOLE
 # ============================================================
@@ -5869,6 +6335,118 @@ with head_theme:
         st.rerun()
 
 
+
+st.markdown(
+    """
+    <style>
+
+    div[class*="st-key-iqr_card_clickable"] {
+        position: relative !important;
+        min-height: 154px !important;
+        border: 1px solid #dbe2ea;
+        border-radius: 12px;
+        background: #ffffff;
+        padding: 6px 7px 7px 7px;
+        overflow: hidden;
+    }
+
+    div[class*="st-key-iqr_card_clickable"]:hover {
+        border-color: #2563eb;
+        box-shadow: 0 3px 12px rgba(15, 23, 42, 0.10);
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .stButton {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 20 !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .stButton > button {
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        opacity: 0 !important;
+        cursor: pointer !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+
+    .iqr-gauge-card {
+        text-align: center;
+        width: 100%;
+        pointer-events: none;
+    }
+
+    .iqr-gauge-title {
+        font-size: 12px;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: -7px;
+    }
+
+    .iqr-gauge-svg {
+        width: 100%;
+        max-width: 150px;
+        height: 76px;
+        display: block;
+        margin: 0 auto -2px auto;
+    }
+
+    .iqr-gauge-value {
+        font-size: 20px;
+        line-height: 1;
+        font-weight: 800;
+        color: #0f172a;
+        margin-top: -2px;
+    }
+
+    .iqr-gauge-description {
+        display: inline-block;
+        color: #ffffff;
+        font-size: 9px;
+        font-weight: 800;
+        line-height: 1.1;
+        padding: 4px 7px;
+        border-radius: 6px;
+        margin-top: 5px;
+    }
+
+    .iqr-gauge-hint {
+        font-size: 7px;
+        color: #64748b;
+        margin-top: 4px;
+    }
+
+    @media (max-width: 850px) {
+
+        div[class*="st-key-iqr_card_clickable"] {
+            min-height: 142px !important;
+            padding: 5px !important;
+        }
+
+        .iqr-gauge-svg {
+            max-width: 135px;
+            height: 68px;
+        }
+
+        .iqr-gauge-value {
+            font-size: 18px;
+        }
+
+        .iqr-gauge-description {
+            font-size: 8px;
+        }
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
 # ============================================================
 # RIEPILOGO COMPATTO
 # ============================================================
@@ -5914,24 +6492,29 @@ m7.metric(
 
 
 
-m8.metric(
-    "⭐ IQR",
-    f"{iqr:.1f}%",
-    delta=descrizione_iqr(
-        iqr
-    ),
-    delta_color="off",
-    help=(
-        "Indice Qualità Rosa. "
-        "Verde = 100, Blu = 70, Rosso = 40, Nero = 0-20; "
-        "gli slot vuoti valgono 0. "
-        "L'indice premia inoltre la densità di giocatori Verdi/Blu "
-        "con riferimenti calibrati per una lega a 12. "
-        "Bonus aggiuntivo per Verdi/Blu nei ruoli offensivi "
-        "Pc, A, W, T e C. "
-        "30 giocatori Verdi = 100%; 30 giocatori con FVM M = 1 = 0%."
-    )
-)
+with m8:
+
+    with st.container(
+        key="iqr_card_clickable"
+    ):
+
+        st.markdown(
+            genera_html_gauge_iqr(
+                iqr
+            ),
+            unsafe_allow_html=True
+        )
+
+        if st.button(
+            "Apri dettaglio IQR",
+            key="btn_apri_dettaglio_iqr",
+            help="Apri il dettaglio dell'Indice Qualità Rosa"
+        ):
+
+            mostra_dettaglio_iqr(
+                iqr,
+                df_rosa_globale
+            )
 
 
 # ============================================================
