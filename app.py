@@ -5134,7 +5134,7 @@ def genera_pdf_rosa_e_moduli(
         "PUNTEGGIO",
         "COPERTURA MEDIA",
         "SCOPERTI",
-        "SOTTO 60%",
+        "SLOT DEBOLI",
         "AL 100%"
     ]]
 
@@ -5153,7 +5153,7 @@ def genera_pdf_rosa_e_moduli(
                 "Scoperti"
             ],
             riga[
-                "Sotto 60%"
+                "Deboli"
             ],
             riga[
                 "Al 100%"
@@ -5740,6 +5740,56 @@ def percentuale_copertura_ruolo(
     )
 
 
+def qualita_media_ruolo_slot(
+    df_rosa,
+    ruolo_posizione
+):
+    """
+    Qualità media (0-100) dei giocatori compatibili con uno slot.
+
+    Usa lo stesso punteggio individuale dell'IQR:
+    Verde 100 / Blu 70 / Rosso 40 / Nero 0-20.
+    Se non esistono giocatori compatibili, la qualità è 0%.
+    """
+
+    possibili = giocatori_compatibili(
+        df_rosa,
+        ruolo_posizione
+    )
+
+    if possibili.empty:
+        return 0.0
+
+    punteggi = []
+
+    for _, giocatore in possibili.iterrows():
+
+        punteggi.append(
+            punteggio_qualita_giocatore(
+                giocatore.get(
+                    "RM",
+                    ""
+                ),
+                giocatore.get(
+                    "FVM M"
+                )
+            )
+        )
+
+    if not punteggi:
+        return 0.0
+
+    return round(
+        sum(
+            punteggi
+        )
+        / len(
+            punteggi
+        ),
+        1
+    )
+
+
 def colore_percentuale_copertura(
     percentuale
 ):
@@ -5808,20 +5858,22 @@ def analizza_modulo(
     """
     Analisi strategica del modulo.
 
-    Il punteggio NON è una semplice media:
-    - parte dalla copertura media dei singoli slot;
-    - penalizza fortemente ogni slot completamente scoperto;
-    - penalizza anche gli slot con copertura inferiore al 60%.
+    Nuove definizioni:
+    - SLOT SCOPERTO: slot con 2 o meno giocatori compatibili.
+    - SLOT DEBOLE: qualità media dei compatibili inferiore al 50%.
+      Gli slot allo 0% sono inclusi automaticamente tra i deboli.
 
-    Formula:
-    punteggio = copertura_media
-                - 15 punti per ogni slot allo 0%
-                - 3 punti per ogni slot tra 1% e 59%
+    Il punteggio strategico considera:
+    - copertura media;
+    - penalità di profondità per gli slot scoperti;
+    - penalità qualitativa per gli slot deboli.
 
-    Il risultato finale è limitato tra 0 e 100.
+    Penalità:
+    - 6 punti per ogni slot scoperto;
+    - 4 punti per ogni slot debole.
     """
 
-    percentuali = []
+    dati_slot = []
 
     for _, posizioni in MODULI[
         nome_modulo
@@ -5829,57 +5881,86 @@ def analizza_modulo(
 
         for _, ruolo_slot in posizioni:
 
-            _, percentuale = (
+            numero, percentuale = (
                 percentuale_copertura_ruolo(
                     df_rosa,
                     ruolo_slot
                 )
             )
 
-            percentuali.append(
-                float(
-                    percentuale
+            qualita_media = (
+                qualita_media_ruolo_slot(
+                    df_rosa,
+                    ruolo_slot
                 )
             )
 
-    if not percentuali:
+            dati_slot.append({
+                "Ruolo": ruolo_slot,
+                "Numero": int(
+                    numero
+                ),
+                "Copertura": float(
+                    percentuale
+                ),
+                "Qualita": float(
+                    qualita_media
+                )
+            })
+
+    if not dati_slot:
 
         return {
             "Modulo": nome_modulo,
             "Punteggio": 0.0,
             "Copertura media": 0.0,
             "Scoperti": 0,
-            "Sotto 60%": 0,
+            "Deboli": 0,
+            "Ruoli deboli": "",
             "Al 100%": 0,
             "Totale slot": 0
         }
 
     copertura_media = (
-        sum(percentuali)
-        / len(percentuali)
+        sum(
+            s["Copertura"]
+            for s in dati_slot
+        )
+        / len(
+            dati_slot
+        )
     )
 
     scoperti = sum(
         1
-        for p in percentuali
-        if p == 0
+        for s in dati_slot
+        if s["Numero"] <= 2
     )
 
-    sotto_60 = sum(
-        1
-        for p in percentuali
-        if 0 < p < 60
+    slot_deboli = [
+        s
+        for s in dati_slot
+        if s["Qualita"] < 50
+    ]
+
+    deboli = len(
+        slot_deboli
+    )
+
+    ruoli_deboli = ", ".join(
+        s["Ruolo"]
+        for s in slot_deboli
     )
 
     al_100 = sum(
         1
-        for p in percentuali
-        if p >= 100
+        for s in dati_slot
+        if s["Numero"] >= 4
     )
 
     penalita = (
-        scoperti * 15
-        + sotto_60 * 3
+        scoperti * 6
+        + deboli * 4
     )
 
     punteggio = max(
@@ -5902,13 +5983,13 @@ def analizza_modulo(
             1
         ),
         "Scoperti": scoperti,
-        "Sotto 60%": sotto_60,
+        "Deboli": deboli,
+        "Ruoli deboli": ruoli_deboli,
         "Al 100%": al_100,
         "Totale slot": len(
-            percentuali
+            dati_slot
         )
     }
-
 
 def classifica_moduli(
     df_rosa
@@ -5930,8 +6011,8 @@ def classifica_moduli(
         key=lambda x: (
             -x["Punteggio"],
             x["Scoperti"],
+            x["Deboli"],
             -x["Copertura media"],
-            x["Sotto 60%"],
             x["Modulo"]
         )
     )
@@ -7302,30 +7383,86 @@ if sezione == "DASHBOARD":
                     ]
                 )
 
-                if not gruppo.empty:
+                numero_giocatori = len(
+                    gruppo
+                )
 
-                    righe.append({
-                        "Ruolo":
-                            ruolo,
+                righe.append({
+                    "Ruolo":
+                        ruolo,
 
-                        "Giocatori":
-                            len(
-                                gruppo
-                            ),
+                    "Giocatori":
+                        numero_giocatori,
 
-                        "Valore":
-                            formatta_crediti(
-                                gruppo[
-                                    "Prezzo"
-                                ]
-                                .fillna(0)
-                                .sum()
-                            )
-                    })
+                    "Valore":
+                        formatta_crediti(
+                            gruppo[
+                                "Prezzo"
+                            ]
+                            .fillna(0)
+                            .sum()
+                        )
+                        if not gruppo.empty
+                        else "0,00"
+                })
 
-            st.dataframe(
+            df_distribuzione = (
                 pd.DataFrame(
                     righe
+                )
+            )
+
+            def colora_riga_ruolo(
+                riga
+            ):
+
+                numero = int(
+                    riga[
+                        "Giocatori"
+                    ]
+                )
+
+                # 0-1: rosso
+                if numero < 2:
+
+                    colore = (
+                        "background-color: #fee2e2; "
+                        "color: #991b1b; "
+                        "font-weight: 700;"
+                    )
+
+                # 3: giallo
+                elif numero == 3:
+
+                    colore = (
+                        "background-color: #fef3c7; "
+                        "color: #92400e; "
+                        "font-weight: 700;"
+                    )
+
+                # 4 o più: verde
+                elif numero >= 4:
+
+                    colore = (
+                        "background-color: #dcfce7; "
+                        "color: #166534; "
+                        "font-weight: 700;"
+                    )
+
+                # Esattamente 2: neutro
+                else:
+
+                    colore = ""
+
+                return [
+                    colore
+                    for _ in riga.index
+                ]
+
+            st.dataframe(
+                df_distribuzione.style.apply(
+                    colora_riga_ruolo,
+                    axis=1
                 ),
                 use_container_width=True,
                 hide_index=True
@@ -7356,7 +7493,16 @@ if sezione == "DASHBOARD":
                     f"— copertura media "
                     f"**{migliore['Copertura media']}%** "
                     f"— slot scoperti "
-                    f"**{migliore['Scoperti']}**"
+                    f"**{migliore['Scoperti']}** "
+                    f"— slot deboli "
+                    f"**{migliore['Deboli']}**"
+                    + (
+                        f" ({migliore['Ruoli deboli']})"
+                        if migliore[
+                            "Ruoli deboli"
+                        ]
+                        else ""
+                    )
                 )
 
                 tabella_classifica = (
@@ -7369,7 +7515,7 @@ if sezione == "DASHBOARD":
                             "Punteggio",
                             "Copertura media",
                             "Scoperti",
-                            "Sotto 60%",
+                            "Deboli",
                             "Al 100%"
                         ]
                     ]
@@ -8437,7 +8583,16 @@ elif sezione == "MODULI":
             f"— copertura media "
             f"**{migliore['Copertura media']}%** "
             f"— slot scoperti "
-            f"**{migliore['Scoperti']}**"
+            f"**{migliore['Scoperti']}** "
+            f"— slot deboli "
+            f"**{migliore['Deboli']}**"
+            + (
+                f" ({migliore['Ruoli deboli']})"
+                if migliore[
+                    "Ruoli deboli"
+                ]
+                else ""
+            )
         )
 
     st.markdown(
@@ -8572,7 +8727,16 @@ elif sezione == "MODULI":
             f'{ruoli_al_100}/{totale_posizioni}'
             f' · slot scoperti: '
             f'{analisi_corrente["Scoperti"]}'
-            '</div>'
+            f' · slot deboli: '
+            f'{analisi_corrente["Deboli"]}'
+            + (
+                f' ({html.escape(analisi_corrente["Ruoli deboli"])})'
+                if analisi_corrente[
+                    "Ruoli deboli"
+                ]
+                else ""
+            )
+            + '</div>'
             '<div class="pitch">'
             '<div class="pitch-half-line"></div>'
         )
