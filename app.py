@@ -977,6 +977,29 @@ st.markdown(
             min-width: 0 !important;
         }}
 
+        div[class*="st-key-priorita_click_"] {{
+            position: relative !important;
+        }}
+
+        div[class*="st-key-priorita_click_"] .stButton {{
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 20 !important;
+            margin: 0 !important;
+        }}
+
+        div[class*="st-key-priorita_click_"] .stButton > button {{
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 100% !important;
+            opacity: 0 !important;
+            cursor: pointer !important;
+            border: 0 !important;
+            padding: 0 !important;
+        }}
+
         /* ==================================================
            CAMPO MANTRA MOBILE
            ================================================== */
@@ -6344,6 +6367,291 @@ def classifica_moduli(
 
 
 # ============================================================
+# POPUP PRIORITÀ ACQUISTO
+# ============================================================
+
+@st.dialog(
+    "Priorità acquisto - dettaglio ruolo",
+    width="large"
+)
+def mostra_dettaglio_priorita_acquisto(
+    giocatore,
+    priorita,
+    df_listone
+):
+
+    ruolo_riferimento = str(
+        priorita.get(
+            "Ruolo",
+            ""
+        )
+    ).strip()
+
+    nome_giocatore = html.escape(
+        str(
+            giocatore.get(
+                "Nome",
+                ""
+            )
+        )
+    )
+
+    st.markdown(
+        f"### {nome_giocatore}"
+    )
+
+    st.caption(
+        f"Ruolo analizzato: {ruolo_riferimento} · "
+        f"Priorità: {priorita.get('Etichetta', '')}"
+    )
+
+    compatibili = giocatori_compatibili(
+        df_listone,
+        ruolo_riferimento
+    )
+
+    if compatibili is None or compatibili.empty:
+
+        st.info(
+            "Non risultano giocatori compatibili nel ruolo."
+        )
+        return
+
+    disponibili = (
+        compatibili[
+            compatibili[
+                "Stato"
+            ]
+            .astype(str)
+            .str.upper()
+            == "DISPONIBILE"
+        ]
+        .copy()
+    )
+
+    if disponibili.empty:
+
+        st.warning(
+            "Non risultano più giocatori disponibili "
+            f"nel ruolo {ruolo_riferimento}."
+        )
+        return
+
+    # --------------------------------------------------------
+    # FASCIA + ORDINAMENTO DAL LIVELLO PIÙ ALTO AL PIÙ BASSO
+    # --------------------------------------------------------
+
+    ordine_fasce = {
+        "VERDE": 1,
+        "BLU": 2,
+        "ROSSO": 3,
+        "NERO": 4
+    }
+
+    disponibili[
+        "_fascia"
+    ] = disponibili.apply(
+        lambda r:
+        fascia_iqr_giocatore(
+            r.get(
+                "RM",
+                ""
+            ),
+            r.get(
+                "FVM M"
+            )
+        ),
+        axis=1
+    )
+
+    disponibili[
+        "_ordine_fascia"
+    ] = disponibili[
+        "_fascia"
+    ].map(
+        ordine_fasce
+    ).fillna(
+        99
+    )
+
+    disponibili[
+        "_fvm_m_num"
+    ] = pd.to_numeric(
+        disponibili[
+            "FVM M"
+        ],
+        errors="coerce"
+    )
+
+    disponibili = (
+        disponibili
+        .sort_values(
+            [
+                "_ordine_fascia",
+                "_fvm_m_num",
+                "Nome"
+            ],
+            ascending=[
+                True,
+                False,
+                True
+            ],
+            na_position="last"
+        )
+        .reset_index(
+            drop=True
+        )
+    )
+
+    # --------------------------------------------------------
+    # RIEPILOGO
+    # --------------------------------------------------------
+
+    st.markdown(
+        f"**Giocatori ancora disponibili nel ruolo: "
+        f"{len(disponibili)}**"
+    )
+
+    fvm_candidato = pd.to_numeric(
+        pd.Series(
+            [
+                giocatore.get(
+                    "FVM M"
+                )
+            ]
+        ),
+        errors="coerce"
+    ).iloc[0]
+
+    if not pd.isna(
+        fvm_candidato
+    ):
+
+        pari_superiori = int(
+            (
+                disponibili[
+                    "_fvm_m_num"
+                ]
+                >= float(
+                    fvm_candidato
+                )
+            )
+            .fillna(False)
+            .sum()
+        )
+
+        st.caption(
+            f"Di questi, {pari_superiori} hanno FVM M "
+            f"pari o superiore a {float(fvm_candidato):g}."
+        )
+
+    # --------------------------------------------------------
+    # TABELLA HTML PER MANTENERE I COLORI DEI NOMI
+    # --------------------------------------------------------
+
+    righe_html = []
+
+    for _, riga in disponibili.iterrows():
+
+        nome = html.escape(
+            str(
+                riga.get(
+                    "Nome",
+                    ""
+                )
+            )
+        )
+
+        squadra = html.escape(
+            str(
+                riga.get(
+                    "Squadra",
+                    ""
+                )
+            )
+        )
+
+        ruolo = html.escape(
+            str(
+                riga.get(
+                    "RM",
+                    ""
+                )
+            )
+        )
+
+        fascia = str(
+            riga.get(
+                "_fascia",
+                "NERO"
+            )
+        )
+
+        fvm_m = riga.get(
+            "FVM M",
+            ""
+        )
+
+        colore_nome = colore_fvm_mantra(
+            riga.get(
+                "RM",
+                ""
+            ),
+            riga.get(
+                "FVM M"
+            )
+        )
+
+        righe_html.append(
+            "<tr>"
+            f"<td style='font-weight:800;color:{colore_nome};'>"
+            f"{nome}</td>"
+            f"<td>{squadra}</td>"
+            f"<td>{ruolo}</td>"
+            f"<td style='text-align:center;'>{html.escape(str(fvm_m))}</td>"
+            f"<td style='text-align:center;font-weight:700;'>"
+            f"{html.escape(fascia.title())}</td>"
+            "</tr>"
+        )
+
+    tabella_html = (
+        "<div style='overflow-x:auto;'>"
+        "<table style='width:100%;border-collapse:collapse;"
+        "font-size:0.88rem;background:#ffffff;'>"
+        "<thead>"
+        "<tr style='background:#071a2f;color:#ffffff;'>"
+        "<th style='padding:8px;border:1px solid #d1d5db;text-align:left;'>"
+        "GIOCATORE</th>"
+        "<th style='padding:8px;border:1px solid #d1d5db;text-align:left;'>"
+        "SQUADRA</th>"
+        "<th style='padding:8px;border:1px solid #d1d5db;text-align:left;'>"
+        "RUOLO</th>"
+        "<th style='padding:8px;border:1px solid #d1d5db;'>FVM M</th>"
+        "<th style='padding:8px;border:1px solid #d1d5db;'>FASCIA</th>"
+        "</tr>"
+        "</thead>"
+        "<tbody>"
+        + "".join(
+            [
+                r.replace(
+                    "<td>",
+                    "<td style='padding:7px;border:1px solid #e5e7eb;'>"
+                )
+                for r in righe_html
+            ]
+        )
+        + "</tbody>"
+        "</table>"
+        "</div>"
+    )
+
+    st.markdown(
+        tabella_html,
+        unsafe_allow_html=True
+    )
+
+
+# ============================================================
 # POPUP IQR - INDICE QUALITÀ ROSA
 # ============================================================
 
@@ -8401,53 +8709,88 @@ elif sezione == "ASTA":
                             f"({priorita_acquisto['Residuo']:.1f}%)"
                         )
 
-                        st.markdown(
-                            f"""
-                            <div style="
-                                min-height:72px;
-                                border:2px solid {bordo_priorita};
-                                border-radius:10px;
-                                background:{bg_priorita};
-                                padding:9px 10px;
-                                display:flex;
-                                flex-direction:column;
-                                justify-content:center;
-                                box-sizing:border-box;
-                            ">
+                        with st.container(
+                            key=(
+                                "priorita_click_"
+                                f"{int(giocatore['Id'])}"
+                            )
+                        ):
+
+                            st.markdown(
+                                f"""
                                 <div style="
-                                    font-size:0.78rem;
-                                    color:#475569;
-                                    margin-bottom:4px;
-                                    font-weight:600;
+                                    min-height:72px;
+                                    border:2px solid {bordo_priorita};
+                                    border-radius:10px;
+                                    background:{bg_priorita};
+                                    padding:9px 10px;
+                                    display:flex;
+                                    flex-direction:column;
+                                    justify-content:center;
+                                    box-sizing:border-box;
+                                    cursor:pointer;
                                 ">
-                                    Priorità acquisto
+                                    <div style="
+                                        font-size:0.78rem;
+                                        color:#475569;
+                                        margin-bottom:4px;
+                                        font-weight:600;
+                                    ">
+                                        Priorità acquisto
+                                    </div>
+                                    <div style="
+                                        font-size:1.00rem;
+                                        line-height:1.10;
+                                        font-weight:800;
+                                        color:{fg_priorita};
+                                    ">
+                                        {html.escape(
+                                            priorita_acquisto[
+                                                "Etichetta"
+                                            ]
+                                        )}
+                                    </div>
+                                    <div style="
+                                        font-size:0.66rem;
+                                        line-height:1.15;
+                                        color:#64748b;
+                                        margin-top:4px;
+                                    ">
+                                        {html.escape(
+                                            dettaglio_priorita
+                                        )}
+                                    </div>
+                                    <div style="
+                                        font-size:0.62rem;
+                                        line-height:1.1;
+                                        color:#64748b;
+                                        margin-top:5px;
+                                        font-weight:600;
+                                    ">
+                                        Clicca per vedere chi è rimasto
+                                    </div>
                                 </div>
-                                <div style="
-                                    font-size:1.00rem;
-                                    line-height:1.10;
-                                    font-weight:800;
-                                    color:{fg_priorita};
-                                ">
-                                    {html.escape(
-                                        priorita_acquisto[
-                                            "Etichetta"
-                                        ]
-                                    )}
-                                </div>
-                                <div style="
-                                    font-size:0.66rem;
-                                    line-height:1.15;
-                                    color:#64748b;
-                                    margin-top:4px;
-                                ">
-                                    {html.escape(
-                                        dettaglio_priorita
-                                    )}
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
+                                """,
+                                unsafe_allow_html=True
+                            )
+
+                            if st.button(
+                                "Apri dettaglio priorità",
+                                key=(
+                                    "btn_priorita_"
+                                    f"{int(giocatore['Id'])}"
+                                ),
+                                help=(
+                                    "Mostra i giocatori ancora "
+                                    "disponibili nel ruolo"
+                                )
+                            ):
+
+                                mostra_dettaglio_priorita_acquisto(
+                                    giocatore,
+                                    priorita_acquisto,
+                                    df_completo
+                                )
 
                     chiave_prezzo = (
                         "offerta_asta_"
