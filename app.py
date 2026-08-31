@@ -7416,7 +7416,7 @@ elif sezione == "LISTONE":
                 engine="openpyxl"
             )
 
-            foglio_listone = None
+            foglio_tutti = None
 
             for nome_foglio in (
                 excel.sheet_names
@@ -7426,19 +7426,19 @@ elif sezione == "LISTONE":
                     nome_foglio
                     .strip()
                     .upper()
-                    == "LISTONE"
+                    == "TUTTI"
                 ):
 
-                    foglio_listone = (
+                    foglio_tutti = (
                         nome_foglio
                     )
 
                     break
 
-            if foglio_listone is None:
+            if foglio_tutti is None:
 
                 st.error(
-                    "Non trovo il foglio LISTONE."
+                    "Non trovo il foglio Tutti."
                 )
 
             else:
@@ -7448,7 +7448,7 @@ elif sezione == "LISTONE":
                         contenuto
                     ),
                     sheet_name=(
-                        foglio_listone
+                        foglio_tutti
                     ),
                     engine="openpyxl",
                     header=1
