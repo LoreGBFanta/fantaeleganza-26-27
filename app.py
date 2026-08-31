@@ -7731,6 +7731,36 @@ elif sezione == "LISTONE":
 
 elif sezione == "ASTA":
 
+    st.markdown(
+        """
+        <style>
+        /* ASTA RAPIDA */
+        div[data-testid="stNumberInput"] input {
+            font-size:1.22rem !important;
+            font-weight:700 !important;
+            text-align:center !important;
+            min-height:46px !important;
+        }
+
+        div[data-testid="stSelectbox"] > div > div {
+            min-height:42px !important;
+        }
+
+        @media (max-width:768px) {
+            div[data-testid="stNumberInput"] input {
+                font-size:1.08rem !important;
+                min-height:44px !important;
+            }
+
+            div[data-testid="stSelectbox"] > div > div {
+                min-height:44px !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
     st.subheader(
         "🔨 Asta"
     )
@@ -7755,70 +7785,18 @@ elif sezione == "ASTA":
         )
 
         # ----------------------------------------------------
-        # DISPONIBILI
+        # DISPONIBILI - ASTA RAPIDA
         # ----------------------------------------------------
 
         with tab1:
 
             disponibili = (
                 df[
-                    df[
-                        "Stato"
-                    ]
-                    == "DISPONIBILE"
+                    df["Stato"] == "DISPONIBILE"
                 ]
                 .copy()
-            )
-
-            ricerca = st.text_input(
-                "🔎 Cerca giocatore o squadra",
-                key="search_asta"
-            )
-
-            if ricerca:
-
-                testo = (
-                    ricerca
-                    .lower()
-                    .strip()
-                )
-
-                disponibili = (
-                    disponibili[
-                        (
-                            disponibili[
-                                "Nome"
-                            ]
-                            .astype(str)
-                            .str.lower()
-                            .str.contains(
-                                testo,
-                                na=False
-                            )
-                        )
-                        |
-                        (
-                            disponibili[
-                                "Squadra"
-                            ]
-                            .astype(str)
-                            .str.lower()
-                            .str.contains(
-                                testo,
-                                na=False
-                            )
-                        )
-                    ]
-                )
-
-            disponibili = (
-                disponibili
-                .sort_values(
-                    "Nome"
-                )
-                .reset_index(
-                    drop=True
-                )
+                .sort_values("Nome")
+                .reset_index(drop=True)
             )
 
             if disponibili.empty:
@@ -7829,7 +7807,7 @@ elif sezione == "ASTA":
 
             else:
 
-                opzioni = (
+                opzioni_asta = (
                     disponibili
                     .apply(
                         lambda r:
@@ -7841,206 +7819,218 @@ elif sezione == "ASTA":
                     .tolist()
                 )
 
-                scelta = (
-                    st.selectbox(
-                        "Giocatore",
-                        opzioni
-                    )
-                )
-
-                giocatore = (
-                    disponibili.iloc[
-                        opzioni.index(
-                            scelta
-                        )
-                    ]
-                )
-
-                g1, g2, g3, g4 = (
-                    st.columns(4)
-                )
-
-                colore_nome_asta = (
-                    colore_fvm_mantra(
-                        giocatore.get(
-                            "RM",
-                            ""
-                        ),
-                        giocatore.get(
-                            "FVM M"
-                        )
-                    )
-                )
-
-                with g1:
-
-                    st.markdown(
-                        f"""
-                        <div class="asta-player-mobile-fix">
-                            <div style="
-                                font-size:0.875rem;
-                                color:rgba(49,51,63,0.6);
-                                margin-bottom:0.15rem;
-                            ">
-                                Giocatore
-                            </div>
-                            <div style="
-                                font-size:1.75rem;
-                                line-height:1.2;
-                                font-weight:600;
-                                color:{colore_nome_asta};
-                                white-space:normal;
-                                overflow-wrap:anywhere;
-                            ">
-                                {html.escape(str(giocatore["Nome"]))}
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-
-                g2.metric(
-                    "Squadra",
-                    giocatore[
-                        "Squadra"
-                    ]
-                )
-
-                g3.metric(
-                    "Ruolo",
-                    giocatore[
-                        "RM"
-                    ]
-                )
-
-                g4.metric(
-                    "FVM",
-                    giocatore[
-                        "FVM"
-                    ]
-                )
-
-                prezzo = (
-                    st.number_input(
-                        "Prezzo di acquisto",
-                        min_value=0.10,
-                        max_value=5000.00,
-                        value=1.00,
-                        step=0.10,
-                        format="%.2f"
-                    )
-                )
-
-                prezzo = round(
-                    float(
-                        prezzo
+                scelta = st.selectbox(
+                    "🔎 Cerca giocatore o squadra",
+                    options=opzioni_asta,
+                    index=None,
+                    placeholder=(
+                        "Digita il nome del giocatore "
+                        "o della squadra…"
                     ),
-                    2
+                    key="search_select_asta"
                 )
 
-                nuovo_valore = round(
-                    valore_acquisti
-                    + prezzo,
-                    2
-                )
+                if scelta is None:
 
-                nuova_spesa = (
-                    calcola_spesa_effettiva(
-                        nuovo_valore
+                    st.caption(
+                        "Inizia a digitare: il campo propone "
+                        "immediatamente i giocatori corrispondenti."
                     )
-                )
 
-                incremento = round(
-                    nuova_spesa
-                    - spesa_effettiva,
-                    2
-                )
+                else:
 
-                p1, p2, p3 = (
-                    st.columns(3)
-                )
-
-                p1.metric(
-                    "Prezzo",
-                    f"{formatta_crediti(prezzo)} €"
-                )
-
-                p2.metric(
-                    "Impatto effettivo",
-                    f"{formatta_crediti(incremento)} €"
-                )
-
-                p3.metric(
-                    "Nuova spesa",
-                    f"{formatta_crediti(nuova_spesa)} €"
-                )
-
-                valido, motivo = (
-                    verifica_acquisto_regole(
-                        df_rosa_globale,
-                        giocatore[
-                            "RM"
+                    giocatore = (
+                        disponibili.iloc[
+                            opzioni_asta.index(
+                                scelta
+                            )
                         ]
                     )
-                )
 
-                if not valido:
-
-                    st.error(
-                        "⛔ " + motivo
+                    colore_nome_asta = (
+                        colore_fvm_mantra(
+                            giocatore.get(
+                                "RM",
+                                ""
+                            ),
+                            giocatore.get(
+                                "FVM M"
+                            )
+                        )
                     )
 
-                a1, a2 = (
-                    st.columns(2)
-                )
+                    g1, g2, g3, g4 = (
+                        st.columns(4)
+                    )
 
-                with a1:
+                    with g1:
 
-                    if st.button(
-                        "✅ ACQUISTA",
-                        use_container_width=True,
-                        type="primary",
-                        disabled=(
-                            not valido
-                        ),
-                        key="btn_acquista"
-                    ):
-
-                        esegui_operazione(
-                            int(
-                                giocatore[
-                                    "Id"
-                                ]
-                            ),
-                            "ACQUISTO",
-                            "MIO",
-                            prezzo,
-                            0
+                        st.markdown(
+                            f"""
+                            <div class="asta-player-mobile-fix">
+                                <div style="
+                                    font-size:0.875rem;
+                                    color:rgba(49,51,63,0.65);
+                                    margin-bottom:0.15rem;
+                                ">
+                                    Giocatore
+                                </div>
+                                <div style="
+                                    font-size:1.35rem;
+                                    line-height:1.15;
+                                    font-weight:700;
+                                    color:{colore_nome_asta};
+                                    white-space:normal;
+                                    overflow-wrap:anywhere;
+                                ">
+                                    {html.escape(str(giocatore["Nome"]))}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
                         )
 
-                        st.rerun()
+                    g2.metric(
+                        "Squadra",
+                        giocatore["Squadra"]
+                    )
 
-                with a2:
+                    g3.metric(
+                        "Ruolo",
+                        giocatore["RM"]
+                    )
 
-                    if st.button(
-                        "🔴 VENDUTO AD AVVERSARIO",
-                        use_container_width=True,
-                        key="btn_avversario"
-                    ):
+                    g4.metric(
+                        "FVM",
+                        giocatore["FVM"]
+                    )
 
-                        esegui_operazione(
-                            int(
-                                giocatore[
-                                    "Id"
-                                ]
-                            ),
-                            "VENDUTO AVVERSARIO",
-                            "AVVERSARIO",
-                            None,
-                            0
+                    chiave_prezzo = (
+                        "offerta_asta_"
+                        f"{int(giocatore['Id'])}"
+                    )
+
+                    if chiave_prezzo not in st.session_state:
+                        st.session_state[
+                            chiave_prezzo
+                        ] = 1.00
+
+                    c1, c2, c3, c4, c5 = (
+                        st.columns(
+                            [
+                                1.10,
+                                1.05,
+                                1.15,
+                                0.85,
+                                0.85
+                            ],
+                            vertical_alignment="bottom"
+                        )
+                    )
+
+                    with c1:
+
+                        prezzo = st.number_input(
+                            "OFFERTA",
+                            min_value=0.10,
+                            max_value=5000.00,
+                            step=0.10,
+                            format="%.2f",
+                            key=chiave_prezzo
                         )
 
-                        st.rerun()
+                    prezzo = round(
+                        float(prezzo),
+                        2
+                    )
+
+                    nuovo_valore = round(
+                        valore_acquisti + prezzo,
+                        2
+                    )
+
+                    nuova_spesa = (
+                        calcola_spesa_effettiva(
+                            nuovo_valore
+                        )
+                    )
+
+                    incremento = round(
+                        nuova_spesa
+                        - spesa_effettiva,
+                        2
+                    )
+
+                    valido, motivo = (
+                        verifica_acquisto_regole(
+                            df_rosa_globale,
+                            giocatore["RM"]
+                        )
+                    )
+
+                    with c2:
+
+                        if st.button(
+                            "✅ ACQUISTA",
+                            use_container_width=True,
+                            type="primary",
+                            disabled=(not valido),
+                            key=(
+                                "btn_acquista_"
+                                f"{int(giocatore['Id'])}"
+                            )
+                        ):
+
+                            esegui_operazione(
+                                int(giocatore["Id"]),
+                                "ACQUISTO",
+                                "MIO",
+                                prezzo,
+                                0
+                            )
+
+                            st.rerun()
+
+                    with c3:
+
+                        if st.button(
+                            "🔴 VENDUTO AD AVVERSARIO",
+                            use_container_width=True,
+                            key=(
+                                "btn_avversario_"
+                                f"{int(giocatore['Id'])}"
+                            )
+                        ):
+
+                            esegui_operazione(
+                                int(giocatore["Id"]),
+                                "VENDUTO AVVERSARIO",
+                                "AVVERSARIO",
+                                None,
+                                0
+                            )
+
+                            st.rerun()
+
+                    with c4:
+
+                        st.metric(
+                            "Impatto effettivo",
+                            f"{formatta_crediti(incremento)} €"
+                        )
+
+                    with c5:
+
+                        st.metric(
+                            "Nuova spesa",
+                            f"{formatta_crediti(nuova_spesa)} €"
+                        )
+
+                    if not valido:
+
+                        st.error(
+                            "⛔ " + motivo
+                        )
 
         # ----------------------------------------------------
         # AVVERSARI
