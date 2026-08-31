@@ -972,6 +972,11 @@ st.markdown(
             font-size: 10px !important;
         }}
 
+        /* Priorità acquisto ASTA */
+        div[data-testid="stHorizontalBlock"] > div {{
+            min-width: 0 !important;
+        }}
+
         /* ==================================================
            CAMPO MANTRA MOBILE
            ================================================== */
@@ -1715,6 +1720,310 @@ def giocatori_compatibili(
         )
 
     return compatibili
+
+
+# ============================================================
+# PRIORITÀ ACQUISTO IN ASTA
+# ============================================================
+
+def valuta_priorita_acquisto(
+    giocatore,
+    df_rosa,
+    df_listone
+):
+    """
+    Determina se il giocatore è:
+    - ACQUISTO FACOLTATIVO
+    - ACQUISTO NECESSARIO
+    - ACQUISTO FONDAMENTALE
+
+    Logica per ciascun ruolo Mantra del giocatore:
+
+    1. "Pari o superiori caratteristiche" = FVM M >= FVM M
+       del giocatore analizzato.
+
+    2. Rosa sufficientemente coperta:
+       almeno 3 giocatori già in rosa compatibili con quel ruolo
+       e con FVM M pari o superiore al giocatore analizzato.
+
+    3. Disponibilità residua nel listone:
+       numero di giocatori ancora DISPONIBILI, compatibili con
+       quel ruolo e con FVM M pari o superiore / totale iniziale
+       dei giocatori del listone con le stesse caratteristiche.
+
+    4. Classificazione:
+       - rosa coperta -> FACOLTATIVO
+       - rosa non coperta + residuo <25% -> FONDAMENTALE
+       - rosa non coperta + residuo <50% -> NECESSARIO
+       - altrimenti -> FACOLTATIVO
+
+    Per un giocatore multiruolo viene considerata la priorità
+    più alta fra tutti i ruoli che può ricoprire.
+    """
+
+    try:
+        fvm_candidato = float(
+            giocatore.get(
+                "FVM M"
+            )
+        )
+    except Exception:
+        fvm_candidato = 0.0
+
+    ruoli_candidato = sorted(
+        ruoli_giocatore(
+            giocatore.get(
+                "RM",
+                ""
+            )
+        )
+    )
+
+    if not ruoli_candidato:
+        ruoli_candidato = [
+            primo_ruolo(
+                giocatore.get(
+                    "RM",
+                    ""
+                )
+            ).upper()
+        ]
+
+    livelli = {
+        "ACQUISTO FACOLTATIVO": 1,
+        "ACQUISTO NECESSARIO": 2,
+        "ACQUISTO FONDAMENTALE": 3
+    }
+
+    migliore = {
+        "Etichetta": "ACQUISTO FACOLTATIVO",
+        "Livello": 1,
+        "Ruolo": "",
+        "Copertura": 0,
+        "Residuo": 100.0,
+        "Disponibili": 0,
+        "Totali": 0
+    }
+
+    for ruolo in ruoli_candidato:
+
+        ruolo = str(
+            ruolo
+        ).strip().upper()
+
+        if not ruolo:
+            continue
+
+        # ----------------------------------------------------
+        # COPERTURA DELLA PROPRIA ROSA
+        # ----------------------------------------------------
+
+        compatibili_rosa = (
+            giocatori_compatibili(
+                df_rosa,
+                ruolo
+            )
+        )
+
+        pari_superiori_rosa = 0
+
+        if (
+            compatibili_rosa is not None
+            and not compatibili_rosa.empty
+        ):
+
+            valori_rosa = pd.to_numeric(
+                compatibili_rosa[
+                    "FVM M"
+                ],
+                errors="coerce"
+            )
+
+            pari_superiori_rosa = int(
+                (
+                    valori_rosa
+                    >= fvm_candidato
+                )
+                .fillna(False)
+                .sum()
+            )
+
+        rosa_coperta = (
+            pari_superiori_rosa
+            >= 3
+        )
+
+        # ----------------------------------------------------
+        # DISPONIBILITÀ RESIDUA NEL LISTONE
+        # ----------------------------------------------------
+
+        compatibili_totali = (
+            giocatori_compatibili(
+                df_listone,
+                ruolo
+            )
+        )
+
+        if (
+            compatibili_totali is None
+            or compatibili_totali.empty
+        ):
+
+            totale_equivalenti = 0
+            disponibili_equivalenti = 0
+            percentuale_residua = 100.0
+
+        else:
+
+            valori_totali = pd.to_numeric(
+                compatibili_totali[
+                    "FVM M"
+                ],
+                errors="coerce"
+            )
+
+            maschera_equivalenti = (
+                valori_totali
+                >= fvm_candidato
+            ).fillna(False)
+
+            equivalenti = (
+                compatibili_totali.loc[
+                    maschera_equivalenti
+                ]
+            )
+
+            totale_equivalenti = len(
+                equivalenti
+            )
+
+            if totale_equivalenti > 0:
+
+                disponibili_equivalenti = int(
+                    (
+                        equivalenti[
+                            "Stato"
+                        ]
+                        .astype(str)
+                        .str.upper()
+                        == "DISPONIBILE"
+                    )
+                    .sum()
+                )
+
+                percentuale_residua = (
+                    disponibili_equivalenti
+                    / totale_equivalenti
+                    * 100.0
+                )
+
+            else:
+
+                disponibili_equivalenti = 0
+                percentuale_residua = 100.0
+
+        # ----------------------------------------------------
+        # CLASSIFICAZIONE DEL RUOLO
+        # ----------------------------------------------------
+
+        if rosa_coperta:
+
+            etichetta = (
+                "ACQUISTO FACOLTATIVO"
+            )
+
+        elif percentuale_residua < 25:
+
+            etichetta = (
+                "ACQUISTO FONDAMENTALE"
+            )
+
+        elif percentuale_residua < 50:
+
+            etichetta = (
+                "ACQUISTO NECESSARIO"
+            )
+
+        else:
+
+            etichetta = (
+                "ACQUISTO FACOLTATIVO"
+            )
+
+        livello = livelli[
+            etichetta
+        ]
+
+        if livello > migliore[
+            "Livello"
+        ]:
+
+            migliore = {
+                "Etichetta": etichetta,
+                "Livello": livello,
+                "Ruolo": ruolo,
+                "Copertura": pari_superiori_rosa,
+                "Residuo": round(
+                    percentuale_residua,
+                    1
+                ),
+                "Disponibili": disponibili_equivalenti,
+                "Totali": totale_equivalenti
+            }
+
+        elif (
+            livello
+            == migliore[
+                "Livello"
+            ]
+            and percentuale_residua
+            < migliore[
+                "Residuo"
+            ]
+        ):
+
+            migliore = {
+                "Etichetta": etichetta,
+                "Livello": livello,
+                "Ruolo": ruolo,
+                "Copertura": pari_superiori_rosa,
+                "Residuo": round(
+                    percentuale_residua,
+                    1
+                ),
+                "Disponibili": disponibili_equivalenti,
+                "Totali": totale_equivalenti
+            }
+
+    return migliore
+
+
+def stile_priorita_acquisto(
+    etichetta
+):
+    """
+    Colori della casella Priorità acquisto.
+    """
+
+    if etichetta == "ACQUISTO FONDAMENTALE":
+        return (
+            "#fee2e2",
+            "#991b1b",
+            "#ef4444"
+        )
+
+    if etichetta == "ACQUISTO NECESSARIO":
+        return (
+            "#ffedd5",
+            "#9a3412",
+            "#f97316"
+        )
+
+    return (
+        "#dcfce7",
+        "#166534",
+        "#22c55e"
+    )
 
 
 # ============================================================
@@ -8009,8 +8318,34 @@ elif sezione == "ASTA":
                         )
                     )
 
-                    g1, g2, g3, g4 = (
-                        st.columns(4)
+                    priorita_acquisto = (
+                        valuta_priorita_acquisto(
+                            giocatore,
+                            df_rosa_globale,
+                            df_completo
+                        )
+                    )
+
+                    (
+                        bg_priorita,
+                        fg_priorita,
+                        bordo_priorita
+                    ) = stile_priorita_acquisto(
+                        priorita_acquisto[
+                            "Etichetta"
+                        ]
+                    )
+
+                    g1, g2, g3, g4, g5 = (
+                        st.columns(
+                            [
+                                1.20,
+                                0.95,
+                                0.95,
+                                0.75,
+                                1.25
+                            ]
+                        )
                     )
 
                     with g1:
@@ -8054,6 +8389,65 @@ elif sezione == "ASTA":
                         "FVM",
                         giocatore["FVM"]
                     )
+
+                    with g5:
+
+                        dettaglio_priorita = (
+                            f"Ruolo {priorita_acquisto['Ruolo']} · "
+                            f"in rosa {priorita_acquisto['Copertura']} "
+                            f"pari/superiori · "
+                            f"rimasti {priorita_acquisto['Disponibili']}/"
+                            f"{priorita_acquisto['Totali']} "
+                            f"({priorita_acquisto['Residuo']:.1f}%)"
+                        )
+
+                        st.markdown(
+                            f"""
+                            <div style="
+                                min-height:72px;
+                                border:2px solid {bordo_priorita};
+                                border-radius:10px;
+                                background:{bg_priorita};
+                                padding:9px 10px;
+                                display:flex;
+                                flex-direction:column;
+                                justify-content:center;
+                                box-sizing:border-box;
+                            ">
+                                <div style="
+                                    font-size:0.78rem;
+                                    color:#475569;
+                                    margin-bottom:4px;
+                                    font-weight:600;
+                                ">
+                                    Priorità acquisto
+                                </div>
+                                <div style="
+                                    font-size:1.00rem;
+                                    line-height:1.10;
+                                    font-weight:800;
+                                    color:{fg_priorita};
+                                ">
+                                    {html.escape(
+                                        priorita_acquisto[
+                                            "Etichetta"
+                                        ]
+                                    )}
+                                </div>
+                                <div style="
+                                    font-size:0.66rem;
+                                    line-height:1.15;
+                                    color:#64748b;
+                                    margin-top:4px;
+                                ">
+                                    {html.escape(
+                                        dettaglio_priorita
+                                    )}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
 
                     chiave_prezzo = (
                         "offerta_asta_"
