@@ -5860,7 +5860,8 @@ def analizza_modulo(
 
     Nuove definizioni:
     - SLOT SCOPERTO: slot con 2 o meno giocatori compatibili.
-    - SLOT DEBOLE: qualità media dei compatibili inferiore al 50%.
+    - SLOT DEBOLE: slot che non raggiunge almeno 3 giocatori
+      compatibili oppure non raggiunge almeno il 50% di qualità media.
       Gli slot allo 0% sono inclusi automaticamente tra i deboli.
 
     Il punteggio strategico considera:
@@ -5940,7 +5941,10 @@ def analizza_modulo(
     slot_deboli = [
         s
         for s in dati_slot
-        if s["Qualita"] < 50
+        if (
+            s["Numero"] < 3
+            or s["Qualita"] < 50
+        )
     ]
 
     deboli = len(
