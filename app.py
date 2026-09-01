@@ -7197,62 +7197,6 @@ def gestisci_backup_cloud():
             st.rerun()
 
 
-
-# ============================================================
-# POPUP SNAPSHOT / RIPRISTINO ASTA
-# ============================================================
-
-@st.dialog(
-    "Snapshot e ripristino",
-    width="large"
-)
-def mostra_snapshot_asta():
-    gestisci_snapshot()
-
-
-# ============================================================
-# POPUP ULTIME OPERAZIONI ASTA
-# ============================================================
-
-@st.dialog(
-    "Ultime operazioni",
-    width="large"
-)
-def mostra_ultime_operazioni_asta():
-
-    storico = carica_ultime_operazioni()
-
-    if (
-        storico is None
-        or storico.empty
-    ):
-
-        st.info(
-            "Nessuna operazione registrata."
-        )
-        return
-
-    colonne = [
-        c
-        for c in [
-            "Data",
-            "Giocatore",
-            "Operazione",
-            "PrezzoDopo",
-            "CostoSvincolo"
-        ]
-        if c in storico.columns
-    ]
-
-    st.dataframe(
-        storico[
-            colonne
-        ].head(10),
-        use_container_width=True,
-        hide_index=True
-    )
-
-
 # ============================================================
 # INIZIALIZZAZIONE
 # ============================================================
@@ -7358,351 +7302,346 @@ iqr = (
 
 
 # ============================================================
-# HEADER / RIEPILOGO STANDARD
-# Nella sezione ASTA vengono sostituiti dalla banda blu laterale.
-if st.session_state.pagina != "ASTA":
+# HEADER COMPATTO
+# ============================================================
 
-    # HEADER COMPATTO
-    # ============================================================
+head_left, head_refresh, head_snapshot, head_backup, head_rules, head_theme = (
+    st.columns(
+        [
+            5.0,
+            0.9,
+            1.0,
+            0.9,
+            0.8,
+            1.0
+        ],
+        vertical_alignment="center"
+    )
+)
 
-    head_left, head_refresh, head_snapshot, head_backup, head_rules, head_theme = (
-        st.columns(
-            [
-                5.0,
-                0.9,
-                1.0,
-                0.9,
-                0.8,
-                1.0
-            ],
-            vertical_alignment="center"
-        )
+with head_left:
+
+    # IMPORTANTE:
+    # stringa HTML senza indentazione iniziale,
+    # così Streamlit non la mostra come codice.
+
+    header_html = (
+        '<div class="fanta-header">'
+        '<div class="fanta-brand">'
+        '<div class="fanta-logo">⚽</div>'
+        '<div>'
+        '<div class="fanta-brand-title">'
+        'FANTAELEGANZA <span>26/27</span>'
+        '</div>'
+        '<div class="fanta-brand-subtitle">'
+        'Gestione asta e rosa'
+        '</div>'
+        '</div>'
+        '</div>'
+        '</div>'
     )
 
-    with head_left:
-
-        # IMPORTANTE:
-        # stringa HTML senza indentazione iniziale,
-        # così Streamlit non la mostra come codice.
-
-        header_html = (
-            '<div class="fanta-header">'
-            '<div class="fanta-brand">'
-            '<div class="fanta-logo">⚽</div>'
-            '<div>'
-            '<div class="fanta-brand-title">'
-            'FANTAELEGANZA <span>26/27</span>'
-            '</div>'
-            '<div class="fanta-brand-subtitle">'
-            'Gestione asta e rosa'
-            '</div>'
-            '</div>'
-            '</div>'
-            '</div>'
-        )
-
-        st.markdown(
-            header_html,
-            unsafe_allow_html=True
-        )
-
-
-    with head_refresh:
-
-        if st.button(
-            "🔄 Aggiorna",
-            use_container_width=True,
-            key="btn_aggiorna_app"
-        ):
-
-            invalida_cache_dati()
-            st.rerun()
-
-
-    with head_snapshot:
-
-        if st.button(
-            "📸 Snapshot",
-            use_container_width=True,
-            key="btn_snapshot"
-        ):
-
-            gestisci_snapshot()
-
-
-    with head_backup:
-
-        if USA_DATABASE_CLOUD:
-
-            if st.button(
-                "☁ Backup",
-                use_container_width=True,
-                key="btn_backup_cloud"
-            ):
-
-                gestisci_backup_cloud()
-
-        elif DB_PATH.exists():
-
-            with open(
-                DB_PATH,
-                "rb"
-            ) as file_db:
-
-                st.download_button(
-                    "☁ Backup",
-                    data=file_db.read(),
-                    file_name=(
-                        "fantaeleganza_backup.db"
-                    ),
-                    mime=(
-                        "application/octet-stream"
-                    ),
-                    use_container_width=True
-                )
-
-
-    with head_rules:
-
-        if st.button(
-            "❔ Regole",
-            use_container_width=True,
-            key="btn_regole"
-        ):
-
-            mostra_regole()
-
-
-    with head_theme:
-
-        nuovo_dark = st.toggle(
-            "🌙 Scuro",
-            value=(
-                st.session_state.dark_mode
-            ),
-            key="toggle_dark"
-        )
-
-        if (
-            nuovo_dark
-            != st.session_state.dark_mode
-        ):
-
-            st.session_state.dark_mode = (
-                nuovo_dark
-            )
-
-            st.rerun()
-
-
-
     st.markdown(
-        """
-        <style>
-
-        div[class*="st-key-iqr_card_clickable"] {
-            position: relative !important;
-            min-height: 154px !important;
-            border: 1px solid #dbe2ea;
-            border-radius: 12px;
-            background: #ffffff;
-            padding: 6px 7px 7px 7px;
-            overflow: hidden;
-        }
-
-        div[class*="st-key-iqr_card_clickable"]:hover {
-            border-color: #2563eb;
-            box-shadow: 0 3px 12px rgba(15, 23, 42, 0.10);
-        }
-
-        div[class*="st-key-iqr_card_clickable"] .stButton {
-            position: absolute !important;
-            inset: 0 !important;
-            z-index: 20 !important;
-            width: 100% !important;
-            height: 100% !important;
-            margin: 0 !important;
-        }
-
-        div[class*="st-key-iqr_card_clickable"] .stButton > button {
-            width: 100% !important;
-            height: 100% !important;
-            min-height: 100% !important;
-            opacity: 0 !important;
-            cursor: pointer !important;
-            padding: 0 !important;
-            border: none !important;
-        }
-
-        .iqr-gauge-card {
-            text-align: center;
-            width: 100%;
-            pointer-events: none;
-        }
-
-        .iqr-gauge-title {
-            font-size: 12px;
-            font-weight: 800;
-            color: #0f172a;
-            margin-bottom: -7px;
-        }
-
-        .iqr-gauge-svg {
-            width: 100%;
-            max-width: 150px;
-            height: 76px;
-            display: block;
-            margin: 0 auto -2px auto;
-        }
-
-        .iqr-gauge-value {
-            font-size: 20px;
-            line-height: 1;
-            font-weight: 800;
-            color: #0f172a;
-            margin-top: -2px;
-        }
-
-        .iqr-gauge-description {
-            display: inline-block;
-            color: #ffffff;
-            font-size: 9px;
-            font-weight: 800;
-            line-height: 1.1;
-            padding: 4px 7px;
-            border-radius: 6px;
-            margin-top: 5px;
-        }
-
-        .iqr-gauge-hint {
-            font-size: 7px;
-            color: #64748b;
-            margin-top: 4px;
-        }
-
-        @media (max-width: 850px) {
-
-            div[class*="st-key-iqr_card_clickable"] {
-                min-height: 142px !important;
-                padding: 5px !important;
-            }
-
-            .iqr-gauge-svg {
-                max-width: 135px;
-                height: 68px;
-            }
-
-            .iqr-gauge-value {
-                font-size: 18px;
-            }
-
-            .iqr-gauge-description {
-                font-size: 8px;
-            }
-        }
-
-        </style>
-        """,
+        header_html,
         unsafe_allow_html=True
     )
 
 
-    # ============================================================
-    # RIEPILOGO COMPATTO
-    # ============================================================
+with head_refresh:
 
-    m1, m2, m3, m4, m5, m6, m7, m8 = (
-        st.columns(8)
-    )
+    if st.button(
+        "🔄 Aggiorna",
+        use_container_width=True,
+        key="btn_aggiorna_app"
+    ):
 
-    m1.metric(
-        "💳 Soglia base",
-        f"{formatta_crediti(SOGLIA_BASE)} €"
-    )
+        invalida_cache_dati()
+        st.rerun()
 
-    with m2:
 
-        st.number_input(
-            "💰 Budget",
-            min_value=0.0,
-            step=10.0,
-            format="%.2f",
-            key="budget_asta_input",
-            on_change=aggiorna_budget_da_widget,
-            help=(
-                "Budget totale che hai deciso di destinare all'asta. "
-                "Il valore viene salvato nel database Cloud e resta "
-                "disponibile anche da altri dispositivi."
-            )
-        )
+with head_snapshot:
 
-    m3.metric(
-        "💵 Budget rimanente",
-        f"{formatta_crediti(budget_rimanente)} €",
-        delta=(
-            "Disponibile"
-            if budget_rimanente >= 0
-            else "Budget superato"
-        ),
-        delta_color=(
-            "off"
-            if budget_rimanente >= 0
-            else "inverse"
-        ),
-        help=(
-            "Budget impostato meno Spesa effettiva. "
-            "La Spesa effettiva include la maggiorazione prevista "
-            "oltre la soglia base."
-        )
-    )
+    if st.button(
+        "📸 Snapshot",
+        use_container_width=True,
+        key="btn_snapshot"
+    ):
 
-    m4.metric(
-        "🪙 Spesa effettiva",
-        f"{formatta_crediti(spesa_effettiva)} €"
-    )
+        gestisci_snapshot()
 
-    m5.metric(
-        "⚡ Oltre soglia",
-        f"{formatta_crediti(oltre_soglia)} €"
-    )
 
-    m6.metric(
-        "👥 Giocatori",
-        f"{numero_rosa}/{MAX_GIOCATORI}"
-    )
+with head_backup:
 
-    m7.metric(
-        "🧤 Portieri",
-        f"{numero_portieri}/{MIN_PORTIERI}"
-    )
+    if USA_DATABASE_CLOUD:
 
-    with m8:
-
-        with st.container(
-            key="iqr_card_clickable"
+        if st.button(
+            "☁ Backup",
+            use_container_width=True,
+            key="btn_backup_cloud"
         ):
 
-            st.markdown(
-                genera_html_gauge_iqr(
-                    iqr
+            gestisci_backup_cloud()
+
+    elif DB_PATH.exists():
+
+        with open(
+            DB_PATH,
+            "rb"
+        ) as file_db:
+
+            st.download_button(
+                "☁ Backup",
+                data=file_db.read(),
+                file_name=(
+                    "fantaeleganza_backup.db"
                 ),
-                unsafe_allow_html=True
+                mime=(
+                    "application/octet-stream"
+                ),
+                use_container_width=True
             )
 
-            if st.button(
-                "Apri dettaglio IQR",
-                key="btn_apri_dettaglio_iqr",
-                help="Apri il dettaglio dell'Indice Qualità Rosa"
-            ):
 
-                mostra_dettaglio_iqr(
-                    iqr,
-                    df_rosa_globale
-                )
+with head_rules:
+
+    if st.button(
+        "❔ Regole",
+        use_container_width=True,
+        key="btn_regole"
+    ):
+
+        mostra_regole()
 
 
-    # ============================================================
+with head_theme:
 
+    nuovo_dark = st.toggle(
+        "🌙 Scuro",
+        value=(
+            st.session_state.dark_mode
+        ),
+        key="toggle_dark"
+    )
+
+    if (
+        nuovo_dark
+        != st.session_state.dark_mode
+    ):
+
+        st.session_state.dark_mode = (
+            nuovo_dark
+        )
+
+        st.rerun()
+
+
+
+st.markdown(
+    """
+    <style>
+
+    div[class*="st-key-iqr_card_clickable"] {
+        position: relative !important;
+        min-height: 154px !important;
+        border: 1px solid #dbe2ea;
+        border-radius: 12px;
+        background: #ffffff;
+        padding: 6px 7px 7px 7px;
+        overflow: hidden;
+    }
+
+    div[class*="st-key-iqr_card_clickable"]:hover {
+        border-color: #2563eb;
+        box-shadow: 0 3px 12px rgba(15, 23, 42, 0.10);
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .stButton {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 20 !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .stButton > button {
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        opacity: 0 !important;
+        cursor: pointer !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+
+    .iqr-gauge-card {
+        text-align: center;
+        width: 100%;
+        pointer-events: none;
+    }
+
+    .iqr-gauge-title {
+        font-size: 12px;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: -7px;
+    }
+
+    .iqr-gauge-svg {
+        width: 100%;
+        max-width: 150px;
+        height: 76px;
+        display: block;
+        margin: 0 auto -2px auto;
+    }
+
+    .iqr-gauge-value {
+        font-size: 20px;
+        line-height: 1;
+        font-weight: 800;
+        color: #0f172a;
+        margin-top: -2px;
+    }
+
+    .iqr-gauge-description {
+        display: inline-block;
+        color: #ffffff;
+        font-size: 9px;
+        font-weight: 800;
+        line-height: 1.1;
+        padding: 4px 7px;
+        border-radius: 6px;
+        margin-top: 5px;
+    }
+
+    .iqr-gauge-hint {
+        font-size: 7px;
+        color: #64748b;
+        margin-top: 4px;
+    }
+
+    @media (max-width: 850px) {
+
+        div[class*="st-key-iqr_card_clickable"] {
+            min-height: 142px !important;
+            padding: 5px !important;
+        }
+
+        .iqr-gauge-svg {
+            max-width: 135px;
+            height: 68px;
+        }
+
+        .iqr-gauge-value {
+            font-size: 18px;
+        }
+
+        .iqr-gauge-description {
+            font-size: 8px;
+        }
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# RIEPILOGO COMPATTO
+# ============================================================
+
+m1, m2, m3, m4, m5, m6, m7, m8 = (
+    st.columns(8)
+)
+
+m1.metric(
+    "💳 Soglia base",
+    f"{formatta_crediti(SOGLIA_BASE)} €"
+)
+
+with m2:
+
+    st.number_input(
+        "💰 Budget",
+        min_value=0.0,
+        step=10.0,
+        format="%.2f",
+        key="budget_asta_input",
+        on_change=aggiorna_budget_da_widget,
+        help=(
+            "Budget totale che hai deciso di destinare all'asta. "
+            "Il valore viene salvato nel database Cloud e resta "
+            "disponibile anche da altri dispositivi."
+        )
+    )
+
+m3.metric(
+    "💵 Budget rimanente",
+    f"{formatta_crediti(budget_rimanente)} €",
+    delta=(
+        "Disponibile"
+        if budget_rimanente >= 0
+        else "Budget superato"
+    ),
+    delta_color=(
+        "off"
+        if budget_rimanente >= 0
+        else "inverse"
+    ),
+    help=(
+        "Budget impostato meno Spesa effettiva. "
+        "La Spesa effettiva include la maggiorazione prevista "
+        "oltre la soglia base."
+    )
+)
+
+m4.metric(
+    "🪙 Spesa effettiva",
+    f"{formatta_crediti(spesa_effettiva)} €"
+)
+
+m5.metric(
+    "⚡ Oltre soglia",
+    f"{formatta_crediti(oltre_soglia)} €"
+)
+
+m6.metric(
+    "👥 Giocatori",
+    f"{numero_rosa}/{MAX_GIOCATORI}"
+)
+
+m7.metric(
+    "🧤 Portieri",
+    f"{numero_portieri}/{MIN_PORTIERI}"
+)
+
+with m8:
+
+    with st.container(
+        key="iqr_card_clickable"
+    ):
+
+        st.markdown(
+            genera_html_gauge_iqr(
+                iqr
+            ),
+            unsafe_allow_html=True
+        )
+
+        if st.button(
+            "Apri dettaglio IQR",
+            key="btn_apri_dettaglio_iqr",
+            help="Apri il dettaglio dell'Indice Qualità Rosa"
+        ):
+
+            mostra_dettaglio_iqr(
+                iqr,
+                df_rosa_globale
+            )
+
+
+# ============================================================
 # NAVBAR
 # ============================================================
 
@@ -7756,90 +7695,85 @@ sezione = (
 
 
 # ============================================================
-# TOOLBAR UNDO STANDARD
-# In ASTA le operazioni sono richiamabili dalla banda laterale.
-if st.session_state.pagina != "ASTA":
+# TOOLBAR UNDO COMPATTA
+# ============================================================
 
-    # TOOLBAR UNDO COMPATTA
-    # ============================================================
+operazioni_undo = (
+    carica_ultime_operazioni()
+)
 
-    operazioni_undo = (
-        carica_ultime_operazioni()
-    )
+undo1, undo2 = st.columns(
+    [
+        1.7,
+        7
+    ]
+)
 
-    undo1, undo2 = st.columns(
-        [
-            1.7,
-            7
-        ]
-    )
+with undo1:
 
-    with undo1:
-
-        if st.button(
-            "↶ ANNULLA ULTIMA OPERAZIONE",
-            use_container_width=True,
-            disabled=(
-                operazioni_undo.empty
-            ),
-            key="btn_undo_generale"
-        ):
-
-            conferma_undo()
-
-
-    with undo2:
-
-        if not operazioni_undo.empty:
-
-            ultima = (
-                operazioni_undo.iloc[0]
-            )
-
-            testo_ultima = (
-                f'<div class="operation-info">'
-                f'Ultima operazione annullabile:&nbsp;'
-                f'<b>'
-                f'{html.escape(str(ultima["Operazione"]))}'
-                f' — '
-                f'{html.escape(str(ultima["Giocatore"]))}'
-                f'</b>'
-                f'&nbsp;'
-                f'({len(operazioni_undo)}/10)'
-                f'</div>'
-            )
-
-            st.markdown(
-                testo_ultima,
-                unsafe_allow_html=True
-            )
-
-
-    with st.expander(
-        "📜 Ultime operazioni",
-        expanded=False
+    if st.button(
+        "↶ ANNULLA ULTIMA OPERAZIONE",
+        use_container_width=True,
+        disabled=(
+            operazioni_undo.empty
+        ),
+        key="btn_undo_generale"
     ):
 
-        if operazioni_undo.empty:
+        conferma_undo()
 
-            st.caption(
-                "Nessuna operazione registrata."
-            )
 
-        else:
+with undo2:
 
-            st.dataframe(
-                operazioni_undo[
-                    [
-                        "Operazione",
-                        "Giocatore",
-                        "Data"
-                    ]
-                ],
-                use_container_width=True,
-                hide_index=True
-            )
+    if not operazioni_undo.empty:
 
+        ultima = (
+            operazioni_undo.iloc[0]
+        )
+
+        testo_ultima = (
+            f'<div class="operation-info">'
+            f'Ultima operazione annullabile:&nbsp;'
+            f'<b>'
+            f'{html.escape(str(ultima["Operazione"]))}'
+            f' — '
+            f'{html.escape(str(ultima["Giocatore"]))}'
+            f'</b>'
+            f'&nbsp;'
+            f'({len(operazioni_undo)}/10)'
+            f'</div>'
+        )
+
+        st.markdown(
+            testo_ultima,
+            unsafe_allow_html=True
+        )
+
+
+with st.expander(
+    "📜 Ultime operazioni",
+    expanded=False
+):
+
+    if operazioni_undo.empty:
+
+        st.caption(
+            "Nessuna operazione registrata."
+        )
+
+    else:
+
+        st.dataframe(
+            operazioni_undo[
+                [
+                    "Operazione",
+                    "Giocatore",
+                    "Data"
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True
+        )
 
 
 @st.dialog("Elimina tutta la rosa")
@@ -8553,406 +8487,97 @@ elif sezione == "ASTA":
     st.markdown(
         """
         <style>
-        /* =====================================================
-           FANTAELEGANZA B - ASTA / INTERFACCIA FINALE
-           ===================================================== */
-
-        /* Layout principale */
-        div[class*="st-key-asta_side_panel"] {
-            background: linear-gradient(180deg,#071a2f 0%,#0c2745 100%) !important;
-            border-radius: 0 0 12px 12px !important;
-            padding: 18px 16px 16px 16px !important;
-            min-height: 560px !important;
-            color: #ffffff !important;
-            box-shadow: 0 6px 18px rgba(15,23,42,.10);
+        /* VERSIONE B - CONSOLE ASTA COMPATTA */
+        div[data-testid="stNumberInput"] input {
+            font-size:1.22rem !important;
+            font-weight:800 !important;
+            text-align:center !important;
+            min-height:58px !important;
+            border:2px solid #94a3b8 !important;
+            border-radius:10px !important;
+            background:#ffffff !important;
         }
 
-        div[class*="st-key-asta_side_panel"] * {
-            color: inherit;
-        }
-
-        .asta-side-brand {
-            font-size: 1.02rem;
-            font-weight: 900;
-            margin-bottom: 18px;
-            color: #ffffff;
-        }
-
-        .asta-side-label {
-            font-size: .68rem;
-            text-transform: uppercase;
-            letter-spacing: .055em;
-            color: #cbd5e1;
-            margin-top: 10px;
-        }
-
-        .asta-side-value {
-            font-size: 1.50rem;
-            line-height: 1.10;
-            font-weight: 900;
-            color: #ffffff;
-            margin: 4px 0 13px 0;
-        }
-
-        .asta-side-value.green {
-            color: #4ade80;
-        }
-
-        .asta-side-rule {
-            border-top: 1px solid rgba(255,255,255,.13);
-            margin: 10px 0;
-        }
-
-        .asta-side-db {
-            margin-top: 18px;
-            font-size: .78rem;
-            color: #cbd5e1;
-        }
-
-        /* Pulsante ultime operazioni dentro banda blu */
-        div[class*="st-key-asta_history_button"] .stButton > button {
-            width: 100% !important;
-            min-height: 40px !important;
-            height: 40px !important;
-            margin-top: 12px !important;
-            background: transparent !important;
-            color: #ffffff !important;
-            border: 1px solid rgba(255,255,255,.18) !important;
-            border-radius: 7px !important;
-            font-size: .78rem !important;
-            font-weight: 800 !important;
-            justify-content: flex-start !important;
-        }
-
-        div[class*="st-key-asta_history_button"] .stButton > button * {
-            color: #ffffff !important;
-        }
-
-        div[class*="st-key-asta_side_action_"] .stButton > button,
-        div[class*="st-key-asta_side_action_"] .stDownloadButton > button {
-            width: 100% !important;
-            min-height: 38px !important;
-            height: 38px !important;
-            background: transparent !important;
-            color: #ffffff !important;
-            border: 0 !important;
-            border-top: 1px solid rgba(255,255,255,.12) !important;
-            border-radius: 0 !important;
-            font-size: .76rem !important;
-            font-weight: 700 !important;
-            justify-content: flex-start !important;
-            padding-left: 2px !important;
-        }
-
-        div[class*="st-key-asta_side_action_"] .stButton > button *,
-        div[class*="st-key-asta_side_action_"] .stDownloadButton > button * {
-            color: #ffffff !important;
-        }
-
-        /* Titoli area centrale */
-        .asta-search-title,
-        .asta-player-title {
-            font-size: .95rem;
-            font-weight: 900;
-            color: #0f172a;
-            margin-bottom: 7px;
-        }
-
-        .asta-player-title {
-            margin-top: 14px;
-        }
-
-        /* Ricerca */
-        div[class*="st-key-search_select_asta"] [data-baseweb="select"] > div,
         div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
-            min-height: 58px !important;
-            height: 58px !important;
-            border: 2px solid #2563eb !important;
-            border-radius: 9px !important;
-            background: #ffffff !important;
-            box-shadow: 0 1px 5px rgba(15,23,42,.06);
+            border:2px solid #94a3b8 !important;
+            border-radius:10px !important;
+            background:#ffffff !important;
+            min-height:50px !important;
         }
 
-        div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within > div {
-            border-color: #2563eb !important;
-            box-shadow: 0 0 0 3px rgba(37,99,235,.11) !important;
+        div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within > div,
+        div[data-testid="stNumberInput"]:focus-within input {
+            border-color:#071a2f !important;
+            box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
         }
 
-        /* Card giocatore */
-        div[class*="st-key-asta_player_card"] {
-            background: #ffffff !important;
-            border: 1px solid #dbe2ea !important;
-            border-radius: 10px !important;
-            padding: 16px 17px !important;
-            box-shadow: 0 3px 12px rgba(15,23,42,.06);
-            margin-bottom: 16px !important;
+        /* STRISCIA OPERATIVA ASTA: stessa altezza reale per tutti i blocchi */
+        div[class*="st-key-btn_acquista_"] .stButton,
+        div[class*="st-key-btn_avversario_"] .stButton {
+            height:76px !important;
         }
 
-        .asta-player-main {
-            min-height: 142px;
-            height: 142px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            box-sizing: border-box;
+        div[class*="st-key-btn_acquista_"] .stButton > button,
+        div[class*="st-key-btn_avversario_"] .stButton > button {
+            min-height:76px !important;
+            height:76px !important;
+            width:100% !important;
+            font-weight:900 !important;
+            font-size:1rem !important;
+            border-radius:8px !important;
+            padding-top:0 !important;
+            padding-bottom:0 !important;
         }
 
-        .asta-player-name {
-            font-size: 1.60rem;
-            line-height: 1.06;
-            font-weight: 900;
-            margin-bottom: 8px;
+        /* OFFERTA: alza l'intero controllo, compresi +/- */
+        div[data-testid="stNumberInput"] > div,
+        div[data-testid="stNumberInput"] [data-baseweb="input"],
+        div[data-testid="stNumberInput"] [data-baseweb="base-input"] {
+            min-height:76px !important;
+            height:76px !important;
         }
 
-        .asta-player-team {
-            font-size: 1.05rem;
-            font-weight: 700;
-            color: #334155;
-            margin-bottom: 10px;
+        div[data-testid="stNumberInput"] input {
+            min-height:76px !important;
+            height:76px !important;
+            font-size:1.22rem !important;
+            font-weight:800 !important;
+            text-align:center !important;
+            border-radius:8px 0 0 8px !important;
+            padding-top:0 !important;
+            padding-bottom:0 !important;
         }
 
-        .asta-pill {
-            display: inline-block;
-            padding: 5px 8px;
-            margin-right: 5px;
-            margin-bottom: 4px;
-            border-radius: 5px;
-            background: #e8f0ff;
-            color: #1d4ed8;
-            font-size: .74rem;
-            font-weight: 800;
+        div[data-testid="stNumberInput"] button {
+            height:38px !important;
+            min-height:38px !important;
         }
 
-        .asta-info-card {
-            height: 142px;
-            min-height: 142px;
-            padding: 15px;
-            border: 1px solid #dbe2ea;
-            border-radius: 9px;
-            background: #ffffff;
-            box-sizing: border-box;
+        /* Metriche: riferimento visivo per l'altezza della riga */
+        div[data-testid="stMetric"] {
+            min-height:76px !important;
+            height:76px !important;
+            padding:8px 12px !important;
+            display:flex !important;
+            flex-direction:column !important;
+            justify-content:center !important;
+            box-sizing:border-box !important;
         }
 
-        .asta-info-label {
-            font-size: .72rem;
-            text-transform: uppercase;
-            font-weight: 800;
-            color: #475569;
-            letter-spacing: .025em;
-            margin-bottom: 10px;
-        }
-
-        .asta-info-value {
-            font-size: 1.30rem;
-            line-height: 1.10;
-            font-weight: 900;
-            color: #0f172a;
-        }
-
-        /* Priorità */
-        div[class*="st-key-priorita_click_"] {
-            position: relative !important;
-        }
-
-        div[class*="st-key-priorita_click_"] .stButton {
-            position: absolute !important;
-            inset: 0 !important;
-            z-index: 50 !important;
-            width: 100% !important;
-            height: 100% !important;
-            margin: 0 !important;
-        }
-
-        div[class*="st-key-priorita_click_"] .stButton > button {
-            width: 100% !important;
-            height: 100% !important;
-            min-height: 100% !important;
-            opacity: 0 !important;
-            border: 0 !important;
-            padding: 0 !important;
-            cursor: pointer !important;
-        }
-
-        .asta-priority {
-            height: 142px;
-            min-height: 142px;
-            padding: 14px 15px;
-            border-radius: 9px;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .asta-priority-title {
-            font-size: .72rem;
-            text-transform: uppercase;
-            font-weight: 900;
-            margin-bottom: 7px;
-        }
-
-        .asta-priority-value {
-            font-size: 1.02rem;
-            line-height: 1.10;
-            font-weight: 900;
-            margin-bottom: 7px;
-        }
-
-        .asta-priority-detail {
-            font-size: .72rem;
-            line-height: 1.23;
-            color: #475569;
-        }
-
-        .asta-priority-button {
-            display: inline-block;
-            width: max-content;
-            margin-top: 9px;
-            padding: 6px 9px;
-            border-radius: 6px;
-            border: 1px solid rgba(15,23,42,.16);
-            background: #ffffff;
-            color: #1d4ed8;
-            font-size: .72rem;
-            font-weight: 800;
-        }
-
-        /* =====================================================
-           STRISCIA OPERATIVA: STESSA ALTEZZA ESATTA
-           ===================================================== */
-
-        :root {
-            --asta-action-h: 108px;
-        }
-
-        div[class*="st-key-asta_offer_action"],
-        div[class*="st-key-asta_buy_action"],
-        div[class*="st-key-asta_enemy_action"],
-        div[class*="st-key-asta_impact_action"],
-        div[class*="st-key-asta_total_action"] {
-            height: var(--asta-action-h) !important;
-            min-height: var(--asta-action-h) !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-
-        /* OFFERTA */
-        div[class*="st-key-asta_offer_action"] div[data-testid="stNumberInput"],
-        div[class*="st-key-asta_offer_action"] div[data-testid="stNumberInput"] > div,
-        div[class*="st-key-asta_offer_action"] div[data-baseweb="input"],
-        div[class*="st-key-asta_offer_action"] div[data-baseweb="base-input"] {
-            height: var(--asta-action-h) !important;
-            min-height: var(--asta-action-h) !important;
-            margin: 0 !important;
-        }
-
-        div[class*="st-key-asta_offer_action"] input {
-            height: var(--asta-action-h) !important;
-            min-height: var(--asta-action-h) !important;
-            padding: 0 !important;
-            font-size: 1.55rem !important;
-            font-weight: 900 !important;
-            text-align: center !important;
-            background: #ffffff !important;
-            color: #0f172a !important;
-            border: 1px solid #dbe2ea !important;
-            border-left: 7px solid #2563eb !important;
-            border-radius: 9px 0 0 9px !important;
-            box-sizing: border-box !important;
-        }
-
-        div[class*="st-key-asta_offer_action"] div[data-testid="stNumberInput"] button {
-            height: calc(var(--asta-action-h) / 2) !important;
-            min-height: calc(var(--asta-action-h) / 2) !important;
-            background: #ffffff !important;
-            color: #0f172a !important;
-            border-color: #dbe2ea !important;
-        }
-
-        /* PULSANTI */
-        div[class*="st-key-asta_buy_action"] .stButton,
-        div[class*="st-key-asta_enemy_action"] .stButton {
-            height: var(--asta-action-h) !important;
-            min-height: var(--asta-action-h) !important;
-            margin: 0 !important;
-        }
-
-        div[class*="st-key-asta_buy_action"] .stButton > button,
-        div[class*="st-key-asta_enemy_action"] .stButton > button {
-            height: var(--asta-action-h) !important;
-            min-height: var(--asta-action-h) !important;
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 0 14px !important;
-            border-radius: 9px !important;
-            font-size: 1.00rem !important;
-            font-weight: 900 !important;
-            line-height: 1.1 !important;
-        }
-
-        div[class*="st-key-asta_buy_action"] .stButton > button {
-            background: #ef3f58 !important;
-            color: #ffffff !important;
-            border-color: #ef3f58 !important;
-        }
-
-        div[class*="st-key-asta_buy_action"] .stButton > button * {
-            color: #ffffff !important;
-        }
-
-        div[class*="st-key-asta_enemy_action"] .stButton > button {
-            background: #ffffff !important;
-            color: #0f172a !important;
-            border: 1px solid #dbe2ea !important;
-        }
-
-        div[class*="st-key-asta_enemy_action"] .stButton > button * {
-            color: #0f172a !important;
-        }
-
-        /* IMPATTO / NUOVA SPESA */
-        .asta-stat-card {
-            height: var(--asta-action-h);
-            min-height: var(--asta-action-h);
-            padding: 15px 16px;
-            border: 1px solid #dbe2ea;
-            border-radius: 9px;
-            background: #ffffff;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .asta-stat-label {
-            font-size: .74rem;
-            color: #475569;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-
-        .asta-stat-value {
-            font-size: 1.42rem;
-            line-height: 1;
-            color: #0f172a;
-            font-weight: 900;
-        }
-
-        @media (max-width: 850px) {
-            div[class*="st-key-asta_side_panel"] {
-                min-height: auto !important;
-                margin-bottom: 10px;
+        @media (max-width:768px) {
+            div[data-testid="stNumberInput"] input {
+                font-size:1.08rem !important;
+                min-height:52px !important;
             }
 
-            .asta-info-card,
-            .asta-player-main,
-            .asta-priority {
-                height: auto;
-                min-height: 105px;
+            div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+                min-height:46px !important;
             }
 
-            :root {
-                --asta-action-h: 84px;
+            div[class*="st-key-btn_acquista_"] .stButton > button,
+            div[class*="st-key-btn_avversario_"] .stButton > button {
+                min-height:68px !important;
+                height:68px !important;
             }
         }
         </style>
@@ -8963,579 +8588,365 @@ elif sezione == "ASTA":
     df = df_completo.copy()
 
     if df.empty:
-
-        st.info(
-            "Prima devi caricare il listone."
-        )
+        st.info("Prima devi caricare il listone.")
 
     else:
-
-        side_col, main_col = st.columns(
-            [1.08, 5.92],
-            gap="large",
-            vertical_alignment="top"
+        disponibili = (
+            df[
+                df["Stato"] == "DISPONIBILE"
+            ]
+            .copy()
+            .sort_values("Nome")
+            .reset_index(drop=True)
         )
 
-        # ----------------------------------------------------
-        # BANDA BLU LATERALE
-        # ----------------------------------------------------
+        if disponibili.empty:
 
-        with side_col:
-
-            with st.container(
-                key="asta_side_panel"
-            ):
-
-                side_html = (
-                    '<div class="asta-side-brand">'
-                    '🏆 FANTAELEGANZA'
-                    '</div>'
-
-                    '<div class="asta-side-label">Squadra</div>'
-                    '<div style="font-size:1rem;font-weight:800;'
-                    'color:#4ade80;margin:4px 0 12px 0;">'
-                    'FantaEleganza FC'
-                    '</div>'
-
-                    '<div class="asta-side-rule"></div>'
-
-                    '<div class="asta-side-label">'
-                    'Budget disponibile'
-                    '</div>'
-                    f'<div class="asta-side-value green">'
-                    f'{formatta_crediti(budget_rimanente)} €'
-                    '</div>'
-
-                    '<div class="asta-side-rule"></div>'
-
-                    '<div class="asta-side-label">'
-                    'Spesa effettiva'
-                    '</div>'
-                    f'<div class="asta-side-value">'
-                    f'{formatta_crediti(spesa_effettiva)} €'
-                    '</div>'
-
-                    '<div class="asta-side-rule"></div>'
-
-                    '<div class="asta-side-label">Rosa</div>'
-                    f'<div class="asta-side-value">'
-                    f'{numero_rosa}/{MAX_GIOCATORI}'
-                    '</div>'
-
-                    '<div class="asta-side-rule"></div>'
-
-                    '<div class="asta-side-label">Portieri</div>'
-                    f'<div class="asta-side-value">'
-                    f'{numero_portieri}/{MIN_PORTIERI}'
-                    '</div>'
-                )
-
-                st.markdown(
-                    side_html,
-                    unsafe_allow_html=True
-                )
-
-                with st.container(
-                    key="asta_history_button"
-                ):
-                    if st.button(
-                        "↶  ULTIME OPERAZIONI  ›",
-                        use_container_width=True,
-                        key="btn_ultime_operazioni_asta"
-                    ):
-                        mostra_ultime_operazioni_asta()
-
-                with st.container(
-                    key="asta_side_action_istruzioni"
-                ):
-                    if st.button(
-                        "ⓘ  ISTRUZIONI  ›",
-                        use_container_width=True,
-                        key="btn_istruzioni_asta"
-                    ):
-                        mostra_regole()
-
-                with st.container(
-                    key="asta_side_action_snapshot"
-                ):
-                    if st.button(
-                        "▣  SNAPSHOT / RIPRISTINO",
-                        use_container_width=True,
-                        key="btn_snapshot_asta"
-                    ):
-                        mostra_snapshot_asta()
-
-                with st.container(
-                    key="asta_side_action_backup"
-                ):
-                    if USA_DATABASE_CLOUD:
-                        if st.button(
-                            "☁  SALVA BACKUP",
-                            use_container_width=True,
-                            key="btn_backup_asta_cloud"
-                        ):
-                            gestisci_backup_cloud()
-                    elif DB_PATH.exists():
-                        with open(DB_PATH, "rb") as file_db:
-                            st.download_button(
-                                "☁  SALVA BACKUP",
-                                data=file_db.read(),
-                                file_name="fantaeleganza_backup.db",
-                                mime="application/octet-stream",
-                                use_container_width=True,
-                                key="download_backup_asta_locale"
-                            )
-
-                with st.container(
-                    key="asta_side_action_aggiorna"
-                ):
-                    if st.button(
-                        "↻  AGGIORNA",
-                        use_container_width=True,
-                        key="btn_aggiorna_asta"
-                    ):
-                        invalida_cache_dati()
-                        st.rerun()
-
-                db_html = (
-                    '<div class="asta-side-db">'
-                    '🟢 DATABASE<br>'
-                    + (
-                        'Cloud connesso'
-                        if USA_DATABASE_CLOUD
-                        else 'Locale connesso'
-                    )
-                    + '</div>'
-                )
-
-                st.markdown(
-                    db_html,
-                    unsafe_allow_html=True
-                )
-
-        # ----------------------------------------------------
-        # AREA CENTRALE
-        # ----------------------------------------------------
-
-        with main_col:
-
-            disponibili = (
-                df[
-                    df["Stato"] == "DISPONIBILE"
-                ]
-                .copy()
-                .sort_values("Nome")
-                .reset_index(drop=True)
+            st.info(
+                "Nessun giocatore disponibile."
             )
 
-            if disponibili.empty:
+        else:
+
+            opzioni_asta = (
+                disponibili
+                .apply(
+                    lambda r:
+                    f"{r['Nome']} — "
+                    f"{r['Squadra']} — "
+                    f"{r['RM']}",
+                    axis=1
+                )
+                .tolist()
+            )
+
+            scelta = st.selectbox(
+                "🔎 CERCA GIOCATORE / SQUADRA / RUOLO",
+                options=opzioni_asta,
+                index=None,
+                placeholder=(
+                    "Scrivi nome, squadra o ruolo…"
+                ),
+                key="search_select_asta"
+            )
+
+            if scelta is None:
 
                 st.info(
-                    "Nessun giocatore disponibile."
+                    "⌨️ Scrivi poche lettere: il giocatore viene proposto "
+                    "subito. Puoi cercare anche per squadra o ruolo."
                 )
 
             else:
 
-                st.markdown(
-                    '<div class="asta-search-title">'
-                    '⌕ &nbsp; CERCA GIOCATORE'
-                    '</div>',
-                    unsafe_allow_html=True
+                giocatore = (
+                    disponibili.iloc[
+                        opzioni_asta.index(
+                            scelta
+                        )
+                    ]
                 )
 
-                opzioni_asta = (
-                    disponibili
-                    .apply(
-                        lambda r:
-                        f"{r['Nome']} — "
-                        f"{r['Squadra']} — "
-                        f"{r['RM']}",
-                        axis=1
+                colore_nome_asta = (
+                    colore_fvm_mantra(
+                        giocatore.get(
+                            "RM",
+                            ""
+                        ),
+                        giocatore.get(
+                            "FVM M"
+                        )
                     )
-                    .tolist()
                 )
 
-                scelta = st.selectbox(
-                    "Cerca giocatore",
-                    options=opzioni_asta,
-                    index=None,
-                    placeholder=(
-                        "Cerca per nome giocatore, squadra o ruolo..."
-                    ),
-                    key="search_select_asta",
-                    label_visibility="collapsed"
-                )
-
-                if scelta is None:
-
-                    st.caption(
-                        "Inizia a digitare per selezionare il giocatore."
+                priorita_acquisto = (
+                    valuta_priorita_acquisto(
+                        giocatore,
+                        df_rosa_globale,
+                        df_completo
                     )
+                )
 
-                else:
+                (
+                    bg_priorita,
+                    fg_priorita,
+                    bordo_priorita
+                ) = stile_priorita_acquisto(
+                    priorita_acquisto[
+                        "Etichetta"
+                    ]
+                )
 
-                    giocatore = (
-                        disponibili.iloc[
-                            opzioni_asta.index(
-                                scelta
-                            )
+                g1, g2, g3, g4, g5 = (
+                    st.columns(
+                        [
+                            1.20,
+                            0.95,
+                            0.95,
+                            0.75,
+                            1.25
                         ]
                     )
+                )
 
-                    colore_nome_asta = (
-                        colore_fvm_mantra(
-                            giocatore.get(
-                                "RM",
-                                ""
-                            ),
-                            giocatore.get(
-                                "FVM M"
-                            )
-                        )
-                    )
-
-                    fascia_giocatore = (
-                        fascia_iqr_giocatore(
-                            giocatore.get(
-                                "RM",
-                                ""
-                            ),
-                            giocatore.get(
-                                "FVM M"
-                            )
-                        )
-                    )
-
-                    priorita_acquisto = (
-                        valuta_priorita_acquisto(
-                            giocatore,
-                            df_rosa_globale,
-                            df_completo
-                        )
-                    )
-
-                    (
-                        bg_priorita,
-                        fg_priorita,
-                        bordo_priorita
-                    ) = stile_priorita_acquisto(
-                        priorita_acquisto[
-                            "Etichetta"
-                        ]
-                    )
+                with g1:
 
                     st.markdown(
-                        '<div class="asta-player-title">'
-                        '♙ &nbsp; GIOCATORE SELEZIONATO'
-                        '</div>',
+                        f"""
+                        <div class="asta-player-mobile-fix">
+                            <div style="
+                                font-size:0.875rem;
+                                color:rgba(49,51,63,0.65);
+                                margin-bottom:0.15rem;
+                            ">
+                                Giocatore
+                            </div>
+                            <div style="
+                                font-size:1.35rem;
+                                line-height:1.15;
+                                font-weight:700;
+                                color:{colore_nome_asta};
+                                white-space:normal;
+                                overflow-wrap:anywhere;
+                            ">
+                                {html.escape(str(giocatore["Nome"]))}
+                            </div>
+                        </div>
+                        """,
                         unsafe_allow_html=True
                     )
 
+                g2.metric(
+                    "Squadra",
+                    giocatore["Squadra"]
+                )
+
+                g3.metric(
+                    "Ruolo",
+                    giocatore["RM"]
+                )
+
+                g4.metric(
+                    "FVM",
+                    giocatore["FVM"]
+                )
+
+                with g5:
+
+                    dettaglio_priorita = (
+                        f"Ruolo {priorita_acquisto['Ruolo']} · "
+                        f"fascia {priorita_acquisto['Fascia candidato'].title()} · "
+                        f"in rosa {priorita_acquisto['Copertura']} · "
+                        f"rimasti {priorita_acquisto['Disponibili']}"
+                    )
+
                     with st.container(
-                        key="asta_player_card"
+                        key=(
+                            "priorita_click_"
+                            f"{int(giocatore['Id'])}"
+                        )
                     ):
 
-                        p1, p2, p3, p4 = st.columns(
-                            [1.22, 1.00, 1.00, 1.38],
-                            vertical_alignment="top"
+                        st.markdown(
+                            f"""
+                            <div style="
+                                min-height:72px;
+                                border:2px solid {bordo_priorita};
+                                border-radius:10px;
+                                background:{bg_priorita};
+                                padding:9px 10px;
+                                display:flex;
+                                flex-direction:column;
+                                justify-content:center;
+                                box-sizing:border-box;
+                                cursor:pointer;
+                            ">
+                                <div style="
+                                    font-size:0.78rem;
+                                    color:#475569;
+                                    margin-bottom:4px;
+                                    font-weight:600;
+                                ">
+                                    Priorità acquisto
+                                </div>
+                                <div style="
+                                    font-size:1.00rem;
+                                    line-height:1.10;
+                                    font-weight:800;
+                                    color:{fg_priorita};
+                                ">
+                                    {html.escape(
+                                        priorita_acquisto[
+                                            "Etichetta"
+                                        ]
+                                    )}
+                                </div>
+                                <div style="
+                                    font-size:0.66rem;
+                                    line-height:1.15;
+                                    color:#64748b;
+                                    margin-top:4px;
+                                ">
+                                    {html.escape(
+                                        dettaglio_priorita
+                                    )}
+                                </div>
+                                <div style="
+                                    font-size:0.62rem;
+                                    line-height:1.1;
+                                    color:#64748b;
+                                    margin-top:5px;
+                                    font-weight:600;
+                                ">
+                                    Giocatori disponibili
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
                         )
 
-                        with p1:
+                        if st.button(
+                            "Giocatori disponibili",
+                            key=(
+                                "btn_priorita_"
+                                f"{int(giocatore['Id'])}"
+                            ),
+                        ):
 
-                            player_html = (
-                                '<div class="asta-player-main">'
-
-                                f'<div class="asta-player-name" '
-                                f'style="color:{colore_nome_asta};">'
-                                f'{html.escape(str(giocatore["Nome"]))}'
-                                '</div>'
-
-                                '<div class="asta-player-team">'
-                                f'{html.escape(str(giocatore["Squadra"]))}'
-                                '</div>'
-
-                                '<div>'
-                                '<span class="asta-pill">'
-                                f'{html.escape(str(giocatore["RM"]))}'
-                                '</span>'
-                                '<span class="asta-pill">'
-                                f'Fascia: {html.escape(str(fascia_giocatore).title())}'
-                                '</span>'
-                                '</div>'
-
-                                '</div>'
+                            mostra_dettaglio_priorita_acquisto(
+                                giocatore,
+                                priorita_acquisto,
+                                df_completo
                             )
 
-                            st.markdown(
-                                player_html,
-                                unsafe_allow_html=True
-                            )
+                chiave_prezzo = (
+                    "offerta_asta_"
+                    f"{int(giocatore['Id'])}"
+                )
 
-                        with p2:
+                if chiave_prezzo not in st.session_state:
+                    st.session_state[
+                        chiave_prezzo
+                    ] = 1.00
 
-                            fvm_html = (
-                                '<div class="asta-info-card">'
-                                '<div class="asta-info-label">FVM</div>'
-                                '<div class="asta-info-value">'
-                                f'{html.escape(str(giocatore["FVM"]))}'
-                                '</div>'
-                                '</div>'
-                            )
+                c1, c2, c3, c4, c5 = (
+                    st.columns(
+                        [
+                            1.15,
+                            1.20,
+                            1.20,
+                            0.85,
+                            0.85
+                        ],
+                        vertical_alignment="bottom"
+                    )
+                )
 
-                            st.markdown(
-                                fvm_html,
-                                unsafe_allow_html=True
-                            )
+                with c1:
 
-                        with p3:
-
-                            ruolo_html = (
-                                '<div class="asta-info-card">'
-                                '<div class="asta-info-label">'
-                                'Ruoli Mantra'
-                                '</div>'
-                                '<div class="asta-info-value">'
-                                f'{html.escape(str(giocatore["RM"]))}'
-                                '</div>'
-                                '</div>'
-                            )
-
-                            st.markdown(
-                                ruolo_html,
-                                unsafe_allow_html=True
-                            )
-
-                        with p4:
-
-                            dettaglio_priorita = (
-                                f"Ruolo {priorita_acquisto['Ruolo']} · "
-                                f"fascia "
-                                f"{priorita_acquisto['Fascia candidato'].title()} · "
-                                f"in rosa {priorita_acquisto['Copertura']} · "
-                                f"rimasti {priorita_acquisto['Disponibili']}"
-                            )
-
-                            with st.container(
-                                key=(
-                                    "priorita_click_"
-                                    f"{int(giocatore['Id'])}"
-                                )
-                            ):
-
-                                priority_html = (
-                                    f'<div class="asta-priority" '
-                                    f'style="background:{bg_priorita};'
-                                    f'border:1px solid {bordo_priorita};">'
-
-                                    f'<div class="asta-priority-title" '
-                                    f'style="color:{fg_priorita};">'
-                                    'Priorità acquisto'
-                                    '</div>'
-
-                                    f'<div class="asta-priority-value" '
-                                    f'style="color:{fg_priorita};">'
-                                    f'{html.escape(priorita_acquisto["Etichetta"])}'
-                                    '</div>'
-
-                                    '<div class="asta-priority-detail">'
-                                    f'{html.escape(dettaglio_priorita)}'
-                                    '</div>'
-
-                                    '<div class="asta-priority-button">'
-                                    '👥 Giocatori disponibili'
-                                    '</div>'
-
-                                    '</div>'
-                                )
-
-                                st.markdown(
-                                    priority_html,
-                                    unsafe_allow_html=True
-                                )
-
-                                if st.button(
-                                    "Giocatori disponibili",
-                                    key=(
-                                        "btn_priorita_"
-                                        f"{int(giocatore['Id'])}"
-                                    )
-                                ):
-
-                                    mostra_dettaglio_priorita_acquisto(
-                                        giocatore,
-                                        priorita_acquisto,
-                                        df_completo
-                                    )
-
-                    # ------------------------------------------------
-                    # STRISCIA OPERATIVA
-                    # ------------------------------------------------
-
-                    chiave_prezzo = (
-                        "offerta_asta_"
-                        f"{int(giocatore['Id'])}"
+                    prezzo = st.number_input(
+                        "Offerta",
+                        min_value=0.10,
+                        max_value=5000.00,
+                        step=0.10,
+                        format="%.2f",
+                        key=chiave_prezzo,
+                        label_visibility="collapsed"
                     )
 
-                    if chiave_prezzo not in st.session_state:
+                prezzo = round(
+                    float(prezzo),
+                    2
+                )
 
-                        st.session_state[
-                            chiave_prezzo
-                        ] = 1.00
+                nuovo_valore = round(
+                    valore_acquisti + prezzo,
+                    2
+                )
 
-                    valido, motivo = (
-                        verifica_acquisto_regole(
-                            df_rosa_globale,
-                            giocatore["RM"]
+                nuova_spesa = (
+                    calcola_spesa_effettiva(
+                        nuovo_valore
+                    )
+                )
+
+                incremento = round(
+                    nuova_spesa
+                    - spesa_effettiva,
+                    2
+                )
+
+                valido, motivo = (
+                    verifica_acquisto_regole(
+                        df_rosa_globale,
+                        giocatore["RM"]
+                    )
+                )
+
+                with c2:
+
+                    if st.button(
+                        "✅ ACQUISTA",
+                        use_container_width=True,
+                        type="primary",
+                        disabled=(not valido),
+                        key=(
+                            "btn_acquista_"
+                            f"{int(giocatore['Id'])}"
                         )
-                    )
+                    ):
 
-                    a1, a2, a3, a4, a5 = st.columns(
-                        [1.10, 1.28, 1.30, .88, .88],
-                        vertical_alignment="top"
-                    )
-
-                    with a1:
-
-                        with st.container(
-                            key="asta_offer_action"
-                        ):
-
-                            prezzo = st.number_input(
-                                "Offerta",
-                                min_value=0.10,
-                                max_value=5000.00,
-                                step=0.10,
-                                format="%.2f",
-                                key=chiave_prezzo,
-                                label_visibility="collapsed"
-                            )
-
-                    prezzo = round(
-                        float(
-                            prezzo
-                        ),
-                        2
-                    )
-
-                    nuovo_valore = round(
-                        valore_acquisti
-                        + prezzo,
-                        2
-                    )
-
-                    nuova_spesa = (
-                        calcola_spesa_effettiva(
-                            nuovo_valore
+                        esegui_operazione(
+                            int(giocatore["Id"]),
+                            "ACQUISTO",
+                            "MIO",
+                            prezzo,
+                            0
                         )
-                    )
 
-                    incremento = round(
-                        nuova_spesa
-                        - spesa_effettiva,
-                        2
-                    )
+                        st.rerun()
 
-                    with a2:
+                with c3:
 
-                        with st.container(
-                            key="asta_buy_action"
-                        ):
-
-                            if st.button(
-                                "✅  ACQUISTA",
-                                use_container_width=True,
-                                type="primary",
-                                disabled=(not valido),
-                                key=(
-                                    "btn_acquista_"
-                                    f"{int(giocatore['Id'])}"
-                                )
-                            ):
-
-                                esegui_operazione(
-                                    int(
-                                        giocatore["Id"]
-                                    ),
-                                    "ACQUISTO",
-                                    "MIO",
-                                    prezzo,
-                                    0
-                                )
-
-                                st.rerun()
-
-                    with a3:
-
-                        with st.container(
-                            key="asta_enemy_action"
-                        ):
-
-                            if st.button(
-                                "🔴  VENDUTO AD AVVERSARIO",
-                                use_container_width=True,
-                                key=(
-                                    "btn_avversario_"
-                                    f"{int(giocatore['Id'])}"
-                                )
-                            ):
-
-                                esegui_operazione(
-                                    int(
-                                        giocatore["Id"]
-                                    ),
-                                    "VENDUTO AVVERSARIO",
-                                    "AVVERSARIO",
-                                    None,
-                                    0
-                                )
-
-                                st.rerun()
-
-                    with a4:
-
-                        with st.container(
-                            key="asta_impact_action"
-                        ):
-
-                            st.markdown(
-                                (
-                                    '<div class="asta-stat-card">'
-                                    '<div class="asta-stat-label">'
-                                    'Impatto effettivo'
-                                    '</div>'
-                                    '<div class="asta-stat-value">'
-                                    f'{formatta_crediti(incremento)} €'
-                                    '</div>'
-                                    '</div>'
-                                ),
-                                unsafe_allow_html=True
-                            )
-
-                    with a5:
-
-                        with st.container(
-                            key="asta_total_action"
-                        ):
-
-                            st.markdown(
-                                (
-                                    '<div class="asta-stat-card">'
-                                    '<div class="asta-stat-label">'
-                                    'Nuova spesa'
-                                    '</div>'
-                                    '<div class="asta-stat-value">'
-                                    f'{formatta_crediti(nuova_spesa)} €'
-                                    '</div>'
-                                    '</div>'
-                                ),
-                                unsafe_allow_html=True
-                            )
-
-                    if not valido:
-
-                        st.error(
-                            "⛔ " + motivo
+                    if st.button(
+                        "🔴 VENDUTO AD AVVERSARIO",
+                        use_container_width=True,
+                        key=(
+                            "btn_avversario_"
+                            f"{int(giocatore['Id'])}"
                         )
+                    ):
+
+                        esegui_operazione(
+                            int(giocatore["Id"]),
+                            "VENDUTO AVVERSARIO",
+                            "AVVERSARIO",
+                            None,
+                            0
+                        )
+
+                        st.rerun()
+
+                with c4:
+
+                    st.metric(
+                        "Impatto effettivo",
+                        f"{formatta_crediti(incremento)} €"
+                    )
+
+                with c5:
+
+                    st.metric(
+                        "Nuova spesa",
+                        f"{formatta_crediti(nuova_spesa)} €"
+                    )
+
+                if not valido:
+
+                    st.error(
+                        "⛔ " + motivo
+                    )
+
 
 
 # ============================================================
