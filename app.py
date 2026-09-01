@@ -1755,33 +1755,34 @@ def valuta_priorita_acquisto(
     df_listone
 ):
     """
-    Determina se il giocatore è:
-    - ACQUISTO FACOLTATIVO
-    - ACQUISTO NECESSARIO
-    - ACQUISTO FONDAMENTALE
+    Valuta la priorità di acquisto per ciascun ruolo Mantra
+    del giocatore e restituisce la priorità più alta.
 
-    Logica per ciascun ruolo Mantra del giocatore:
+    LOGICA V2
 
-    1. "Pari o superiori caratteristiche" = FVM M >= FVM M
-       del giocatore analizzato.
+    "Rimasti" =
+        giocatori ancora DISPONIBILI compatibili con il ruolo
+        e con FVM M >= FVM M del giocatore selezionato.
 
-    2. Rosa sufficientemente coperta:
-       almeno 3 giocatori già in rosa compatibili con quel ruolo
-       e con FVM M pari o superiore al giocatore analizzato.
+    La copertura della rosa considera invece TUTTI i giocatori
+    già presenti in rosa compatibili con quel ruolo.
 
-    3. Disponibilità residua nel listone:
-       numero di giocatori ancora DISPONIBILI, compatibili con
-       quel ruolo e con FVM M pari o superiore / totale iniziale
-       dei giocatori del listone con le stesse caratteristiche.
+    Le condizioni devono verificarsi insieme:
 
-    4. Classificazione:
-       - rosa coperta -> FACOLTATIVO
-       - rosa non coperta + residuo <25% -> FONDAMENTALE
-       - rosa non coperta + residuo <50% -> NECESSARIO
-       - altrimenti -> FACOLTATIVO
+    - ACQUISTO FONDAMENTALE:
+        massimo 2 giocatori in rosa NEL RUOLO
+        E meno di 7 giocatori pari/superiori rimasti.
 
-    Per un giocatore multiruolo viene considerata la priorità
-    più alta fra tutti i ruoli che può ricoprire.
+    - ACQUISTO NECESSARIO:
+        meno di 4 giocatori in rosa NEL RUOLO
+        E meno di 10 giocatori pari/superiori rimasti.
+
+    - ACQUISTO FACOLTATIVO:
+        tutti gli altri casi.
+        Quindi è facoltativo anche con rosa vuota se nel listone
+        restano almeno 10 alternative pari/superiori.
+
+    Per i multiruolo viene adottata la priorità più alta.
     """
 
     try:
@@ -1790,7 +1791,15 @@ def valuta_priorita_acquisto(
                 "FVM M"
             )
         )
+
+        if pd.isna(
+            fvm_candidato
+        ):
+            raise ValueError
+
     except Exception:
+        # Se manca FVM M, non vogliamo produrre artificialmente
+        # "rimasti 0": consideriamo come soglia minima 0.
         fvm_candidato = 0.0
 
     ruoli_candidato = sorted(
@@ -1803,30 +1812,21 @@ def valuta_priorita_acquisto(
     )
 
     if not ruoli_candidato:
-        ruoli_candidato = [
-            primo_ruolo(
-                giocatore.get(
-                    "RM",
-                    ""
-                )
-            ).upper()
-        ]
 
-    livelli = {
-        "ACQUISTO FACOLTATIVO": 1,
-        "ACQUISTO NECESSARIO": 2,
-        "ACQUISTO FONDAMENTALE": 3
-    }
+        ruolo_principale = primo_ruolo(
+            giocatore.get(
+                "RM",
+                ""
+            )
+        ).upper()
 
-    migliore = {
-        "Etichetta": "ACQUISTO FACOLTATIVO",
-        "Livello": 1,
-        "Ruolo": "",
-        "Copertura": 0,
-        "Residuo": 100.0,
-        "Disponibili": 0,
-        "Totali": 0
-    }
+        ruoli_candidato = (
+            [ruolo_principale]
+            if ruolo_principale
+            else []
+        )
+
+    risultati_ruolo = []
 
     for ruolo in ruoli_candidato:
 
@@ -1838,7 +1838,7 @@ def valuta_priorita_acquisto(
             continue
 
         # ----------------------------------------------------
-        # COPERTURA DELLA PROPRIA ROSA
+        # 1. QUANTI GIOCATORI HO GIÀ IN ROSA NEL RUOLO
         # ----------------------------------------------------
 
         compatibili_rosa = (
@@ -1848,124 +1848,92 @@ def valuta_priorita_acquisto(
             )
         )
 
-        pari_superiori_rosa = 0
-
-        if (
-            compatibili_rosa is not None
-            and not compatibili_rosa.empty
-        ):
-
-            valori_rosa = pd.to_numeric(
-                compatibili_rosa[
-                    "FVM M"
-                ],
-                errors="coerce"
+        numero_in_rosa = (
+            len(
+                compatibili_rosa
             )
-
-            pari_superiori_rosa = int(
-                (
-                    valori_rosa
-                    >= fvm_candidato
-                )
-                .fillna(False)
-                .sum()
-            )
-
-        rosa_coperta = (
-            pari_superiori_rosa
-            >= 3
+            if compatibili_rosa is not None
+            else 0
         )
 
         # ----------------------------------------------------
-        # DISPONIBILITÀ RESIDUA NEL LISTONE
+        # 2. QUANTI PARI/SUPERIORI SONO ANCORA DISPONIBILI
         # ----------------------------------------------------
 
-        compatibili_totali = (
+        compatibili_listone = (
             giocatori_compatibili(
                 df_listone,
                 ruolo
             )
         )
 
+        disponibili_equivalenti = 0
+
         if (
-            compatibili_totali is None
-            or compatibili_totali.empty
+            compatibili_listone is not None
+            and not compatibili_listone.empty
         ):
 
-            totale_equivalenti = 0
-            disponibili_equivalenti = 0
-            percentuale_residua = 100.0
-
-        else:
-
-            valori_totali = pd.to_numeric(
-                compatibili_totali[
+            valori_fvm = pd.to_numeric(
+                compatibili_listone[
                     "FVM M"
                 ],
                 errors="coerce"
             )
 
-            maschera_equivalenti = (
-                valori_totali
-                >= fvm_candidato
-            ).fillna(False)
-
-            equivalenti = (
-                compatibili_totali.loc[
-                    maschera_equivalenti
+            stato_disponibile = (
+                compatibili_listone[
+                    "Stato"
                 ]
+                .astype(str)
+                .str.upper()
+                .eq(
+                    "DISPONIBILE"
+                )
             )
 
-            totale_equivalenti = len(
-                equivalenti
+            pari_superiori = (
+                valori_fvm
+                .ge(
+                    fvm_candidato
+                )
+                .fillna(False)
             )
 
-            if totale_equivalenti > 0:
-
-                disponibili_equivalenti = int(
-                    (
-                        equivalenti[
-                            "Stato"
-                        ]
-                        .astype(str)
-                        .str.upper()
-                        == "DISPONIBILE"
-                    )
-                    .sum()
+            disponibili_equivalenti = int(
+                (
+                    stato_disponibile
+                    & pari_superiori
                 )
-
-                percentuale_residua = (
-                    disponibili_equivalenti
-                    / totale_equivalenti
-                    * 100.0
-                )
-
-            else:
-
-                disponibili_equivalenti = 0
-                percentuale_residua = 100.0
+                .sum()
+            )
 
         # ----------------------------------------------------
-        # CLASSIFICAZIONE DEL RUOLO
+        # 3. CLASSIFICAZIONE: DEVONO VERIFICARSI ENTRAMBI
+        #    I REQUISITI DELLA FASCIA
         # ----------------------------------------------------
 
-        if rosa_coperta:
-
-            etichetta = (
-                "ACQUISTO FACOLTATIVO"
-            )
-
-        elif percentuale_residua < 25:
+        if (
+            numero_in_rosa <= 2
+            and disponibili_equivalenti < 7
+        ):
 
             etichetta = (
                 "ACQUISTO FONDAMENTALE"
             )
 
-        elif percentuale_residua < 50:
+            livello = 3
+
+        elif (
+            numero_in_rosa < 4
+            and disponibili_equivalenti < 10
+        ):
 
             etichetta = (
                 "ACQUISTO NECESSARIO"
             )
+
+            livello = 2
 
         else:
 
@@ -1973,53 +1941,49 @@ def valuta_priorita_acquisto(
                 "ACQUISTO FACOLTATIVO"
             )
 
-        livello = livelli[
-            etichetta
-        ]
+            livello = 1
 
-        if livello > migliore[
-            "Livello"
-        ]:
+        risultati_ruolo.append({
+            "Etichetta": etichetta,
+            "Livello": livello,
+            "Ruolo": ruolo,
+            "Copertura": int(
+                numero_in_rosa
+            ),
+            "Disponibili": int(
+                disponibili_equivalenti
+            ),
+            "FVM candidato": float(
+                fvm_candidato
+            )
+        })
 
-            migliore = {
-                "Etichetta": etichetta,
-                "Livello": livello,
-                "Ruolo": ruolo,
-                "Copertura": pari_superiori_rosa,
-                "Residuo": round(
-                    percentuale_residua,
-                    1
-                ),
-                "Disponibili": disponibili_equivalenti,
-                "Totali": totale_equivalenti
-            }
+    if not risultati_ruolo:
 
-        elif (
-            livello
-            == migliore[
-                "Livello"
-            ]
-            and percentuale_residua
-            < migliore[
-                "Residuo"
-            ]
-        ):
+        return {
+            "Etichetta": "ACQUISTO FACOLTATIVO",
+            "Livello": 1,
+            "Ruolo": "",
+            "Copertura": 0,
+            "Disponibili": 0,
+            "FVM candidato": float(
+                fvm_candidato
+            )
+        }
 
-            migliore = {
-                "Etichetta": etichetta,
-                "Livello": livello,
-                "Ruolo": ruolo,
-                "Copertura": pari_superiori_rosa,
-                "Residuo": round(
-                    percentuale_residua,
-                    1
-                ),
-                "Disponibili": disponibili_equivalenti,
-                "Totali": totale_equivalenti
-            }
+    # Priorità più alta. A parità di priorità scegliamo il ruolo
+    # più critico: meno alternative rimaste, poi meno copertura.
+    migliore = sorted(
+        risultati_ruolo,
+        key=lambda x: (
+            -x["Livello"],
+            x["Disponibili"],
+            x["Copertura"],
+            x["Ruolo"]
+        )
+    )[0]
 
     return migliore
-
 
 def stile_priorita_acquisto(
     etichetta
@@ -6543,7 +6507,8 @@ def mostra_dettaglio_priorita_acquisto(
         st.caption(
             f"Totale disponibili nel ruolo: {len(disponibili)} · "
             f"Pari o superiori al giocatore in asta: {pari_superiori} "
-            f"(FVM M ≥ {float(fvm_candidato):g})."
+            f"(FVM M ≥ {float(fvm_candidato):g}). "
+            "La tabella sotto mostra comunque tutti i disponibili."
         )
 
     # --------------------------------------------------------
@@ -8703,8 +8668,7 @@ elif sezione == "ASTA":
 
                         dettaglio_priorita = (
                             f"Ruolo {priorita_acquisto['Ruolo']} · "
-                            f"in rosa {priorita_acquisto['Copertura']} "
-                            f"pari/superiori · "
+                            f"in rosa {priorita_acquisto['Copertura']} · "
                             f"rimasti {priorita_acquisto['Disponibili']}"
                         )
 
