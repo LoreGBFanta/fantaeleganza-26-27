@@ -8541,7 +8541,7 @@ elif sezione == "ASTA":
         """
         <style>
         /* VERSIONE B - CONSOLE ASTA COMPATTA */
-        div[data-testid="stNumberInput"] input {
+        div[class*="st-key-asta_offerta_box"] div[data-testid="stNumberInput"] input {
             font-size:1.22rem !important;
             font-weight:800 !important;
             text-align:center !important;
@@ -8583,9 +8583,9 @@ elif sezione == "ASTA":
         }
 
         /* OFFERTA: alza l'intero controllo, compresi +/- */
-        div[data-testid="stNumberInput"] > div,
-        div[data-testid="stNumberInput"] [data-baseweb="input"],
-        div[data-testid="stNumberInput"] [data-baseweb="base-input"] {
+        div[class*="st-key-asta_offerta_box"] div[data-testid="stNumberInput"] > div,
+        div[class*="st-key-asta_offerta_box"] div[data-testid="stNumberInput"] [data-baseweb="input"],
+        div[class*="st-key-asta_offerta_box"] div[data-testid="stNumberInput"] [data-baseweb="base-input"] {
             min-height:76px !important;
             height:76px !important;
         }
@@ -8601,7 +8601,7 @@ elif sezione == "ASTA":
             padding-bottom:0 !important;
         }
 
-        div[data-testid="stNumberInput"] button {
+        div[class*="st-key-asta_offerta_box"] div[data-testid="stNumberInput"] button {
             height:38px !important;
             min-height:38px !important;
         }
@@ -8618,7 +8618,7 @@ elif sezione == "ASTA":
         }
 
         @media (max-width:768px) {
-            div[data-testid="stNumberInput"] input {
+            div[class*="st-key-asta_offerta_box"] div[data-testid="stNumberInput"] input {
                 font-size:1.08rem !important;
                 min-height:52px !important;
             }
@@ -8897,15 +8897,19 @@ elif sezione == "ASTA":
 
                 with c1:
 
-                    prezzo = st.number_input(
-                        "Offerta",
-                        min_value=0.10,
-                        max_value=5000.00,
-                        step=0.10,
-                        format="%.2f",
-                        key=chiave_prezzo,
-                        label_visibility="collapsed"
-                    )
+                    with st.container(
+                        key="asta_offerta_box"
+                    ):
+
+                        prezzo = st.number_input(
+                            "Offerta",
+                            min_value=0.10,
+                            max_value=5000.00,
+                            step=0.10,
+                            format="%.2f",
+                            key=chiave_prezzo,
+                            label_visibility="collapsed"
+                        )
 
                 prezzo = round(
                     float(prezzo),
