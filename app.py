@@ -6541,8 +6541,9 @@ def mostra_dettaglio_priorita_acquisto(
         )
 
         st.caption(
-            f"Di questi, {pari_superiori} hanno FVM M "
-            f"pari o superiore a {float(fvm_candidato):g}."
+            f"Totale disponibili nel ruolo: {len(disponibili)} · "
+            f"Pari o superiori al giocatore in asta: {pari_superiori} "
+            f"(FVM M ≥ {float(fvm_candidato):g})."
         )
 
     # --------------------------------------------------------
@@ -8704,9 +8705,7 @@ elif sezione == "ASTA":
                             f"Ruolo {priorita_acquisto['Ruolo']} · "
                             f"in rosa {priorita_acquisto['Copertura']} "
                             f"pari/superiori · "
-                            f"rimasti {priorita_acquisto['Disponibili']}/"
-                            f"{priorita_acquisto['Totali']} "
-                            f"({priorita_acquisto['Residuo']:.1f}%)"
+                            f"rimasti {priorita_acquisto['Disponibili']}"
                         )
 
                         with st.container(
