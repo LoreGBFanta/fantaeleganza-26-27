@@ -8498,6 +8498,38 @@ elif sezione == "ASTA":
             min-height:42px !important;
         }
 
+        /* VERSIONE B - USABILITY ASTA */
+        div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+            border:2px solid #94a3b8 !important;
+            border-radius:10px !important;
+            background:#ffffff !important;
+            min-height:50px !important;
+        }
+
+        div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within > div {
+            border-color:#071a2f !important;
+            box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
+        }
+
+        div[data-testid="stNumberInput"] input {
+            border:2px solid #94a3b8 !important;
+            border-radius:10px !important;
+            background:#ffffff !important;
+        }
+
+        div[data-testid="stNumberInput"]:focus-within input {
+            border-color:#071a2f !important;
+            box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
+        }
+
+        /* Le azioni principali devono sembrare immediatamente azionabili */
+        button[data-testid="stBaseButton-primary"] {
+            min-height:48px !important;
+            font-weight:900 !important;
+            font-size:1rem !important;
+            border-radius:10px !important;
+        }
+
         @media (max-width:768px) {
             div[data-testid="stNumberInput"] input {
                 font-size:1.08rem !important;
@@ -8513,8 +8545,23 @@ elif sezione == "ASTA":
         unsafe_allow_html=True
     )
 
-    st.subheader(
-        "🔨 Asta"
+    st.markdown(
+        """
+        <div style="
+            background:#071a2f;
+            color:white;
+            border-radius:12px;
+            padding:12px 16px;
+            margin-bottom:12px;
+        ">
+            <div style="font-size:1.35rem;font-weight:900;">🔨 ASTA RAPIDA</div>
+            <div style="font-size:0.82rem;opacity:.85;">
+                1. Cerca il giocatore &nbsp;→&nbsp; 2. Inserisci l'offerta
+                &nbsp;→&nbsp; 3. Assegna l'esito
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
     df = (
@@ -8572,21 +8619,20 @@ elif sezione == "ASTA":
                 )
 
                 scelta = st.selectbox(
-                    "🔎 Cerca giocatore o squadra",
+                    "🔎 1 · CERCA GIOCATORE / SQUADRA / RUOLO",
                     options=opzioni_asta,
                     index=None,
                     placeholder=(
-                        "Digita il nome del giocatore "
-                        "o della squadra…"
+                        "Scrivi nome, squadra o ruolo…"
                     ),
                     key="search_select_asta"
                 )
 
                 if scelta is None:
 
-                    st.caption(
-                        "Inizia a digitare: il campo propone "
-                        "immediatamente i giocatori corrispondenti."
+                    st.info(
+                        "⌨️ Scrivi poche lettere: il giocatore viene proposto "
+                        "subito. Puoi cercare anche per squadra o ruolo."
                     )
 
                 else:
@@ -8627,6 +8673,13 @@ elif sezione == "ASTA":
                         priorita_acquisto[
                             "Etichetta"
                         ]
+                    )
+
+                    st.markdown(
+                        "<div style='margin:10px 0 5px 0;font-size:.78rem;"
+                        "font-weight:800;color:#64748b;letter-spacing:.04em;'>"
+                        "GIOCATORE SELEZIONATO</div>",
+                        unsafe_allow_html=True
                     )
 
                     g1, g2, g3, g4, g5 = (
@@ -8781,12 +8834,19 @@ elif sezione == "ASTA":
                             chiave_prezzo
                         ] = 1.00
 
+                    st.markdown(
+                        "<div style='margin:12px 0 2px 0;font-size:.78rem;"
+                        "font-weight:800;color:#64748b;letter-spacing:.04em;'>"
+                        "OFFERTA E ASSEGNAZIONE</div>",
+                        unsafe_allow_html=True
+                    )
+
                     c1, c2, c3, c4, c5 = (
                         st.columns(
                             [
-                                1.10,
-                                1.05,
                                 1.15,
+                                1.20,
+                                1.20,
                                 0.85,
                                 0.85
                             ],
@@ -8797,7 +8857,7 @@ elif sezione == "ASTA":
                     with c1:
 
                         prezzo = st.number_input(
-                            "OFFERTA",
+                            "💰 2 · OFFERTA",
                             min_value=0.10,
                             max_value=5000.00,
                             step=0.10,
@@ -8837,7 +8897,7 @@ elif sezione == "ASTA":
                     with c2:
 
                         if st.button(
-                            "✅ ACQUISTA",
+                            "✅ 3 · ACQUISTA",
                             use_container_width=True,
                             type="primary",
                             disabled=(not valido),
@@ -8860,7 +8920,7 @@ elif sezione == "ASTA":
                     with c3:
 
                         if st.button(
-                            "🔴 VENDUTO AD AVVERSARIO",
+                            "🔴 3 · AVVERSARIO",
                             use_container_width=True,
                             key=(
                                 "btn_avversario_"
