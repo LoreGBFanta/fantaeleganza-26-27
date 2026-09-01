@@ -8511,34 +8511,57 @@ elif sezione == "ASTA":
             box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
         }
 
-        /* STRISCIA OPERATIVA ASTA: compatta, alta e tutta allineata */
+        /* STRISCIA OPERATIVA ASTA: stessa altezza reale per tutti i blocchi */
+        div[class*="st-key-btn_acquista_"] .stButton,
+        div[class*="st-key-btn_avversario_"] .stButton {
+            height:76px !important;
+        }
+
         div[class*="st-key-btn_acquista_"] .stButton > button,
         div[class*="st-key-btn_avversario_"] .stButton > button {
-            min-height:56px !important;
-            height:56px !important;
-            font-weight:800 !important;
+            min-height:76px !important;
+            height:76px !important;
+            width:100% !important;
+            font-weight:900 !important;
             font-size:1rem !important;
-            border-radius:6px !important;
+            border-radius:8px !important;
+            padding-top:0 !important;
+            padding-bottom:0 !important;
+        }
+
+        /* OFFERTA: alza l'intero controllo, compresi +/- */
+        div[data-testid="stNumberInput"] > div,
+        div[data-testid="stNumberInput"] [data-baseweb="input"],
+        div[data-testid="stNumberInput"] [data-baseweb="base-input"] {
+            min-height:76px !important;
+            height:76px !important;
         }
 
         div[data-testid="stNumberInput"] input {
-            min-height:56px !important;
-            height:56px !important;
-            border-radius:6px 0 0 6px !important;
+            min-height:76px !important;
+            height:76px !important;
+            font-size:1.22rem !important;
+            font-weight:800 !important;
+            text-align:center !important;
+            border-radius:8px 0 0 8px !important;
+            padding-top:0 !important;
+            padding-bottom:0 !important;
         }
 
         div[data-testid="stNumberInput"] button {
-            min-height:28px !important;
+            height:38px !important;
+            min-height:38px !important;
         }
 
-        /* Metriche finali della stessa altezza visiva */
+        /* Metriche: riferimento visivo per l'altezza della riga */
         div[data-testid="stMetric"] {
-            min-height:56px !important;
-            height:56px !important;
-            padding:6px 10px !important;
+            min-height:76px !important;
+            height:76px !important;
+            padding:8px 12px !important;
             display:flex !important;
             flex-direction:column !important;
             justify-content:center !important;
+            box-sizing:border-box !important;
         }
 
         @media (max-width:768px) {
@@ -8553,8 +8576,8 @@ elif sezione == "ASTA":
 
             div[class*="st-key-btn_acquista_"] .stButton > button,
             div[class*="st-key-btn_avversario_"] .stButton > button {
-                min-height:54px !important;
-                height:54px !important;
+                min-height:68px !important;
+                height:68px !important;
             }
         }
         </style>
