@@ -3639,38 +3639,11 @@ def inizializza_database():
     """)
 
 
+    # La cronologia viene gestita direttamente in Python.
+    # Rimuoviamo l'eventuale trigger creato dalle release precedenti:
+    # su Turso/libsql può generare ValueError durante alcuni ripristini.
     cur.execute("""
-        CREATE TRIGGER IF NOT EXISTS trg_operazioni_post_insert
-
-        AFTER INSERT ON operazioni
-
-        BEGIN
-
-            INSERT INTO costi_svincoli (
-                operazione_id,
-                giocatore_id,
-                nome_giocatore,
-                importo
-            )
-
-            SELECT
-                NEW.id,
-                NEW.giocatore_id,
-                NEW.nome_giocatore,
-                NEW.costo_svincolo
-
-            WHERE NEW.costo_svincolo > 0;
-
-            DELETE FROM operazioni
-
-            WHERE id NOT IN (
-                SELECT id
-                FROM operazioni
-                ORDER BY id DESC
-                LIMIT 10
-            );
-
-        END
+        DROP TRIGGER IF EXISTS trg_operazioni_post_insert
     """)
 
     colonne = {
@@ -4215,16 +4188,15 @@ def esegui_operazione(
 ):
 
     # Recupera lo stato precedente dalla copia già in memoria.
-    # Nessuna SELECT remota aggiuntiva.
-    df_corrente = (
-        carica_tutti_giocatori()
+    df_corrente = carica_tutti_giocatori()
+
+    giocatore_id_db = int(
+        giocatore_id
     )
 
     riga = df_corrente[
         df_corrente["Id"]
-        == int(
-            giocatore_id
-        )
+        == giocatore_id_db
     ]
 
     if riga.empty:
@@ -4232,110 +4204,204 @@ def esegui_operazione(
 
     precedente = riga.iloc[0]
 
-    nome = precedente[
-        "Nome"
-    ]
+    # Tutti i parametri vengono convertiti in tipi Python nativi.
+    # È importante con Turso/libsql perché valori pandas/numpy
+    # possono produrre ValueError in alcuni percorsi operativi.
+    nome = str(
+        precedente.get(
+            "Nome",
+            ""
+        )
+    )
 
-    stato_prima = precedente[
-        "Stato"
-    ]
+    stato_prima = str(
+        precedente.get(
+            "Stato",
+            ""
+        )
+    )
 
-    prezzo_prima = precedente[
+    prezzo_prima_raw = precedente.get(
         "Prezzo"
-    ]
+    )
+
+    prezzo_prima = (
+        None
+        if pd.isna(
+            prezzo_prima_raw
+        )
+        else float(
+            prezzo_prima_raw
+        )
+    )
+
+    tipo_db = str(
+        tipo
+    )
+
+    nuovo_stato_db = str(
+        nuovo_stato
+    )
+
+    nuovo_prezzo_db = (
+        None
+        if nuovo_prezzo is None
+        or pd.isna(
+            nuovo_prezzo
+        )
+        else float(
+            nuovo_prezzo
+        )
+    )
+
+    costo_svincolo_db = float(
+        costo_svincolo
+        or 0
+    )
 
     conn = get_connection()
     cur = conn.cursor()
 
-    # Prima registriamo la cronologia:
-    # il trigger gestisce automaticamente
-    # eventuale costo svincolo e limite 10 operazioni.
-    cur.execute("""
-        INSERT INTO operazioni (
+    try:
 
-            tipo,
-            giocatore_id,
-            nome_giocatore,
+        # ------------------------------------------------------
+        # 1. REGISTRA OPERAZIONE
+        # ------------------------------------------------------
 
+        cur.execute("""
+            INSERT INTO operazioni (
+
+                tipo,
+                giocatore_id,
+                nome_giocatore,
+
+                stato_prima,
+                prezzo_prima,
+
+                stato_dopo,
+                prezzo_dopo,
+
+                costo_svincolo
+            )
+
+            VALUES (
+                ?, ?, ?,
+                ?, ?,
+                ?, ?,
+                ?
+            )
+        """, (
+            tipo_db,
+            giocatore_id_db,
+            nome,
             stato_prima,
             prezzo_prima,
+            nuovo_stato_db,
+            nuovo_prezzo_db,
+            costo_svincolo_db
+        ))
 
-            stato_dopo,
-            prezzo_dopo,
-
-            costo_svincolo
+        # lastrowid non è sempre affidabile allo stesso modo
+        # tra sqlite3 e libsql: recuperiamo esplicitamente l'id.
+        cur.execute(
+            "SELECT last_insert_rowid()"
         )
 
-        VALUES (
-            ?, ?, ?,
-            ?, ?,
-            ?, ?,
-            ?
-        )
-    """, (
-        tipo,
-        int(
-            giocatore_id
-        ),
-        nome,
+        riga_id = cur.fetchone()
 
-        stato_prima,
-        (
-            None
-            if pd.isna(
-                prezzo_prima
+        operazione_id = (
+            int(
+                riga_id[0]
             )
-            else float(
-                prezzo_prima
+            if riga_id
+            and riga_id[0] is not None
+            else 0
+        )
+
+        # ------------------------------------------------------
+        # 2. EVENTUALE COSTO SVINCOLO
+        # ------------------------------------------------------
+
+        if costo_svincolo_db > 0:
+
+            cur.execute("""
+                INSERT INTO costi_svincoli (
+                    operazione_id,
+                    giocatore_id,
+                    nome_giocatore,
+                    importo
+                )
+                VALUES (?, ?, ?, ?)
+            """, (
+                operazione_id,
+                giocatore_id_db,
+                nome,
+                costo_svincolo_db
+            ))
+
+        # ------------------------------------------------------
+        # 3. AGGIORNA STATO GIOCATORE
+        # ------------------------------------------------------
+
+        cur.execute("""
+            UPDATE giocatori
+
+            SET
+                stato = ?,
+                prezzo_acquisto = ?
+
+            WHERE id = ?
+        """, (
+            nuovo_stato_db,
+            nuovo_prezzo_db,
+            giocatore_id_db
+        ))
+
+        # ------------------------------------------------------
+        # 4. CRONOLOGIA: CONSERVA SOLO LE ULTIME 10 OPERAZIONI
+        # ------------------------------------------------------
+
+        cur.execute("""
+            DELETE FROM operazioni
+
+            WHERE id NOT IN (
+                SELECT id
+                FROM operazioni
+                ORDER BY id DESC
+                LIMIT ?
             )
-        ),
+        """, (
+            int(
+                MAX_UNDO
+            ),
+        ))
 
-        nuovo_stato,
-        nuovo_prezzo,
+        conn.commit()
 
-        float(
-            costo_svincolo
-            or 0
+    except Exception:
+
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+        raise
+
+    finally:
+
+        chiudi_connessione(
+            conn
         )
-    ))
 
-    operazione_id = getattr(
-        cur,
-        "lastrowid",
-        0
-    )
+    # ----------------------------------------------------------
+    # AGGIORNAMENTO CACHE LOCALE
+    # ----------------------------------------------------------
 
-    cur.execute("""
-        UPDATE giocatori
-
-        SET
-            stato = ?,
-            prezzo_acquisto = ?
-
-        WHERE id = ?
-    """, (
-        nuovo_stato,
-        nuovo_prezzo,
-        int(
-            giocatore_id
-        )
-    ))
-
-    conn.commit()
-
-    chiudi_connessione(
-        conn
-    )
-
-    # Aggiorna subito la copia locale:
-    # il rerun non deve rileggere tutti i 500+ giocatori da Turso.
     maschera = (
         st.session_state[
             "_df_giocatori_sessione"
         ]["Id"]
-        == int(
-            giocatore_id
-        )
+        == giocatore_id_db
     )
 
     st.session_state[
@@ -4343,49 +4409,34 @@ def esegui_operazione(
     ].loc[
         maschera,
         "Stato"
-    ] = nuovo_stato
+    ] = nuovo_stato_db
 
     st.session_state[
         "_df_giocatori_sessione"
     ].loc[
         maschera,
         "Prezzo"
-    ] = nuovo_prezzo
+    ] = nuovo_prezzo_db
 
-    # Aggiornamento locale immediato: il rerun successivo
-    # non deve rileggere cronologia e costi da Turso.
     aggiorna_cronologia_locale_dopo_operazione(
         operazione_id,
-        tipo,
-        giocatore_id,
+        tipo_db,
+        giocatore_id_db,
         nome,
         stato_prima,
-        (
-            None
-            if pd.isna(
-                prezzo_prima
-            )
-            else float(
-                prezzo_prima
-            )
-        ),
-        nuovo_stato,
-        nuovo_prezzo,
-        costo_svincolo
+        prezzo_prima,
+        nuovo_stato_db,
+        nuovo_prezzo_db,
+        costo_svincolo_db
     )
 
-    if float(
-        costo_svincolo
-        or 0
-    ) > 0:
+    if costo_svincolo_db > 0:
 
         st.session_state[
             "_costi_svincoli_sessione"
         ] = round(
             calcola_costi_svincoli()
-            + float(
-                costo_svincolo
-            ),
+            + costo_svincolo_db,
             2
         )
 
@@ -4394,7 +4445,6 @@ def esegui_operazione(
 
     if "pdf_rosa_moduli" in st.session_state:
         st.session_state.pdf_rosa_moduli = None
-
 
 def carica_ultime_operazioni():
 
