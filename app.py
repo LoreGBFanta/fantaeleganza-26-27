@@ -7199,6 +7199,18 @@ def gestisci_backup_cloud():
 
 
 # ============================================================
+# POPUP SNAPSHOT / RIPRISTINO ASTA
+# ============================================================
+
+@st.dialog(
+    "Snapshot e ripristino",
+    width="large"
+)
+def mostra_snapshot_asta():
+    gestisci_snapshot()
+
+
+# ============================================================
 # POPUP ULTIME OPERAZIONI ASTA
 # ============================================================
 
@@ -7346,346 +7358,351 @@ iqr = (
 
 
 # ============================================================
-# HEADER COMPATTO
-# ============================================================
+# HEADER / RIEPILOGO STANDARD
+# Nella sezione ASTA vengono sostituiti dalla banda blu laterale.
+if st.session_state.pagina != "ASTA":
 
-head_left, head_refresh, head_snapshot, head_backup, head_rules, head_theme = (
-    st.columns(
-        [
-            5.0,
-            0.9,
-            1.0,
-            0.9,
-            0.8,
-            1.0
-        ],
-        vertical_alignment="center"
+    # HEADER COMPATTO
+    # ============================================================
+
+    head_left, head_refresh, head_snapshot, head_backup, head_rules, head_theme = (
+        st.columns(
+            [
+                5.0,
+                0.9,
+                1.0,
+                0.9,
+                0.8,
+                1.0
+            ],
+            vertical_alignment="center"
+        )
     )
-)
 
-with head_left:
+    with head_left:
 
-    # IMPORTANTE:
-    # stringa HTML senza indentazione iniziale,
-    # così Streamlit non la mostra come codice.
+        # IMPORTANTE:
+        # stringa HTML senza indentazione iniziale,
+        # così Streamlit non la mostra come codice.
 
-    header_html = (
-        '<div class="fanta-header">'
-        '<div class="fanta-brand">'
-        '<div class="fanta-logo">⚽</div>'
-        '<div>'
-        '<div class="fanta-brand-title">'
-        'FANTAELEGANZA <span>26/27</span>'
-        '</div>'
-        '<div class="fanta-brand-subtitle">'
-        'Gestione asta e rosa'
-        '</div>'
-        '</div>'
-        '</div>'
-        '</div>'
-    )
+        header_html = (
+            '<div class="fanta-header">'
+            '<div class="fanta-brand">'
+            '<div class="fanta-logo">⚽</div>'
+            '<div>'
+            '<div class="fanta-brand-title">'
+            'FANTAELEGANZA <span>26/27</span>'
+            '</div>'
+            '<div class="fanta-brand-subtitle">'
+            'Gestione asta e rosa'
+            '</div>'
+            '</div>'
+            '</div>'
+            '</div>'
+        )
+
+        st.markdown(
+            header_html,
+            unsafe_allow_html=True
+        )
+
+
+    with head_refresh:
+
+        if st.button(
+            "🔄 Aggiorna",
+            use_container_width=True,
+            key="btn_aggiorna_app"
+        ):
+
+            invalida_cache_dati()
+            st.rerun()
+
+
+    with head_snapshot:
+
+        if st.button(
+            "📸 Snapshot",
+            use_container_width=True,
+            key="btn_snapshot"
+        ):
+
+            gestisci_snapshot()
+
+
+    with head_backup:
+
+        if USA_DATABASE_CLOUD:
+
+            if st.button(
+                "☁ Backup",
+                use_container_width=True,
+                key="btn_backup_cloud"
+            ):
+
+                gestisci_backup_cloud()
+
+        elif DB_PATH.exists():
+
+            with open(
+                DB_PATH,
+                "rb"
+            ) as file_db:
+
+                st.download_button(
+                    "☁ Backup",
+                    data=file_db.read(),
+                    file_name=(
+                        "fantaeleganza_backup.db"
+                    ),
+                    mime=(
+                        "application/octet-stream"
+                    ),
+                    use_container_width=True
+                )
+
+
+    with head_rules:
+
+        if st.button(
+            "❔ Regole",
+            use_container_width=True,
+            key="btn_regole"
+        ):
+
+            mostra_regole()
+
+
+    with head_theme:
+
+        nuovo_dark = st.toggle(
+            "🌙 Scuro",
+            value=(
+                st.session_state.dark_mode
+            ),
+            key="toggle_dark"
+        )
+
+        if (
+            nuovo_dark
+            != st.session_state.dark_mode
+        ):
+
+            st.session_state.dark_mode = (
+                nuovo_dark
+            )
+
+            st.rerun()
+
+
 
     st.markdown(
-        header_html,
+        """
+        <style>
+
+        div[class*="st-key-iqr_card_clickable"] {
+            position: relative !important;
+            min-height: 154px !important;
+            border: 1px solid #dbe2ea;
+            border-radius: 12px;
+            background: #ffffff;
+            padding: 6px 7px 7px 7px;
+            overflow: hidden;
+        }
+
+        div[class*="st-key-iqr_card_clickable"]:hover {
+            border-color: #2563eb;
+            box-shadow: 0 3px 12px rgba(15, 23, 42, 0.10);
+        }
+
+        div[class*="st-key-iqr_card_clickable"] .stButton {
+            position: absolute !important;
+            inset: 0 !important;
+            z-index: 20 !important;
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+        }
+
+        div[class*="st-key-iqr_card_clickable"] .stButton > button {
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 100% !important;
+            opacity: 0 !important;
+            cursor: pointer !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+
+        .iqr-gauge-card {
+            text-align: center;
+            width: 100%;
+            pointer-events: none;
+        }
+
+        .iqr-gauge-title {
+            font-size: 12px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: -7px;
+        }
+
+        .iqr-gauge-svg {
+            width: 100%;
+            max-width: 150px;
+            height: 76px;
+            display: block;
+            margin: 0 auto -2px auto;
+        }
+
+        .iqr-gauge-value {
+            font-size: 20px;
+            line-height: 1;
+            font-weight: 800;
+            color: #0f172a;
+            margin-top: -2px;
+        }
+
+        .iqr-gauge-description {
+            display: inline-block;
+            color: #ffffff;
+            font-size: 9px;
+            font-weight: 800;
+            line-height: 1.1;
+            padding: 4px 7px;
+            border-radius: 6px;
+            margin-top: 5px;
+        }
+
+        .iqr-gauge-hint {
+            font-size: 7px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        @media (max-width: 850px) {
+
+            div[class*="st-key-iqr_card_clickable"] {
+                min-height: 142px !important;
+                padding: 5px !important;
+            }
+
+            .iqr-gauge-svg {
+                max-width: 135px;
+                height: 68px;
+            }
+
+            .iqr-gauge-value {
+                font-size: 18px;
+            }
+
+            .iqr-gauge-description {
+                font-size: 8px;
+            }
+        }
+
+        </style>
+        """,
         unsafe_allow_html=True
     )
 
 
-with head_refresh:
+    # ============================================================
+    # RIEPILOGO COMPATTO
+    # ============================================================
 
-    if st.button(
-        "🔄 Aggiorna",
-        use_container_width=True,
-        key="btn_aggiorna_app"
-    ):
+    m1, m2, m3, m4, m5, m6, m7, m8 = (
+        st.columns(8)
+    )
 
-        invalida_cache_dati()
-        st.rerun()
+    m1.metric(
+        "💳 Soglia base",
+        f"{formatta_crediti(SOGLIA_BASE)} €"
+    )
 
+    with m2:
 
-with head_snapshot:
-
-    if st.button(
-        "📸 Snapshot",
-        use_container_width=True,
-        key="btn_snapshot"
-    ):
-
-        gestisci_snapshot()
-
-
-with head_backup:
-
-    if USA_DATABASE_CLOUD:
-
-        if st.button(
-            "☁ Backup",
-            use_container_width=True,
-            key="btn_backup_cloud"
-        ):
-
-            gestisci_backup_cloud()
-
-    elif DB_PATH.exists():
-
-        with open(
-            DB_PATH,
-            "rb"
-        ) as file_db:
-
-            st.download_button(
-                "☁ Backup",
-                data=file_db.read(),
-                file_name=(
-                    "fantaeleganza_backup.db"
-                ),
-                mime=(
-                    "application/octet-stream"
-                ),
-                use_container_width=True
+        st.number_input(
+            "💰 Budget",
+            min_value=0.0,
+            step=10.0,
+            format="%.2f",
+            key="budget_asta_input",
+            on_change=aggiorna_budget_da_widget,
+            help=(
+                "Budget totale che hai deciso di destinare all'asta. "
+                "Il valore viene salvato nel database Cloud e resta "
+                "disponibile anche da altri dispositivi."
             )
+        )
 
-
-with head_rules:
-
-    if st.button(
-        "❔ Regole",
-        use_container_width=True,
-        key="btn_regole"
-    ):
-
-        mostra_regole()
-
-
-with head_theme:
-
-    nuovo_dark = st.toggle(
-        "🌙 Scuro",
-        value=(
-            st.session_state.dark_mode
+    m3.metric(
+        "💵 Budget rimanente",
+        f"{formatta_crediti(budget_rimanente)} €",
+        delta=(
+            "Disponibile"
+            if budget_rimanente >= 0
+            else "Budget superato"
         ),
-        key="toggle_dark"
-    )
-
-    if (
-        nuovo_dark
-        != st.session_state.dark_mode
-    ):
-
-        st.session_state.dark_mode = (
-            nuovo_dark
-        )
-
-        st.rerun()
-
-
-
-st.markdown(
-    """
-    <style>
-
-    div[class*="st-key-iqr_card_clickable"] {
-        position: relative !important;
-        min-height: 154px !important;
-        border: 1px solid #dbe2ea;
-        border-radius: 12px;
-        background: #ffffff;
-        padding: 6px 7px 7px 7px;
-        overflow: hidden;
-    }
-
-    div[class*="st-key-iqr_card_clickable"]:hover {
-        border-color: #2563eb;
-        box-shadow: 0 3px 12px rgba(15, 23, 42, 0.10);
-    }
-
-    div[class*="st-key-iqr_card_clickable"] .stButton {
-        position: absolute !important;
-        inset: 0 !important;
-        z-index: 20 !important;
-        width: 100% !important;
-        height: 100% !important;
-        margin: 0 !important;
-    }
-
-    div[class*="st-key-iqr_card_clickable"] .stButton > button {
-        width: 100% !important;
-        height: 100% !important;
-        min-height: 100% !important;
-        opacity: 0 !important;
-        cursor: pointer !important;
-        padding: 0 !important;
-        border: none !important;
-    }
-
-    .iqr-gauge-card {
-        text-align: center;
-        width: 100%;
-        pointer-events: none;
-    }
-
-    .iqr-gauge-title {
-        font-size: 12px;
-        font-weight: 800;
-        color: #0f172a;
-        margin-bottom: -7px;
-    }
-
-    .iqr-gauge-svg {
-        width: 100%;
-        max-width: 150px;
-        height: 76px;
-        display: block;
-        margin: 0 auto -2px auto;
-    }
-
-    .iqr-gauge-value {
-        font-size: 20px;
-        line-height: 1;
-        font-weight: 800;
-        color: #0f172a;
-        margin-top: -2px;
-    }
-
-    .iqr-gauge-description {
-        display: inline-block;
-        color: #ffffff;
-        font-size: 9px;
-        font-weight: 800;
-        line-height: 1.1;
-        padding: 4px 7px;
-        border-radius: 6px;
-        margin-top: 5px;
-    }
-
-    .iqr-gauge-hint {
-        font-size: 7px;
-        color: #64748b;
-        margin-top: 4px;
-    }
-
-    @media (max-width: 850px) {
-
-        div[class*="st-key-iqr_card_clickable"] {
-            min-height: 142px !important;
-            padding: 5px !important;
-        }
-
-        .iqr-gauge-svg {
-            max-width: 135px;
-            height: 68px;
-        }
-
-        .iqr-gauge-value {
-            font-size: 18px;
-        }
-
-        .iqr-gauge-description {
-            font-size: 8px;
-        }
-    }
-
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-
-# ============================================================
-# RIEPILOGO COMPATTO
-# ============================================================
-
-m1, m2, m3, m4, m5, m6, m7, m8 = (
-    st.columns(8)
-)
-
-m1.metric(
-    "💳 Soglia base",
-    f"{formatta_crediti(SOGLIA_BASE)} €"
-)
-
-with m2:
-
-    st.number_input(
-        "💰 Budget",
-        min_value=0.0,
-        step=10.0,
-        format="%.2f",
-        key="budget_asta_input",
-        on_change=aggiorna_budget_da_widget,
+        delta_color=(
+            "off"
+            if budget_rimanente >= 0
+            else "inverse"
+        ),
         help=(
-            "Budget totale che hai deciso di destinare all'asta. "
-            "Il valore viene salvato nel database Cloud e resta "
-            "disponibile anche da altri dispositivi."
+            "Budget impostato meno Spesa effettiva. "
+            "La Spesa effettiva include la maggiorazione prevista "
+            "oltre la soglia base."
         )
     )
 
-m3.metric(
-    "💵 Budget rimanente",
-    f"{formatta_crediti(budget_rimanente)} €",
-    delta=(
-        "Disponibile"
-        if budget_rimanente >= 0
-        else "Budget superato"
-    ),
-    delta_color=(
-        "off"
-        if budget_rimanente >= 0
-        else "inverse"
-    ),
-    help=(
-        "Budget impostato meno Spesa effettiva. "
-        "La Spesa effettiva include la maggiorazione prevista "
-        "oltre la soglia base."
+    m4.metric(
+        "🪙 Spesa effettiva",
+        f"{formatta_crediti(spesa_effettiva)} €"
     )
-)
 
-m4.metric(
-    "🪙 Spesa effettiva",
-    f"{formatta_crediti(spesa_effettiva)} €"
-)
+    m5.metric(
+        "⚡ Oltre soglia",
+        f"{formatta_crediti(oltre_soglia)} €"
+    )
 
-m5.metric(
-    "⚡ Oltre soglia",
-    f"{formatta_crediti(oltre_soglia)} €"
-)
+    m6.metric(
+        "👥 Giocatori",
+        f"{numero_rosa}/{MAX_GIOCATORI}"
+    )
 
-m6.metric(
-    "👥 Giocatori",
-    f"{numero_rosa}/{MAX_GIOCATORI}"
-)
+    m7.metric(
+        "🧤 Portieri",
+        f"{numero_portieri}/{MIN_PORTIERI}"
+    )
 
-m7.metric(
-    "🧤 Portieri",
-    f"{numero_portieri}/{MIN_PORTIERI}"
-)
+    with m8:
 
-with m8:
-
-    with st.container(
-        key="iqr_card_clickable"
-    ):
-
-        st.markdown(
-            genera_html_gauge_iqr(
-                iqr
-            ),
-            unsafe_allow_html=True
-        )
-
-        if st.button(
-            "Apri dettaglio IQR",
-            key="btn_apri_dettaglio_iqr",
-            help="Apri il dettaglio dell'Indice Qualità Rosa"
+        with st.container(
+            key="iqr_card_clickable"
         ):
 
-            mostra_dettaglio_iqr(
-                iqr,
-                df_rosa_globale
+            st.markdown(
+                genera_html_gauge_iqr(
+                    iqr
+                ),
+                unsafe_allow_html=True
             )
 
+            if st.button(
+                "Apri dettaglio IQR",
+                key="btn_apri_dettaglio_iqr",
+                help="Apri il dettaglio dell'Indice Qualità Rosa"
+            ):
 
-# ============================================================
+                mostra_dettaglio_iqr(
+                    iqr,
+                    df_rosa_globale
+                )
+
+
+    # ============================================================
+
 # NAVBAR
 # ============================================================
 
@@ -7739,85 +7756,90 @@ sezione = (
 
 
 # ============================================================
-# TOOLBAR UNDO COMPATTA
-# ============================================================
+# TOOLBAR UNDO STANDARD
+# In ASTA le operazioni sono richiamabili dalla banda laterale.
+if st.session_state.pagina != "ASTA":
 
-operazioni_undo = (
-    carica_ultime_operazioni()
-)
+    # TOOLBAR UNDO COMPATTA
+    # ============================================================
 
-undo1, undo2 = st.columns(
-    [
-        1.7,
-        7
-    ]
-)
+    operazioni_undo = (
+        carica_ultime_operazioni()
+    )
 
-with undo1:
+    undo1, undo2 = st.columns(
+        [
+            1.7,
+            7
+        ]
+    )
 
-    if st.button(
-        "↶ ANNULLA ULTIMA OPERAZIONE",
-        use_container_width=True,
-        disabled=(
-            operazioni_undo.empty
-        ),
-        key="btn_undo_generale"
+    with undo1:
+
+        if st.button(
+            "↶ ANNULLA ULTIMA OPERAZIONE",
+            use_container_width=True,
+            disabled=(
+                operazioni_undo.empty
+            ),
+            key="btn_undo_generale"
+        ):
+
+            conferma_undo()
+
+
+    with undo2:
+
+        if not operazioni_undo.empty:
+
+            ultima = (
+                operazioni_undo.iloc[0]
+            )
+
+            testo_ultima = (
+                f'<div class="operation-info">'
+                f'Ultima operazione annullabile:&nbsp;'
+                f'<b>'
+                f'{html.escape(str(ultima["Operazione"]))}'
+                f' — '
+                f'{html.escape(str(ultima["Giocatore"]))}'
+                f'</b>'
+                f'&nbsp;'
+                f'({len(operazioni_undo)}/10)'
+                f'</div>'
+            )
+
+            st.markdown(
+                testo_ultima,
+                unsafe_allow_html=True
+            )
+
+
+    with st.expander(
+        "📜 Ultime operazioni",
+        expanded=False
     ):
 
-        conferma_undo()
+        if operazioni_undo.empty:
 
+            st.caption(
+                "Nessuna operazione registrata."
+            )
 
-with undo2:
+        else:
 
-    if not operazioni_undo.empty:
+            st.dataframe(
+                operazioni_undo[
+                    [
+                        "Operazione",
+                        "Giocatore",
+                        "Data"
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True
+            )
 
-        ultima = (
-            operazioni_undo.iloc[0]
-        )
-
-        testo_ultima = (
-            f'<div class="operation-info">'
-            f'Ultima operazione annullabile:&nbsp;'
-            f'<b>'
-            f'{html.escape(str(ultima["Operazione"]))}'
-            f' — '
-            f'{html.escape(str(ultima["Giocatore"]))}'
-            f'</b>'
-            f'&nbsp;'
-            f'({len(operazioni_undo)}/10)'
-            f'</div>'
-        )
-
-        st.markdown(
-            testo_ultima,
-            unsafe_allow_html=True
-        )
-
-
-with st.expander(
-    "📜 Ultime operazioni",
-    expanded=False
-):
-
-    if operazioni_undo.empty:
-
-        st.caption(
-            "Nessuna operazione registrata."
-        )
-
-    else:
-
-        st.dataframe(
-            operazioni_undo[
-                [
-                    "Operazione",
-                    "Giocatore",
-                    "Data"
-                ]
-            ],
-            use_container_width=True,
-            hide_index=True
-        )
 
 
 @st.dialog("Elimina tutta la rosa")
@@ -8606,6 +8628,27 @@ elif sezione == "ASTA":
             color: #ffffff !important;
         }
 
+        div[class*="st-key-asta_side_action_"] .stButton > button,
+        div[class*="st-key-asta_side_action_"] .stDownloadButton > button {
+            width: 100% !important;
+            min-height: 38px !important;
+            height: 38px !important;
+            background: transparent !important;
+            color: #ffffff !important;
+            border: 0 !important;
+            border-top: 1px solid rgba(255,255,255,.12) !important;
+            border-radius: 0 !important;
+            font-size: .76rem !important;
+            font-weight: 700 !important;
+            justify-content: flex-start !important;
+            padding-left: 2px !important;
+        }
+
+        div[class*="st-key-asta_side_action_"] .stButton > button *,
+        div[class*="st-key-asta_side_action_"] .stDownloadButton > button * {
+            color: #ffffff !important;
+        }
+
         /* Titoli area centrale */
         .asta-search-title,
         .asta-player-title {
@@ -8948,6 +8991,14 @@ elif sezione == "ASTA":
                     '🏆 FANTAELEGANZA'
                     '</div>'
 
+                    '<div class="asta-side-label">Squadra</div>'
+                    '<div style="font-size:1rem;font-weight:800;'
+                    'color:#4ade80;margin:4px 0 12px 0;">'
+                    'FantaEleganza FC'
+                    '</div>'
+
+                    '<div class="asta-side-rule"></div>'
+
                     '<div class="asta-side-label">'
                     'Budget disponibile'
                     '</div>'
@@ -8966,18 +9017,14 @@ elif sezione == "ASTA":
 
                     '<div class="asta-side-rule"></div>'
 
-                    '<div class="asta-side-label">'
-                    'Rosa'
-                    '</div>'
+                    '<div class="asta-side-label">Rosa</div>'
                     f'<div class="asta-side-value">'
                     f'{numero_rosa}/{MAX_GIOCATORI}'
                     '</div>'
 
                     '<div class="asta-side-rule"></div>'
 
-                    '<div class="asta-side-label">'
-                    'Portieri'
-                    '</div>'
+                    '<div class="asta-side-label">Portieri</div>'
                     f'<div class="asta-side-value">'
                     f'{numero_portieri}/{MIN_PORTIERI}'
                     '</div>'
@@ -8991,14 +9038,64 @@ elif sezione == "ASTA":
                 with st.container(
                     key="asta_history_button"
                 ):
-
                     if st.button(
                         "↶  ULTIME OPERAZIONI  ›",
                         use_container_width=True,
                         key="btn_ultime_operazioni_asta"
                     ):
-
                         mostra_ultime_operazioni_asta()
+
+                with st.container(
+                    key="asta_side_action_istruzioni"
+                ):
+                    if st.button(
+                        "ⓘ  ISTRUZIONI  ›",
+                        use_container_width=True,
+                        key="btn_istruzioni_asta"
+                    ):
+                        mostra_regole()
+
+                with st.container(
+                    key="asta_side_action_snapshot"
+                ):
+                    if st.button(
+                        "▣  SNAPSHOT / RIPRISTINO",
+                        use_container_width=True,
+                        key="btn_snapshot_asta"
+                    ):
+                        mostra_snapshot_asta()
+
+                with st.container(
+                    key="asta_side_action_backup"
+                ):
+                    if USA_DATABASE_CLOUD:
+                        if st.button(
+                            "☁  SALVA BACKUP",
+                            use_container_width=True,
+                            key="btn_backup_asta_cloud"
+                        ):
+                            gestisci_backup_cloud()
+                    elif DB_PATH.exists():
+                        with open(DB_PATH, "rb") as file_db:
+                            st.download_button(
+                                "☁  SALVA BACKUP",
+                                data=file_db.read(),
+                                file_name="fantaeleganza_backup.db",
+                                mime="application/octet-stream",
+                                use_container_width=True,
+                                key="download_backup_asta_locale"
+                            )
+
+                with st.container(
+                    key="asta_side_action_aggiorna"
+                ):
+                    if st.button(
+                        "↻  AGGIORNA",
+                        use_container_width=True,
+                        key="btn_aggiorna_asta"
+                    ):
+                        invalida_cache_dati()
+                        st.rerun()
 
                 db_html = (
                     '<div class="asta-side-db">'
