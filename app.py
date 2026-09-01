@@ -1417,10 +1417,10 @@ MODULI = {
             ("POR", "Por")
         ]),
         ("DIFESA", [
-            ("DD", "Dd"),
+            ("DS", "Ds"),
             ("DC_SX", "Dc"),
             ("DC_DX", "Dc"),
-            ("DS", "Ds")
+            ("DD", "Dd")
         ]),
         ("CENTROCAMPO", [
             ("MC", "M/C"),
@@ -1439,10 +1439,10 @@ MODULI = {
             ("POR", "Por")
         ]),
         ("DIFESA", [
-            ("DD", "Dd"),
+            ("DS", "Ds"),
             ("DC_SX", "Dc"),
             ("DC_DX", "Dc"),
-            ("DS", "Ds")
+            ("DD", "Dd")
         ]),
         ("CENTROCAMPO", [
             ("MC", "M/C"),
@@ -1463,10 +1463,10 @@ MODULI = {
             ("POR", "Por")
         ]),
         ("DIFESA", [
-            ("DD", "Dd"),
+            ("DS", "Ds"),
             ("DC_SX", "Dc"),
             ("DC_DX", "Dc"),
-            ("DS", "Ds")
+            ("DD", "Dd")
         ]),
         ("CENTROCAMPO", [
             ("EW_SX", "E/W"),
@@ -1485,10 +1485,10 @@ MODULI = {
             ("POR", "Por")
         ]),
         ("DIFESA", [
-            ("DD", "Dd"),
+            ("DS", "Ds"),
             ("DC_SX", "Dc"),
             ("DC_DX", "Dc"),
-            ("DS", "Ds")
+            ("DD", "Dd")
         ]),
         ("MEDIANA", [
             ("M", "M")
@@ -1509,10 +1509,10 @@ MODULI = {
             ("POR", "Por")
         ]),
         ("DIFESA", [
-            ("DD", "Dd"),
+            ("DS", "Ds"),
             ("DC_SX", "Dc"),
             ("DC_DX", "Dc"),
-            ("DS", "Ds")
+            ("DD", "Dd")
         ]),
         ("CENTROCAMPO", [
             ("EW_SX", "E/W"),
@@ -1533,10 +1533,10 @@ MODULI = {
             ("POR", "Por")
         ]),
         ("DIFESA", [
-            ("DD", "Dd"),
+            ("DS", "Ds"),
             ("DC_SX", "Dc"),
             ("DC_DX", "Dc"),
-            ("DS", "Ds")
+            ("DD", "Dd")
         ]),
         ("MEDIANA", [
             ("M", "M"),
