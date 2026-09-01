@@ -8558,8 +8558,12 @@ elif sezione == "ASTA":
             min-height:50px !important;
         }
 
-        div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within > div,
-        div[data-testid="stNumberInput"]:focus-within input {
+        div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within > div {
+            border-color:#071a2f !important;
+            box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
+        }
+
+        div[class*="st-key-asta_offerta_box"] div[data-testid="stNumberInput"]:focus-within input {
             border-color:#071a2f !important;
             box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
         }
@@ -8590,7 +8594,7 @@ elif sezione == "ASTA":
             height:76px !important;
         }
 
-        div[data-testid="stNumberInput"] input {
+        div[class*="st-key-asta_offerta_box"] div[data-testid="stNumberInput"] input {
             min-height:76px !important;
             height:76px !important;
             font-size:1.22rem !important;
@@ -8604,17 +8608,6 @@ elif sezione == "ASTA":
         div[class*="st-key-asta_offerta_box"] div[data-testid="stNumberInput"] button {
             height:38px !important;
             min-height:38px !important;
-        }
-
-        /* Metriche: riferimento visivo per l'altezza della riga */
-        div[data-testid="stMetric"] {
-            min-height:76px !important;
-            height:76px !important;
-            padding:8px 12px !important;
-            display:flex !important;
-            flex-direction:column !important;
-            justify-content:center !important;
-            box-sizing:border-box !important;
         }
 
         @media (max-width:768px) {
