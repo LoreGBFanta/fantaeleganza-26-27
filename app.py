@@ -8773,7 +8773,7 @@ elif sezione == "ASTA":
                                         margin-top:5px;
                                         font-weight:600;
                                     ">
-                                        Clicca per vedere chi è rimasto
+                                        Giocatori disponibili
                                     </div>
                                 </div>
                                 """,
@@ -8781,15 +8781,11 @@ elif sezione == "ASTA":
                             )
 
                             if st.button(
-                                "Apri dettaglio priorità",
+                                "Giocatori disponibili",
                                 key=(
                                     "btn_priorita_"
                                     f"{int(giocatore['Id'])}"
                                 ),
-                                help=(
-                                    "Mostra i giocatori ancora "
-                                    "disponibili nel ruolo"
-                                )
                             ):
 
                                 mostra_dettaglio_priorita_acquisto(
