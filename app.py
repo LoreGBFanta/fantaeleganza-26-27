@@ -8843,58 +8843,46 @@ elif sezione == "ASTA":
 
         with side_col:
 
+            sidebar_html = (
+                '<div class="asta-b-sidebar">'
+                '<div style="font-size:1.05rem;font-weight:900;'
+                'margin-bottom:16px;">⚽ FANTAELEGANZA</div>'
+
+                '<div class="asta-b-side-title">Budget disponibile</div>'
+                f'<div class="asta-b-side-value green">'
+                f'{formatta_crediti(budget_rimanente)} €</div>'
+
+                '<div class="asta-b-side-rule"></div>'
+
+                '<div class="asta-b-side-title">Spesa effettiva</div>'
+                f'<div class="asta-b-side-value">'
+                f'{formatta_crediti(spesa_effettiva)} €</div>'
+
+                '<div class="asta-b-side-rule"></div>'
+
+                '<div class="asta-b-side-title">Rosa</div>'
+                f'<div class="asta-b-side-value">'
+                f'{numero_rosa}/{MAX_GIOCATORI}</div>'
+
+                '<div class="asta-b-side-rule"></div>'
+
+                '<div class="asta-b-side-title">Portieri</div>'
+                f'<div class="asta-b-side-value">'
+                f'{numero_portieri}/{MIN_PORTIERI}</div>'
+
+                '<div class="asta-b-db">'
+                '🟢 Database '
+                + (
+                    'Cloud'
+                    if USA_DATABASE_CLOUD
+                    else 'locale'
+                )
+                + ' attivo</div>'
+                '</div>'
+            )
+
             st.markdown(
-                f"""
-                <div class="asta-b-sidebar">
-                    <div style="
-                        font-size:1.05rem;
-                        font-weight:900;
-                        margin-bottom:16px;
-                    ">
-                        ⚽ FANTAELEGANZA
-                    </div>
-
-                    <div class="asta-b-side-title">
-                        Budget disponibile
-                    </div>
-                    <div class="asta-b-side-value green">
-                        {formatta_crediti(budget_rimanente)} €
-                    </div>
-
-                    <div class="asta-b-side-rule"></div>
-
-                    <div class="asta-b-side-title">
-                        Spesa effettiva
-                    </div>
-                    <div class="asta-b-side-value">
-                        {formatta_crediti(spesa_effettiva)} €
-                    </div>
-
-                    <div class="asta-b-side-rule"></div>
-
-                    <div class="asta-b-side-title">
-                        Rosa
-                    </div>
-                    <div class="asta-b-side-value">
-                        {numero_rosa}/{MAX_GIOCATORI}
-                    </div>
-
-                    <div class="asta-b-side-rule"></div>
-
-                    <div class="asta-b-side-title">
-                        Portieri
-                    </div>
-                    <div class="asta-b-side-value">
-                        {numero_portieri}/{MIN_PORTIERI}
-                    </div>
-
-                    <div class="asta-b-db">
-                        🟢 Database
-                        {" Cloud" if USA_DATABASE_CLOUD else " locale"}
-                        attivo
-                    </div>
-                </div>
-                """,
+                sidebar_html,
                 unsafe_allow_html=True
             )
 
@@ -9020,7 +9008,7 @@ elif sezione == "ASTA":
 
                         p1, p2, p3, p4 = st.columns(
                             [1.25, 1, 1, 1.35],
-                            vertical_alignment="stretch"
+                            vertical_alignment="top"
                         )
 
                         with p1:
