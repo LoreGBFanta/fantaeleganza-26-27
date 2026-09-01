@@ -8511,14 +8511,34 @@ elif sezione == "ASTA":
             box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
         }
 
-        /* I due pulsanti operativi hanno la stessa altezza delle metriche */
+        /* STRISCIA OPERATIVA ASTA: compatta, alta e tutta allineata */
         div[class*="st-key-btn_acquista_"] .stButton > button,
         div[class*="st-key-btn_avversario_"] .stButton > button {
-            min-height:76px !important;
-            height:76px !important;
-            font-weight:900 !important;
+            min-height:56px !important;
+            height:56px !important;
+            font-weight:800 !important;
             font-size:1rem !important;
-            border-radius:10px !important;
+            border-radius:6px !important;
+        }
+
+        div[data-testid="stNumberInput"] input {
+            min-height:56px !important;
+            height:56px !important;
+            border-radius:6px 0 0 6px !important;
+        }
+
+        div[data-testid="stNumberInput"] button {
+            min-height:28px !important;
+        }
+
+        /* Metriche finali della stessa altezza visiva */
+        div[data-testid="stMetric"] {
+            min-height:56px !important;
+            height:56px !important;
+            padding:6px 10px !important;
+            display:flex !important;
+            flex-direction:column !important;
+            justify-content:center !important;
         }
 
         @media (max-width:768px) {
@@ -8533,8 +8553,8 @@ elif sezione == "ASTA":
 
             div[class*="st-key-btn_acquista_"] .stButton > button,
             div[class*="st-key-btn_avversario_"] .stButton > button {
-                min-height:64px !important;
-                height:64px !important;
+                min-height:54px !important;
+                height:54px !important;
             }
         }
         </style>
@@ -8802,12 +8822,13 @@ elif sezione == "ASTA":
                 with c1:
 
                     prezzo = st.number_input(
-                        "💰 OFFERTA",
+                        "Offerta",
                         min_value=0.10,
                         max_value=5000.00,
                         step=0.10,
                         format="%.2f",
-                        key=chiave_prezzo
+                        key=chiave_prezzo,
+                        label_visibility="collapsed"
                     )
 
                 prezzo = round(
