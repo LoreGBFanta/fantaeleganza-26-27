@@ -6396,8 +6396,8 @@ def mostra_dettaglio_priorita_acquisto(
         return
 
     st.caption(
-        "Sono mostrati tutti i giocatori ancora disponibili, "
-        "separati per ciascun ruolo Mantra del giocatore selezionato."
+        "Giocatori ancora disponibili, separati per ciascun ruolo "
+        "Mantra del giocatore selezionato."
     )
 
     ordine_fasce = {
@@ -6407,233 +6407,229 @@ def mostra_dettaglio_priorita_acquisto(
         "NERO": 4
     }
 
-    for indice_ruolo, ruolo_riferimento in enumerate(
-        ruoli_candidato,
-        start=1
+    # Una colonna per ciascun ruolo: le tabelle vengono affiancate.
+    colonne_ruolo = st.columns(
+        len(
+            ruoli_candidato
+        ),
+        gap="small"
+    )
+
+    for colonna, ruolo_riferimento in zip(
+        colonne_ruolo,
+        ruoli_candidato
     ):
 
         ruolo_riferimento = str(
             ruolo_riferimento
         ).strip().upper()
 
-        st.markdown(
-            f"### Ruolo {ruolo_riferimento}"
-        )
+        with colonna:
 
-        compatibili = giocatori_compatibili(
-            df_listone,
-            ruolo_riferimento
-        )
-
-        if (
-            compatibili is None
-            or compatibili.empty
-        ):
-
-            st.info(
-                f"Nessun giocatore compatibile nel ruolo "
-                f"{ruolo_riferimento}."
+            st.markdown(
+                f"### {ruolo_riferimento}"
             )
 
-            if indice_ruolo < len(
-                ruoli_candidato
+            compatibili = giocatori_compatibili(
+                df_listone,
+                ruolo_riferimento
+            )
+
+            if (
+                compatibili is None
+                or compatibili.empty
             ):
-                st.divider()
 
-            continue
+                st.info(
+                    "Nessun giocatore disponibile."
+                )
+                continue
 
-        disponibili = (
-            compatibili[
+            disponibili = (
                 compatibili[
-                    "Stato"
+                    compatibili[
+                        "Stato"
+                    ]
+                    .astype(str)
+                    .str.upper()
+                    == "DISPONIBILE"
                 ]
-                .astype(str)
-                .str.upper()
-                == "DISPONIBILE"
-            ]
-            .copy()
-        )
-
-        if disponibili.empty:
-
-            st.warning(
-                f"Non risultano più giocatori disponibili "
-                f"nel ruolo {ruolo_riferimento}."
+                .copy()
             )
 
-            if indice_ruolo < len(
-                ruoli_candidato
-            ):
-                st.divider()
+            if disponibili.empty:
 
-            continue
-
-        # Fascia e ordinamento
-        disponibili[
-            "_fascia"
-        ] = disponibili.apply(
-            lambda r:
-            fascia_iqr_giocatore(
-                r.get(
-                    "RM",
-                    ""
-                ),
-                r.get(
-                    "FVM M"
+                st.warning(
+                    "Nessun giocatore disponibile."
                 )
-            ),
-            axis=1
-        )
+                continue
 
-        disponibili[
-            "_ordine_fascia"
-        ] = disponibili[
-            "_fascia"
-        ].map(
-            ordine_fasce
-        ).fillna(
-            99
-        )
-
-        disponibili[
-            "_fvm_m_num"
-        ] = pd.to_numeric(
+            # Manteniamo il criterio qualitativo per l'ordinamento,
+            # ma non mostriamo più FVM e FASCIA nella tabella.
             disponibili[
-                "FVM M"
-            ],
-            errors="coerce"
-        )
-
-        disponibili = (
-            disponibili
-            .sort_values(
-                [
-                    "_ordine_fascia",
-                    "_fvm_m_num",
-                    "Nome"
-                ],
-                ascending=[
-                    True,
-                    False,
-                    True
-                ],
-                na_position="last"
-            )
-            .reset_index(
-                drop=True
-            )
-        )
-
-        st.caption(
-            f"Giocatori disponibili: {len(disponibili)}"
-        )
-
-        righe_html = []
-
-        for _, riga in disponibili.iterrows():
-
-            nome = html.escape(
-                str(
-                    riga.get(
-                        "Nome",
+                "_fascia"
+            ] = disponibili.apply(
+                lambda r:
+                fascia_iqr_giocatore(
+                    r.get(
+                        "RM",
                         ""
+                    ),
+                    r.get(
+                        "FVM M"
                     )
+                ),
+                axis=1
+            )
+
+            disponibili[
+                "_ordine_fascia"
+            ] = disponibili[
+                "_fascia"
+            ].map(
+                ordine_fasce
+            ).fillna(
+                99
+            )
+
+            disponibili[
+                "_fvm_m_num"
+            ] = pd.to_numeric(
+                disponibili[
+                    "FVM M"
+                ],
+                errors="coerce"
+            )
+
+            disponibili = (
+                disponibili
+                .sort_values(
+                    [
+                        "_ordine_fascia",
+                        "_fvm_m_num",
+                        "Nome"
+                    ],
+                    ascending=[
+                        True,
+                        False,
+                        True
+                    ],
+                    na_position="last"
+                )
+                .reset_index(
+                    drop=True
                 )
             )
 
-            squadra = html.escape(
-                str(
-                    riga.get(
-                        "Squadra",
-                        ""
-                    )
-                )
+            st.caption(
+                f"{len(disponibili)} disponibili"
             )
 
-            ruolo = html.escape(
-                str(
+            righe_html = []
+
+            for _, riga in disponibili.iterrows():
+
+                nome = html.escape(
+                    str(
+                        riga.get(
+                            "Nome",
+                            ""
+                        )
+                    )
+                )
+
+                squadra = html.escape(
+                    str(
+                        riga.get(
+                            "Squadra",
+                            ""
+                        )
+                    )
+                )
+
+                ruolo = html.escape(
+                    str(
+                        riga.get(
+                            "RM",
+                            ""
+                        )
+                    )
+                )
+
+                colore_nome = colore_fvm_mantra(
                     riga.get(
                         "RM",
                         ""
+                    ),
+                    riga.get(
+                        "FVM M"
                     )
                 )
-            )
 
-            fascia = str(
-                riga.get(
-                    "_fascia",
-                    "NERO"
+                righe_html.append(
+                    "<tr>"
+                    f"<td style='padding:5px 6px;"
+                    f"border:1px solid #e5e7eb;"
+                    f"font-weight:800;"
+                    f"font-size:0.78rem;"
+                    f"color:{colore_nome};'>"
+                    f"{nome}</td>"
+                    f"<td style='padding:5px 6px;"
+                    f"border:1px solid #e5e7eb;"
+                    f"font-size:0.74rem;'>"
+                    f"{squadra}</td>"
+                    f"<td style='padding:5px 6px;"
+                    f"border:1px solid #e5e7eb;"
+                    f"font-size:0.74rem;"
+                    f"text-align:center;'>"
+                    f"{ruolo}</td>"
+                    "</tr>"
                 )
-            )
 
-            fvm_m = riga.get(
-                "FVM M",
-                ""
-            )
-
-            colore_nome = colore_fvm_mantra(
-                riga.get(
-                    "RM",
-                    ""
-                ),
-                riga.get(
-                    "FVM M"
-                )
-            )
-
-            righe_html.append(
-                "<tr>"
-                f"<td style='padding:7px;border:1px solid #e5e7eb;"
-                f"font-weight:800;color:{colore_nome};'>"
-                f"{nome}</td>"
-                f"<td style='padding:7px;border:1px solid #e5e7eb;'>"
-                f"{squadra}</td>"
-                f"<td style='padding:7px;border:1px solid #e5e7eb;'>"
-                f"{ruolo}</td>"
-                f"<td style='padding:7px;border:1px solid #e5e7eb;"
-                f"text-align:center;'>{html.escape(str(fvm_m))}</td>"
-                f"<td style='padding:7px;border:1px solid #e5e7eb;"
-                f"text-align:center;font-weight:700;'>"
-                f"{html.escape(fascia.title())}</td>"
+            tabella_html = (
+                "<div style='overflow-x:auto;'>"
+                "<table style='width:100%;"
+                "border-collapse:collapse;"
+                "table-layout:fixed;"
+                "background:#ffffff;'>"
+                "<colgroup>"
+                "<col style='width:48%;'>"
+                "<col style='width:32%;'>"
+                "<col style='width:20%;'>"
+                "</colgroup>"
+                "<thead>"
+                "<tr style='background:#071a2f;"
+                "color:#ffffff;'>"
+                "<th style='padding:6px;"
+                "border:1px solid #d1d5db;"
+                "font-size:0.72rem;"
+                "text-align:left;'>"
+                "GIOCATORE</th>"
+                "<th style='padding:6px;"
+                "border:1px solid #d1d5db;"
+                "font-size:0.72rem;"
+                "text-align:left;'>"
+                "SQUADRA</th>"
+                "<th style='padding:6px;"
+                "border:1px solid #d1d5db;"
+                "font-size:0.72rem;"
+                "text-align:center;'>"
+                "RUOLO</th>"
                 "</tr>"
+                "</thead>"
+                "<tbody>"
+                + "".join(
+                    righe_html
+                )
+                + "</tbody>"
+                "</table>"
+                "</div>"
             )
 
-        tabella_html = (
-            "<div style='overflow-x:auto;'>"
-            "<table style='width:100%;border-collapse:collapse;"
-            "font-size:0.88rem;background:#ffffff;'>"
-            "<thead>"
-            "<tr style='background:#071a2f;color:#ffffff;'>"
-            "<th style='padding:8px;border:1px solid #d1d5db;"
-            "text-align:left;'>GIOCATORE</th>"
-            "<th style='padding:8px;border:1px solid #d1d5db;"
-            "text-align:left;'>SQUADRA</th>"
-            "<th style='padding:8px;border:1px solid #d1d5db;"
-            "text-align:left;'>RUOLO</th>"
-            "<th style='padding:8px;border:1px solid #d1d5db;'>"
-            "FVM M</th>"
-            "<th style='padding:8px;border:1px solid #d1d5db;'>"
-            "FASCIA</th>"
-            "</tr>"
-            "</thead>"
-            "<tbody>"
-            + "".join(
-                righe_html
+            st.markdown(
+                tabella_html,
+                unsafe_allow_html=True
             )
-            + "</tbody>"
-            "</table>"
-            "</div>"
-        )
-
-        st.markdown(
-            tabella_html,
-            unsafe_allow_html=True
-        )
-
-        if indice_ruolo < len(
-            ruoli_candidato
-        ):
-            st.divider()
 
 
 # ============================================================
