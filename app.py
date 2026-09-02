@@ -9397,23 +9397,22 @@ st.markdown("""
 }
 
 .pf-player-goal{
-    width:210px !important;
-    min-width:210px !important;
-    min-height:60px !important;
-    padding:8px 10px !important;
+    width:230px !important;
+    min-width:230px !important;
+    min-height:96px !important;
+    padding:10px 12px !important;
     box-sizing:border-box !important;
     overflow:visible !important;
     border:1px solid rgba(15,23,42,.10) !important;
-    border-radius:9px !important;
+    border-radius:14px !important;
     background:rgba(255,255,255,.97) !important;
 }
 
-.pf-main-player,
-.pf-sub-player{
+.pf-main-player{
     display:flex !important;
     align-items:baseline !important;
     justify-content:center !important;
-    gap:6px !important;
+    gap:7px !important;
     width:100% !important;
     text-align:center !important;
     white-space:nowrap !important;
@@ -9423,7 +9422,7 @@ st.markdown("""
 .pf-main-player .pf-name{
     display:inline !important;
     color:#16a34a !important;
-    font-size:.92rem !important;
+    font-size:1.00rem !important;
     line-height:1.10 !important;
     font-weight:900 !important;
     white-space:nowrap !important;
@@ -9434,15 +9433,23 @@ st.markdown("""
 .pf-mantra-role{
     display:inline !important;
     margin:0 !important;
-    color:#334155 !important;
-    font-size:.70rem !important;
+    color:#111827 !important;
+    font-size:.82rem !important;
     line-height:1 !important;
     font-weight:900 !important;
     white-space:nowrap !important;
 }
 
 .pf-sub-player{
-    margin-top:7px !important;
+    display:flex !important;
+    align-items:baseline !important;
+    justify-content:center !important;
+    gap:7px !important;
+    width:100% !important;
+    text-align:center !important;
+    white-space:nowrap !important;
+    overflow:visible !important;
+    margin-top:14px !important;
     padding-top:0 !important;
     border-top:0 !important;
 }
@@ -9450,7 +9457,7 @@ st.markdown("""
 .pf-sub-name{
     display:inline !important;
     color:#2563eb !important;
-    font-size:.92rem !important;
+    font-size:1.00rem !important;
     line-height:1.10 !important;
     font-weight:900 !important;
     white-space:nowrap !important;
@@ -9461,22 +9468,22 @@ st.markdown("""
 .pf-sub-role{
     display:inline !important;
     margin:0 !important;
-    color:#2563eb !important;
-    font-size:.70rem !important;
+    color:#111827 !important;
+    font-size:.82rem !important;
     line-height:1 !important;
     font-weight:900 !important;
     white-space:nowrap !important;
 }
 
 .pf-line{
-    gap:14px !important;
-    padding:6px 0 !important;
+    gap:16px !important;
+    padding:8px 0 !important;
     align-items:stretch !important;
 }
 
 @media(max-width:768px){
     .pf-pitch{
-        min-height:450px !important;
+        min-height:470px !important;
         padding-left:2px !important;
         padding-right:2px !important;
     }
@@ -9486,20 +9493,24 @@ st.markdown("""
     }
 
     .pf-player-goal{
-        width:118px !important;
-        min-width:118px !important;
-        min-height:56px !important;
-        padding:6px 5px !important;
+        width:132px !important;
+        min-width:132px !important;
+        min-height:84px !important;
+        padding:7px 6px !important;
     }
 
     .pf-main-player .pf-name,
     .pf-sub-name{
-        font-size:.70rem !important;
+        font-size:.76rem !important;
     }
 
     .pf-mantra-role,
     .pf-sub-role{
-        font-size:.55rem !important;
+        font-size:.61rem !important;
+    }
+
+    .pf-sub-player{
+        margin-top:10px !important;
     }
 }
 </style>
