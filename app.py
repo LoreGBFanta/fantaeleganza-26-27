@@ -5,6 +5,9 @@ import json
 import math
 import os
 import sqlite3
+import re
+import urllib.request
+from html.parser import HTMLParser
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
@@ -61,6 +64,7 @@ MAX_UNDO = 10
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "fantacalcio.db"
+URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio.it/probabili-formazioni-serie-a"
 
 MAX_SNAPSHOT = 30
 
@@ -3024,6 +3028,105 @@ def formatta_crediti(valore):
 # ============================================================
 # BUDGET ASTA
 # ============================================================
+
+
+def leggi_config_generica(chiave, default=""):
+    conn=get_connection(); cur=conn.cursor()
+    try:
+        cur.execute("SELECT valore FROM configurazione_app WHERE chiave = ?",(chiave,))
+        r=cur.fetchone()
+    finally: chiudi_connessione(conn)
+    return r[0] if r else default
+
+def salva_config_generica(chiave,valore):
+    conn=get_connection(); cur=conn.cursor()
+    try:
+        cur.execute("INSERT INTO configurazione_app (chiave,valore) VALUES (?,?) ON CONFLICT(chiave) DO UPDATE SET valore=excluded.valore",(chiave,valore))
+        conn.commit()
+    finally: chiudi_connessione(conn)
+
+class PFParser(HTMLParser):
+    def __init__(self): super().__init__(); self.x=[]
+    def handle_data(self,d):
+        d=re.sub(r"\s+"," ",str(d)).strip()
+        if d: self.x.append(d)
+
+def pf_mod(x): return bool(re.fullmatch(r"[1-5](?:-[1-5]){2,4}",str(x).strip()))
+def pf_pct(x): return bool(re.fullmatch(r"\d{1,3}\s*%",str(x).strip()))
+def pf_num(x):
+    m=re.search(r"\d{1,3}",str(x)); return int(m.group()) if m else 0
+
+def aggiorna_probabili_web():
+    req=urllib.request.Request(URL_PROBABILI_FORMAZIONI,headers={"User-Agent":"Mozilla/5.0","Accept-Language":"it-IT,it;q=0.9"})
+    with urllib.request.urlopen(req,timeout=20) as r: raw=r.read().decode("utf-8","ignore")
+    p=PFParser(); p.feed(raw); righe=[]
+    for x in p.x:
+        if not righe or righe[-1]!=x: righe.append(x)
+    trovate=[]; i=0
+    while i<len(righe)-3:
+        if pf_mod(righe[i+1]) and len(righe[i])<32:
+            nome,modulo=righe[i],righe[i+1]; j=i+2; tit=[]
+            while j+1<len(righe) and len(tit)<11:
+                if righe[j].lower()=="panchina": break
+                if pf_pct(righe[j+1]):
+                    tit.append({"nome":righe[j],"percentuale":pf_num(righe[j+1])}); j+=2
+                else: j+=1
+            if len(tit)>=9:
+                bench=[]
+                while j<len(righe) and righe[j].lower()!="panchina" and j<i+75: j+=1
+                if j<len(righe): j+=1
+                stop={"presentazione squadre","dettaglio calciatori","ballottaggi","squalificati","diffidati","infortunati","in dubbio"}
+                while j+1<len(righe) and len(bench)<18:
+                    if pf_mod(righe[j+1]) or righe[j].lower() in stop: break
+                    if pf_pct(righe[j+1]):
+                        bench.append({"nome":righe[j],"percentuale":pf_num(righe[j+1])}); j+=2
+                    else: j+=1
+                trovate.append({"squadra":nome,"modulo":modulo,"titolari":tit[:11],"panchina":bench})
+                i=max(i+2,j); continue
+        i+=1
+    uniche={}
+    for s in trovate:
+        if s["squadra"] not in uniche: uniche[s["squadra"]]=s
+    squadre=list(uniche.values())
+    if len(squadre)<10: raise RuntimeError("La pagina è raggiungibile ma la struttura non è stata riconosciuta. I dati precedenti non sono stati cancellati.")
+    ag=[x.replace("Ultimo aggiornamento","").strip() for x in righe if x.lower().startswith("ultimo aggiornamento")]
+    dati={"scaricato_il":datetime.now(ZoneInfo("Europe/Rome")).strftime("%d/%m/%Y %H:%M"),"aggiornamento_fonte":ag[0] if ag else "","squadre":squadre}
+    salva_config_generica("probabili_formazioni_web",json.dumps(dati,ensure_ascii=False))
+    return dati
+
+def carica_probabili_web():
+    x=leggi_config_generica("probabili_formazioni_web","")
+    try: return json.loads(x) if x else None
+    except Exception: return None
+
+def pf_colore(p):
+    p=int(p or 0)
+    return "#16a34a" if p>=80 else "#2563eb" if p>=60 else "#f59e0b" if p>=40 else "#dc2626"
+
+def pf_linee(modulo,titolari):
+    try: nums=[int(x) for x in str(modulo).split("-")]
+    except Exception: nums=[4,4,2]
+    if sum(nums)!=10: nums=[4,4,2]
+    altri=list(titolari)[1:]; linee=[]; k=0
+    for n in nums: linee.append(altri[k:k+n]); k+=n
+    return list(reversed(linee))+[list(titolari)[:1]]
+
+def mostra_probabile(s):
+    rows=""
+    for linea in pf_linee(s.get("modulo",""),s.get("titolari",[])):
+        players=""
+        for g in linea:
+            p=int(g.get("percentuale",0) or 0); col=pf_colore(p); nome=html.escape(str(g.get("nome","")))
+            players += '<div class="pf-player"><div class="pf-name">'+nome+'</div><div class="pf-pct" style="color:'+col+'">'+str(p)+'%</div></div>'
+        rows += '<div class="pf-line">'+players+'</div>'
+    titolo=html.escape(str(s.get("squadra",""))); modulo=html.escape(str(s.get("modulo","")))
+    st.markdown('<div class="pf-team">'+titolo+'<span>'+modulo+'</span></div><div class="pf-pitch">'+rows+'</div>',unsafe_allow_html=True)
+    if s.get("panchina"):
+        with st.expander("Panchina"):
+            cc=st.columns(2)
+            for n,g in enumerate(s["panchina"]):
+                p=int(g.get("percentuale",0) or 0); nome=html.escape(str(g.get("nome","")))
+                cc[n%2].markdown("**"+nome+"** <span style='color:"+pf_colore(p)+";font-weight:800'>"+str(p)+"%</span>",unsafe_allow_html=True)
 
 def leggi_budget_asta():
 
@@ -7969,6 +8072,13 @@ with m8:
             )
 
 
+st.markdown('''<style>
+.pf-team{background:#071a2f;color:white;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:900;display:flex;justify-content:space-between}.pf-team span{color:#f5b51b}
+.pf-pitch{min-height:420px;padding:16px 7px;border:3px solid white;border-radius:0 0 11px 11px;background:repeating-linear-gradient(90deg,#16863b 0,#16863b 46px,#118039 46px,#118039 92px);display:flex;flex-direction:column;justify-content:space-around;box-shadow:0 3px 12px #0002}
+.pf-line{display:flex;justify-content:space-around;gap:4px}.pf-player{width:92px;background:#fffffff2;border-radius:8px;padding:6px 3px;text-align:center;box-shadow:0 2px 6px #0003}.pf-name{font-size:.70rem;font-weight:850;color:#071a2f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pf-pct{font-size:.69rem;font-weight:900;margin-top:3px}
+@media(max-width:768px){.pf-pitch{min-height:380px}.pf-player{width:64px}.pf-name{font-size:.58rem}}
+</style>''',unsafe_allow_html=True)
+
 # ============================================================
 # NAVBAR
 # ============================================================
@@ -7979,6 +8089,7 @@ PAGINE = [
     ("🔨", "ASTA"),
     ("👕", "ROSA"),
     ("▣", "MODULI"),
+    ("⚽", "PROBABILI FORMAZIONI"),
     ("🔴", "VENDUTI AD AVVERSARI")
 ]
 
@@ -7987,7 +8098,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-nav_cols = st.columns(6)
+nav_cols = st.columns(7)
 
 for col, (
     icona,
@@ -9759,6 +9870,39 @@ elif sezione == "ROSA":
                             giocatore["Nome"],
                             giocatore["Prezzo"]
                         )
+
+
+# ============================================================
+# PROBABILI FORMAZIONI
+# ============================================================
+
+elif sezione == "PROBABILI FORMAZIONI":
+    st.subheader("⚽ Probabili formazioni Serie A 2026/27")
+    dati=carica_probabili_web()
+    a,b=st.columns([1.35,4.65],vertical_alignment="center")
+    with a:
+        if st.button("🌐 AGGIORNA DAL WEB",type="primary",use_container_width=True,key="pf_update"):
+            try:
+                with st.spinner("Aggiornamento dal web..."): dati=aggiorna_probabili_web()
+                st.success(f"Aggiornate {len(dati.get('squadre',[]))} squadre."); st.rerun()
+            except Exception as e:
+                st.error("Aggiornamento non riuscito. Gli eventuali dati già salvati restano disponibili."); st.caption(str(e))
+    with b:
+        if dati:
+            testo=f"Ultimo download: **{dati.get('scaricato_il','—')}**"
+            if dati.get("aggiornamento_fonte"): testo+=f" · Aggiornamento fonte: **{dati.get('aggiornamento_fonte')}**"
+            st.markdown(testo)
+        else: st.info("Nessun dato salvato. Collegati a Internet e premi «AGGIORNA DAL WEB».")
+    st.caption("Fonte: Fantacalcio.it · verde ≥80% · blu 60–79% · arancio 40–59% · rosso <40%. I dati restano salvati nell'app.")
+    if dati:
+        squadre=dati.get("squadre",[]); nomi=[s.get("squadra","") for s in squadre]
+        filtro=st.selectbox("Vai a una squadra",["TUTTE"]+nomi,key="pf_filter")
+        vis=squadre if filtro=="TUTTE" else [s for s in squadre if s.get("squadra")==filtro]
+        for i in range(0,len(vis),2):
+            cols=st.columns(2)
+            for j in range(2):
+                if i+j<len(vis):
+                    with cols[j]: mostra_probabile(vis[i+j])
 
 
 # ============================================================
