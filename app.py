@@ -66,7 +66,7 @@ MAX_UNDO = 10
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "fantacalcio.db"
-URL_PROBABILI_FORMAZIONI = "https://www.goal.com/it/liste/fantacalcio-formazioni-titolari-serie-a-2026-2027-tutte-le-squadre-tipo/blt5527c89487e5b7d3"
+URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558"
 
 MAX_SNAPSHOT = 30
 
@@ -3192,20 +3192,358 @@ def _goal_parse_formation_line(line):
     }
 
 
+class FantacalcioFormazioniParser(HTMLParser):
+    """
+    Estrae i blocchi squadra dall'articolo Fantacalcio.it.
+
+    La struttura editoriale utile è:
+        H2 = squadra
+        Allenatore:
+        Modulo:
+        Probabile formazione (da dx a sx):
+        Ballottaggi:
+
+    Non utilizziamo immagini/infografiche e non ricostruiamo dati
+    non esplicitamente pubblicati dalla fonte.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        self.in_h2 = False
+        self.h2_parts = []
+
+        self.current_heading = None
+        self.current_parts = []
+
+        self.blocks = []
+
+
+    def _flush(self):
+
+        if (
+            self.current_heading
+            and self.current_parts
+        ):
+
+            testo = re.sub(
+                r"\s+",
+                " ",
+                " ".join(
+                    self.current_parts
+                )
+            ).strip()
+
+            self.blocks.append(
+                (
+                    self.current_heading,
+                    testo
+                )
+            )
+
+        self.current_parts = []
+
+
+    def handle_starttag(
+        self,
+        tag,
+        attrs
+    ):
+
+        if str(
+            tag
+        ).lower() == "h2":
+
+            self._flush()
+
+            self.in_h2 = True
+            self.h2_parts = []
+
+
+    def handle_endtag(
+        self,
+        tag
+    ):
+
+        if str(
+            tag
+        ).lower() == "h2":
+
+            self.in_h2 = False
+
+            titolo = re.sub(
+                r"\s+",
+                " ",
+                " ".join(
+                    self.h2_parts
+                )
+            ).strip()
+
+            self.current_heading = (
+                titolo
+                if titolo
+                else None
+            )
+
+            self.h2_parts = []
+
+
+    def handle_data(
+        self,
+        data
+    ):
+
+        testo = re.sub(
+            r"\s+",
+            " ",
+            str(
+                data
+            )
+        ).strip()
+
+        if not testo:
+            return
+
+        if self.in_h2:
+
+            self.h2_parts.append(
+                testo
+            )
+
+        elif self.current_heading:
+
+            self.current_parts.append(
+                testo
+            )
+
+
+    def close(self):
+
+        super().close()
+        self._flush()
+
+
+def _fc_pulisci_nome(nome):
+
+    nome = re.sub(
+        r"\s+",
+        " ",
+        str(
+            nome
+            or ""
+        )
+    ).strip(
+        " .,:;-"
+    )
+
+    return nome
+
+
+def _fc_split_giocatori(testo):
+
+    risultato = []
+
+    for pezzo in str(
+        testo
+    ).split(
+        ","
+    ):
+
+        nome = _fc_pulisci_nome(
+            pezzo
+        )
+
+        if (
+            nome
+            and _goal_nome_valido(
+                nome
+            )
+        ):
+
+            risultato.append(
+                nome
+            )
+
+    return risultato
+
+
+def _fc_parse_formazione(
+    testo_formazione,
+    modulo
+):
+    """
+    Fantacalcio.it pubblica la formazione "da dx a sx" e separa
+    le linee con punto e virgola.
+
+    Manteniamo ESATTAMENTE quelle linee:
+      P ; D ; C/... ; A
+
+    e accettiamo soltanto una formazione con 11 nomi.
+    """
+
+    testo_formazione = re.sub(
+        r"\s+",
+        " ",
+        str(
+            testo_formazione
+        )
+    ).strip(
+        " ."
+    )
+
+    linee = []
+
+    for gruppo in testo_formazione.split(
+        ";"
+    ):
+
+        nomi = _fc_split_giocatori(
+            gruppo
+        )
+
+        if nomi:
+            linee.append(
+                nomi
+            )
+
+    titolari = [
+        nome
+        for linea in linee
+        for nome in linea
+    ]
+
+    if len(
+        titolari
+    ) != 11:
+
+        return None
+
+    # Coerenza minima col modulo:
+    # il modulo deve sempre rappresentare 10 giocatori di movimento.
+    try:
+
+        componenti = [
+            int(
+                x
+            )
+            for x in str(
+                modulo
+            ).split(
+                "-"
+            )
+        ]
+
+    except Exception:
+
+        componenti = []
+
+    if (
+        not componenti
+        or sum(
+            componenti
+        ) != 10
+    ):
+
+        return None
+
+    return {
+        "linee_fonte":
+            linee,
+
+        "titolari":
+            titolari
+    }
+
+
+def _fc_parse_ballottaggi(testo):
+    """
+    Restituisce le coppie nell'ordine pubblicato dalla fonte.
+
+    Esempio:
+        Bellanova/Zappacosta;
+        Kristensen/Hien
+
+    Eventuali note tra parentesi vengono rimosse.
+    """
+
+    testo = re.sub(
+        r"\([^)]*\)",
+        "",
+        str(
+            testo
+            or ""
+        )
+    )
+
+    coppie = []
+
+    for blocco in testo.split(
+        ";"
+    ):
+
+        blocco = re.sub(
+            r"\s+",
+            " ",
+            blocco
+        ).strip(
+            " .,:;"
+        )
+
+        if "/" not in blocco:
+            continue
+
+        parti = [
+            _fc_pulisci_nome(
+                x
+            )
+            for x in blocco.split(
+                "/",
+                1
+            )
+        ]
+
+        if (
+            len(
+                parti
+            ) == 2
+            and all(
+                parti
+            )
+            and all(
+                _goal_nome_valido(
+                    x
+                )
+                for x in parti
+            )
+        ):
+
+            coppie.append({
+                "a":
+                    parti[
+                        0
+                    ],
+
+                "b":
+                    parti[
+                        1
+                    ]
+            })
+
+    return coppie
+
+
 def aggiorna_probabili_web():
     """
-    Aggiorna le formazioni tipo stagionali da GOAL Italia.
+    V10 - Fantacalcio.it come fonte primaria.
 
-    FIX V2:
-    GOAL non espone sempre i blocchi come elementi HTML separati.
-    Per questo non cerchiamo più una sequenza rigida di tag, ma:
-    1) estraiamo tutto il testo leggibile della pagina;
-    2) lo normalizziamo in una singola stringa;
-    3) individuiamo ogni blocco "PROBABILE FORMAZIONE ...";
-    4) leggiamo modulo e XI esattamente come pubblicati;
-    5) accettiamo solo squadre con esattamente 11 giocatori.
+    LOGICA STATUS:
+    - VERDE: titolare della formazione tipo NON coinvolto
+      in alcun ballottaggio esplicito;
+    - BLU sopra + BLU sotto: titolare coinvolto in un
+      ballottaggio e il giocatore indicato dalla fonte con cui
+      si contende il posto.
 
-    Nessun giocatore viene ricollocato o inventato.
+    Nessuna "riserva" viene inventata.
     """
 
     richiesta = urllib.request.Request(
@@ -3230,226 +3568,120 @@ def aggiorna_probabili_web():
             "ignore"
         )
 
-    parser = GoalTextParser()
+    parser = (
+        FantacalcioFormazioniParser()
+    )
+
     parser.feed(
         raw
     )
 
-    # ----------------------------------------------------------
-    # 1. Costruiamo un testo continuo e pulito.
-    # ----------------------------------------------------------
-
-    parti = []
-
-    for elemento in parser.items:
-
-        testo = re.sub(
-            r"\s+",
-            " ",
-            str(
-                elemento
-            )
-        ).strip()
-
-        if testo:
-            parti.append(
-                testo
-            )
-
-    testo_completo = " ".join(
-        parti
-    )
-
-    # Entità / spazi non separabili che possono comparire
-    # nella pagina.
-    testo_completo = (
-        testo_completo
-        .replace("\xa0", " ")
-        .replace("–", "-")
-        .replace("—", "-")
-    )
-
-    testo_completo = re.sub(
-        r"\s+",
-        " ",
-        testo_completo
-    ).strip()
-
-    # ----------------------------------------------------------
-    # 2. Isoliamo i blocchi squadra.
-    # ----------------------------------------------------------
-
-    pattern_blocchi = re.compile(
-        r"PROBABILE FORMAZIONE\s+"
-        r"(?P<squadra>[A-ZÀ-ÖØ-Ý' .-]+?)\s+"
-        r"FORMAZIONE TIPO"
-        r"(?P<contenuto>.*?)"
-        r"(?="
-            r"PROBABILE FORMAZIONE\s+"
-            r"[A-ZÀ-ÖØ-Ý' .-]+?\s+"
-            r"FORMAZIONE TIPO"
-            r"|TI È PIACIUTA QUESTA STORIA"
-            r"|$"
-        r")",
-        flags=re.IGNORECASE
-    )
+    parser.close()
 
     squadre = []
 
-    for match in pattern_blocchi.finditer(
-        testo_completo
-    ):
+    for titolo, blocco in parser.blocks:
+
+        # Un vero blocco squadra deve contenere tutte le voci chiave.
+        if (
+            "Modulo:" not in blocco
+            or "Probabile formazione" not in blocco
+        ):
+
+            continue
 
         nome_squadra = re.sub(
             r"\s+",
             " ",
-            match.group(
-                "squadra"
+            str(
+                titolo
             )
-        ).strip(
-            " -"
-        )
+        ).strip()
 
-        blocco = match.group(
-            "contenuto"
-        )
-
-        # Allenatore facoltativo.
-        allenatore = ""
-
-        match_allenatore = re.search(
-            r"\(Allenatore\s*:\s*([^)]+)\)",
-            blocco,
-            flags=re.IGNORECASE
-        )
-
-        if match_allenatore:
-
-            allenatore = (
-                match_allenatore
-                .group(
-                    1
-                )
-                .strip()
-            )
-
-        # ------------------------------------------------------
-        # 3. Modulo + XI.
-        #
-        # Esempio GOAL:
-        # (3-5-2): Martinez; Bisseck, Akanji, Bastoni;
-        # Spence, Barella, ...; Lautaro, Thuram.
-        # ------------------------------------------------------
-
-        match_formazione = re.search(
-            r"\(([1-5](?:-[1-5]){2,4})\)\s*:\s*"
-            r"(.+?)"
-            r"(?="
-                r"\s+Altri possibili titolari\s*:"
-                r"|$"
-            r")",
-            blocco,
-            flags=re.IGNORECASE
-        )
-
-        if not match_formazione:
+        # Evita eventuali H2 editoriali.
+        if (
+            not nome_squadra
+            or len(
+                nome_squadra
+            ) > 30
+        ):
 
             continue
 
+        match_modulo = re.search(
+            r"Modulo:\s*"
+            r"([1-5](?:-[1-5]){2,4})",
+            blocco,
+            flags=re.IGNORECASE
+        )
+
+        if not match_modulo:
+            continue
+
         modulo = (
-            match_formazione
+            match_modulo
             .group(
                 1
             )
             .strip()
         )
 
-        testo_formazione = (
-            match_formazione
-            .group(
-                2
-            )
-            .strip()
-            .rstrip(
-                "."
-            )
-        )
-
-        # Le linee tattiche di GOAL sono separate da ";"
-        linee_fonte = []
-
-        for gruppo in testo_formazione.split(
-            ";"
-        ):
-
-            nomi = _goal_split_names(
-                gruppo
-            )
-
-            if nomi:
-
-                linee_fonte.append(
-                    nomi
-                )
-
-        titolari = [
-            nome
-            for linea in linee_fonte
-            for nome in linea
-        ]
-
-        # Controllo fondamentale:
-        # non salviamo mai una formazione incompleta.
-        if len(
-            titolari
-        ) != 11:
-
-            continue
-
-        # ------------------------------------------------------
-        # 4. Altri possibili titolari.
-        # ------------------------------------------------------
-
-        alternative = []
-
-        match_alternative = re.search(
-            r"Altri possibili titolari\s*:\s*"
+        match_formazione = re.search(
+            r"Probabile formazione"
+            r"(?:\s*\(da dx a sx\))?\s*:\s*"
             r"(.+?)"
-            r"(?="
-                r"\s+PROBABILE FORMAZIONE"
-                r"|$"
-            r")",
+            r"(?=\s+Ballottaggi\s*:|\s+Rigoristi\s*:|$)",
             blocco,
             flags=re.IGNORECASE
         )
 
-        if match_alternative:
+        if not match_formazione:
+            continue
 
-            testo_alternative = (
-                match_alternative
-                .group(
+        parsed_formazione = (
+            _fc_parse_formazione(
+                match_formazione.group(
+                    1
+                ),
+                modulo
+            )
+        )
+
+        if not parsed_formazione:
+            continue
+
+        match_ballottaggi = re.search(
+            r"Ballottaggi\s*:\s*"
+            r"(.+?)"
+            r"(?=\s+Rigoristi\s*:|\s+Calci da fermo\s*:|$)",
+            blocco,
+            flags=re.IGNORECASE
+        )
+
+        ballottaggi = (
+            _fc_parse_ballottaggi(
+                match_ballottaggi.group(
                     1
                 )
-                .strip()
-                .rstrip(
-                    "."
-                )
             )
+            if match_ballottaggi
+            else []
+        )
 
-            # Pulizia di eventuali elementi editoriali che,
-            # in alcune versioni della pagina, seguono la lista.
-            testo_alternative = re.split(
-                r"\s+(?:TI È PIACIUTA|Aggiungi GOAL|Segui GOAL)\b",
-                testo_alternative,
-                maxsplit=1,
-                flags=re.IGNORECASE
-            )[0]
+        match_allenatore = re.search(
+            r"Allenatore:\s*(.+?)"
+            r"(?=\s+Modulo\s*:)",
+            blocco,
+            flags=re.IGNORECASE
+        )
 
-            alternative = (
-                _goal_split_names(
-                    testo_alternative
-                )
-            )
+        allenatore = (
+            match_allenatore.group(
+                1
+            ).strip()
+            if match_allenatore
+            else ""
+        )
 
         squadre.append({
             "squadra":
@@ -3461,35 +3693,26 @@ def aggiorna_probabili_web():
             "modulo":
                 modulo,
 
-            # Manteniamo esattamente le linee pubblicate dalla fonte.
             "linee_fonte":
-                linee_fonte,
+                parsed_formazione[
+                    "linee_fonte"
+                ],
 
             "formazione": [
                 {
                     "nome":
-                        nome,
-                    "status":
-                        "TITOLARE"
+                        nome
                 }
-                for nome in titolari
+                for nome in parsed_formazione[
+                    "titolari"
+                ]
             ],
 
-            "alternative": [
-                {
-                    "nome":
-                        nome,
-                    "status":
-                        "BALLOTTAGGIO"
-                }
-                for nome in alternative
-            ]
+            "ballottaggi":
+                ballottaggi
         })
 
-    # ----------------------------------------------------------
-    # 5. Deduplica.
-    # ----------------------------------------------------------
-
+    # Deduplica eventuali ripetizioni.
     uniche = {}
 
     for squadra in squadre:
@@ -3515,10 +3738,7 @@ def aggiorna_probabili_web():
         uniche.values()
     )
 
-    # ----------------------------------------------------------
-    # 6. Validazione.
-    # ----------------------------------------------------------
-
+    # Controllo forte: non sovrascrive la cache con dati incompleti.
     non_valide = [
         s.get(
             "squadra",
@@ -3540,41 +3760,15 @@ def aggiorna_probabili_web():
         or non_valide
     ):
 
-        nomi_trovati = ", ".join(
-            s.get(
-                "squadra",
-                "?"
-            )
-            for s in squadre
-        )
-
         raise RuntimeError(
-            "Aggiornamento annullato: sono state riconosciute "
+            "Aggiornamento annullato: Fantacalcio.it ha restituito "
             f"{len(squadre)} squadre valide su 20. "
-            + (
-                "Formazioni incomplete: "
-                + ", ".join(
-                    non_valide
-                )
-                + ". "
-                if non_valide
-                else ""
-            )
-            + (
-                "Squadre riconosciute: "
-                + nomi_trovati
-                if nomi_trovati
-                else "Nessuna squadra riconosciuta."
-            )
+            "La cache precedente non è stata modificata."
         )
-
-    # ----------------------------------------------------------
-    # 7. Salvataggio nuova cache V4.
-    # ----------------------------------------------------------
 
     dati = {
         "versione_dati":
-            4,
+            10,
 
         "fonte":
             URL_PROBABILI_FORMAZIONI,
@@ -3593,7 +3787,7 @@ def aggiorna_probabili_web():
     }
 
     salva_config_generica(
-        "formazioni_tipo_goal_v2",
+        "formazioni_tipo_fantacalcio_v10",
         json.dumps(
             dati,
             ensure_ascii=False
@@ -3605,7 +3799,7 @@ def aggiorna_probabili_web():
 def carica_probabili_web():
 
     raw = leggi_config_generica(
-        "formazioni_tipo_goal_v2",
+        "formazioni_tipo_fantacalcio_v10",
         ""
     )
 
@@ -3625,7 +3819,7 @@ def carica_probabili_web():
             )
             and dati.get(
                 "versione_dati"
-            ) == 4
+            ) == 10
         ):
 
             squadre = (
@@ -4051,164 +4245,88 @@ def _goal_visual_lines(
     )
 
 
-def _assegna_alternative_a_linee(
-    squadra
+def _stesso_giocatore(
+    nome_a,
+    nome_b
 ):
-    """
-    Colloca gli 'altri possibili titolari' DENTRO il campo.
 
-    La fonte GOAL non indica quale titolare venga sfidato:
-    quindi non inventiamo un accoppiamento individuale.
-    Li assegniamo soltanto alla LINEA TATTICA coerente
-    con un singolo ruolo Mantra ricavato dal listone.
-    """
-
-    linee = squadra.get(
-        "linee_fonte",
-        []
-    ) or []
-
-    gruppi = _gruppi_linee_goal(
-        squadra.get(
-            "modulo",
-            ""
-        ),
-        len(
-            linee
+    return (
+        _normalizza_nome_goal(
+            nome_a
+        )
+        == _normalizza_nome_goal(
+            nome_b
         )
     )
 
-    per_linea = {
-        indice: []
-        for indice in range(
-            len(
-                linee
-            )
-        )
-    }
 
-    alternative = [
-        alternativa
-        for alternativa in (
-            squadra.get(
-                "alternative",
-                []
-            )
-            or []
-        )
-        if _goal_nome_valido(
-            alternativa.get(
-                "nome",
-                ""
-            )
-        )
-    ]
+def _ballottaggio_del_titolare(
+    squadra,
+    nome_titolare
+):
+    """
+    Cerca la PRIMA coppia Fantacalcio.it che coinvolge il titolare.
 
-    for alternativa in alternative:
+    Se la fonte scrive:
+        Piccoli/Dovbyk
+    e Dovbyk è nell'XI, restituisce Piccoli.
 
-        nome = alternativa.get(
-            "nome",
+    Se scrive:
+        Bellanova/Zappacosta
+    e Bellanova è nell'XI, restituisce Zappacosta.
+
+    Massimo un concorrente per card.
+    """
+
+    for coppia in (
+        squadra.get(
+            "ballottaggi",
+            []
+        )
+        or []
+    ):
+
+        a = coppia.get(
+            "a",
             ""
         )
 
-        ruoli = _ruoli_mantra_goal(
-            nome,
-            squadra.get(
-                "squadra",
-                ""
-            )
+        b = coppia.get(
+            "b",
+            ""
         )
 
-        # Proviamo tutti i ruoli del giocatore.
-        gruppi_possibili = [
-            _gruppo_tattico_da_ruolo(
-                ruolo
-            )
-            for ruolo in ruoli
-        ]
+        if _stesso_giocatore(
+            nome_titolare,
+            a
+        ):
 
-        gruppi_possibili = [
-            g
-            for g in gruppi_possibili
-            if g
-        ]
+            return b
 
-        indice_scelto = None
+        if _stesso_giocatore(
+            nome_titolare,
+            b
+        ):
 
-        # Preferisce una linea con gruppo esatto.
-        for gruppo in gruppi_possibili:
+            return a
 
-            for indice, gruppo_linea in enumerate(
-                gruppi
-            ):
-
-                if gruppo_linea == gruppo:
-
-                    indice_scelto = indice
-
-                    # Per giocatori offensivi, preferisce la linea
-                    # offensiva più avanzata compatibile.
-                    if gruppo == "A":
-                        continue
-
-                    break
-
-            if indice_scelto is not None:
-                break
-
-        # Fallback prudente: centrocampo.
-        if indice_scelto is None:
-
-            candidati_c = [
-                indice
-                for indice, gruppo_linea in enumerate(
-                    gruppi
-                )
-                if gruppo_linea == "C"
-            ]
-
-            indice_scelto = (
-                candidati_c[
-                    0
-                ]
-                if candidati_c
-                else max(
-                    0,
-                    len(
-                        linee
-                    ) - 2
-                )
-            )
-
-        ruolo_completo = (
-            ";".join(
-                ruoli
-            )
-            if ruoli
-            else "—"
-        )
-
-        per_linea[
-            indice_scelto
-        ].append({
-            "nome":
-                nome,
-            "ruolo":
-                ruolo_completo
-        })
-
-    return per_linea
+    return None
 
 
 def mostra_probabile(
     squadra
 ):
     """
-    Rendering:
-    - TITOLARI verdi;
-    - ruolo Mantra accanto al nome;
-    - ALTRI POSSIBILI TITOLARI blu;
-    - alternative direttamente sotto i titolari della stessa linea tattica.
+    CARD V10:
+
+    CASO 1 - nessun ballottaggio:
+        TITOLARE VERDE + ruoli Mantra
+
+    CASO 2 - ballottaggio esplicito Fantacalcio.it:
+        TITOLARE BLU + ruoli Mantra
+        CONCORRENTE BLU + ruoli Mantra
+
+    Nessun altro nome viene mostrato nella card.
     """
 
     linee_originali = squadra.get(
@@ -4216,90 +4334,43 @@ def mostra_probabile(
         []
     ) or []
 
-    gruppi_originali = _gruppi_linee_goal(
-        squadra.get(
-            "modulo",
-            ""
-        ),
-        len(
-            linee_originali
-        )
-    )
-
-    alternative_per_linea = (
-        _assegna_alternative_a_linee(
-            squadra
-        )
-    )
-
     righe_html = ""
 
-    # Visualizzazione dal reparto offensivo al portiere.
-    for indice_originale in reversed(
-        range(
-            len(
-                linee_originali
-            )
-        )
+    # Fantacalcio.it pubblica:
+    # portiere -> difesa -> centrocampo/... -> attacco.
+    # Sul campo mostriamo attacco -> ... -> portiere.
+    for linea in reversed(
+        linee_originali
     ):
-
-        linea = linee_originali[
-            indice_originale
-        ]
-
-        gruppo_linea = gruppi_originali[
-            indice_originale
-        ]
-
-        alternative_linea = list(
-            alternative_per_linea.get(
-                indice_originale,
-                []
-            )
-        )
-
-        numero_slot = max(
-            1,
-            len(
-                linea
-            )
-        )
-
-        # Distribuzione round-robin delle alternative sotto i titolari
-        # della stessa linea, senza inventare un ballottaggio specifico.
-        alternative_slot = {
-            indice: []
-            for indice in range(
-                numero_slot
-            )
-        }
-
-        # Massimo UNA alternativa per ciascun titolare.
-        # Se la fonte ne riporta più del numero di slot della linea,
-        # mostriamo soltanto le prime N coerenti con quella linea.
-        for indice_alt, alternativa in enumerate(
-            alternative_linea[
-                :numero_slot
-            ]
-        ):
-
-            alternative_slot[
-                indice_alt
-            ] = [
-                alternativa
-            ]
 
         giocatori_html = ""
 
-        for indice_slot, nome_raw in enumerate(
-            [
+        nomi_validi = [
+            nome
+            for nome in linea
+            if _goal_nome_valido(
                 nome
-                for nome in linea
-                if _goal_nome_valido(
-                    nome
+            )
+        ]
+
+        for nome_raw in nomi_validi:
+
+            concorrente = (
+                _ballottaggio_del_titolare(
+                    squadra,
+                    nome_raw
                 )
-            ]
-        ):
+            )
+
+            in_ballottaggio = bool(
+                concorrente
+            )
+
+            colore_principale = (
+                "#2563eb"
+                if in_ballottaggio
+                else "#16a34a"
+            )
 
             nome = html.escape(
                 str(
@@ -4323,32 +4394,35 @@ def mostra_probabile(
                 else "—"
             )
 
-            alternative_html = ""
+            secondo_html = ""
 
-            for alternativa in alternative_slot.get(
-                indice_slot,
-                []
-            ):
+            if concorrente:
 
                 nome_alt = html.escape(
                     str(
-                        alternativa.get(
-                            "nome",
+                        concorrente
+                    )
+                )
+
+                ruoli_alt = (
+                    _ruoli_mantra_goal(
+                        concorrente,
+                        squadra.get(
+                            "squadra",
                             ""
                         )
                     )
                 )
 
                 ruolo_alt = html.escape(
-                    str(
-                        alternativa.get(
-                            "ruolo",
-                            "—"
-                        )
+                    ";".join(
+                        ruoli_alt
                     )
+                    if ruoli_alt
+                    else "—"
                 )
 
-                alternative_html += (
+                secondo_html = (
                     '<div class="pf-sub-player">'
                     '<span class="pf-sub-name">'
                     + nome_alt
@@ -4362,27 +4436,23 @@ def mostra_probabile(
             giocatori_html += (
                 '<div class="pf-player pf-player-goal">'
                 '<div class="pf-main-player">'
-                '<span class="pf-name" style="color:#16a34a;">'
+                '<span class="pf-name" style="color:'
+                + colore_principale
+                + ' !important;">'
                 + nome
                 + '</span>'
                 '<span class="pf-mantra-role">'
                 + ruolo
                 + '</span>'
                 '</div>'
-                + alternative_html
+                + secondo_html
                 + '</div>'
             )
 
         numero_card_linea = max(
             1,
             len(
-                [
-                    nome
-                    for nome in linea
-                    if _goal_nome_valido(
-                        nome
-                    )
-                ]
+                nomi_validi
             )
         )
 
@@ -4425,7 +4495,6 @@ def mostra_probabile(
         + '</div>',
         unsafe_allow_html=True
     )
-
 
 def leggi_budget_asta():
 
@@ -11490,7 +11559,7 @@ elif sezione == "FORMAZIONI TIPO":
             )
 
     st.caption(
-        "Fonte: GOAL Italia — formazioni tipo stagionali. "
+        "Fonte: Fantacalcio.it — probabili formazioni stagionali per l’asta. "
         "I dati sono stagionali, non riferiti alla singola giornata. "
         "Il consenso delle guide viene trasformato in "
         "TITOLARE / BALLOTTAGGIO / RISERVA."
@@ -11499,9 +11568,9 @@ elif sezione == "FORMAZIONI TIPO":
     legenda = (
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px 0;">'
         '<span style="background:#dcfce7;color:#15803d;border-radius:7px;padding:5px 9px;font-weight:900;">'
-        '● FORMAZIONE TIPO</span>'
+        '● TITOLARE CONSOLIDATO</span>'
         '<span style="background:#dbeafe;color:#1d4ed8;border-radius:7px;padding:5px 9px;font-weight:900;">'
-        '● ALTRO POSSIBILE TITOLARE</span>'
+        '● BALLOTTAGGIO</span>'
         '</div>'
     )
 
