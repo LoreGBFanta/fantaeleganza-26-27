@@ -3528,16 +3528,18 @@ def _fc_parse_ballottaggi(testo):
 
 def aggiorna_probabili_web():
     """
-    V10 - Fantacalcio.it come fonte primaria.
+    V12 - Fantacalcio.it, parser a testo continuo.
 
-    LOGICA STATUS:
-    - VERDE: titolare della formazione tipo NON coinvolto
-      in alcun ballottaggio esplicito;
-    - BLU sopra + BLU sotto: titolare coinvolto in un
-      ballottaggio e il giocatore indicato dalla fonte con cui
-      si contende il posto.
+    Non dipende più dai tag H2 della pagina.
+    Cerca direttamente i blocchi:
+        SQUADRA
+        Allenatore:
+        Modulo:
+        Probabile formazione:
+        Ballottaggi:
+        Rigoristi:
 
-    Nessuna "riserva" viene inventata.
+    Questo rende l'importazione molto più robusta su Streamlit Cloud.
     """
 
     urls_da_provare = [
@@ -3573,119 +3575,158 @@ def aggiorna_probabili_web():
                 timeout=25
             ) as risposta:
 
-                raw = risposta.read().decode(
+                raw_candidate = risposta.read().decode(
                     "utf-8",
                     "ignore"
                 )
 
-            # Controllo immediato: non basta ricevere HTTP 200.
-            # La pagina deve contenere realmente i dati editoriali.
+            # Basta verificare che il contenuto editoriale sia presente.
             if (
-                "Probabile formazione" in raw
-                and "Ballottaggi" in raw
-                and "ATALANTA" in raw.upper()
+                "Probabile formazione" in raw_candidate
+                and "Ballottaggi" in raw_candidate
+                and "Allenatore" in raw_candidate
             ):
-                break
 
-            raw = ""
+                raw = raw_candidate
+                break
 
         except Exception as exc:
 
             ultimo_errore = exc
-            raw = ""
 
     if not raw:
 
-        dettaglio = (
-            str(
-                ultimo_errore
-            )
-            if ultimo_errore
-            else "pagina ricevuta senza contenuto utile"
-        )
-
         raise RuntimeError(
-            "Fantacalcio.it è raggiungibile ma il server dell'app "
-            "non ha ricevuto il contenuto delle formazioni. "
-            "Dettaglio: "
-            + dettaglio
+            "Fantacalcio.it non ha restituito il contenuto utile "
+            "delle formazioni. "
+            + (
+                f"Dettaglio: {ultimo_errore}"
+                if ultimo_errore
+                else ""
+            )
         )
 
-    parser = (
-        FantacalcioFormazioniParser()
-    )
+    # ----------------------------------------------------------
+    # 1. Estrazione del solo testo leggibile.
+    # Usiamo GoalTextParser, già presente nell'app, che ignora
+    # script/style/noscript.
+    # ----------------------------------------------------------
 
-    parser.feed(
+    estrattore = GoalTextParser()
+    estrattore.feed(
         raw
     )
 
-    parser.close()
+    parti = []
+
+    for elemento in estrattore.items:
+
+        testo = re.sub(
+            r"\s+",
+            " ",
+            str(
+                elemento
+            )
+        ).strip()
+
+        if testo:
+            parti.append(
+                testo
+            )
+
+    testo_completo = " ".join(
+        parti
+    )
+
+    testo_completo = (
+        testo_completo
+        .replace(
+            "\xa0",
+            " "
+        )
+        .replace(
+            "’",
+            "'"
+        )
+    )
+
+    testo_completo = re.sub(
+        r"\s+",
+        " ",
+        testo_completo
+    ).strip()
+
+    # ----------------------------------------------------------
+    # 2. Individuazione dei 20 blocchi squadra.
+    #
+    # Non usiamo una lista hardcoded: la squadra viene riconosciuta
+    # perché precede immediatamente "Allenatore:".
+    # ----------------------------------------------------------
+
+    pattern_blocco = re.compile(
+        r"(?P<squadra>[A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' .-]{1,28})"
+        r"\s+Allenatore:\s*"
+        r"(?P<allenatore>.+?)"
+        r"\s+Modulo:\s*"
+        r"(?P<modulo>[1-5](?:-[1-5]){2,4})"
+        r"(?:\s*\([^)]*\))?"
+        r"\s+Probabile formazione"
+        r"(?:\s*\(da dx a sx\))?\s*:\s*"
+        r"(?P<formazione>.+?)"
+        r"\s+Ballottaggi:\s*"
+        r"(?P<ballottaggi>.+?)"
+        r"\s+Rigoristi:\s*"
+        r"(?P<rigoristi>.+?)"
+        r"(?=\s+Calci da fermo:)",
+        flags=re.IGNORECASE
+    )
 
     squadre = []
 
-    for titolo, blocco in parser.blocks:
-
-        # Un vero blocco squadra deve contenere tutte le voci chiave.
-        if (
-            "Modulo:" not in blocco
-            or "Probabile formazione" not in blocco
-        ):
-
-            continue
+    for match in pattern_blocco.finditer(
+        testo_completo
+    ):
 
         nome_squadra = re.sub(
             r"\s+",
             " ",
-            str(
-                titolo
+            match.group(
+                "squadra"
             )
         ).strip()
 
-        # Evita eventuali H2 editoriali.
-        if (
-            not nome_squadra
-            or len(
-                nome_squadra
-            ) > 30
-        ):
-
-            continue
-
-        match_modulo = re.search(
-            r"Modulo:\s*"
-            r"([1-5](?:-[1-5]){2,4})",
-            blocco,
-            flags=re.IGNORECASE
-        )
-
-        if not match_modulo:
-            continue
+        allenatore = re.sub(
+            r"\s+",
+            " ",
+            match.group(
+                "allenatore"
+            )
+        ).strip()
 
         modulo = (
-            match_modulo
-            .group(
-                1
+            match.group(
+                "modulo"
             )
             .strip()
         )
 
-        match_formazione = re.search(
-            r"Probabile formazione"
-            r"(?:\s*\(da dx a sx\))?\s*:\s*"
-            r"(.+?)"
-            r"(?=\s+Ballottaggi\s*:|\s+Rigoristi\s*:|$)",
-            blocco,
-            flags=re.IGNORECASE
+        testo_formazione = (
+            match.group(
+                "formazione"
+            )
+            .strip()
         )
 
-        if not match_formazione:
-            continue
+        testo_ballottaggi = (
+            match.group(
+                "ballottaggi"
+            )
+            .strip()
+        )
 
         parsed_formazione = (
             _fc_parse_formazione(
-                match_formazione.group(
-                    1
-                ),
+                testo_formazione,
                 modulo
             )
         )
@@ -3693,37 +3734,10 @@ def aggiorna_probabili_web():
         if not parsed_formazione:
             continue
 
-        match_ballottaggi = re.search(
-            r"Ballottaggi\s*:\s*"
-            r"(.+?)"
-            r"(?=\s+Rigoristi\s*:|\s+Calci da fermo\s*:|$)",
-            blocco,
-            flags=re.IGNORECASE
-        )
-
         ballottaggi = (
             _fc_parse_ballottaggi(
-                match_ballottaggi.group(
-                    1
-                )
+                testo_ballottaggi
             )
-            if match_ballottaggi
-            else []
-        )
-
-        match_allenatore = re.search(
-            r"Allenatore:\s*(.+?)"
-            r"(?=\s+Modulo\s*:)",
-            blocco,
-            flags=re.IGNORECASE
-        )
-
-        allenatore = (
-            match_allenatore.group(
-                1
-            ).strip()
-            if match_allenatore
-            else ""
         )
 
         squadre.append({
@@ -3755,7 +3769,10 @@ def aggiorna_probabili_web():
                 ballottaggi
         })
 
-    # Deduplica eventuali ripetizioni.
+    # ----------------------------------------------------------
+    # 3. Deduplica.
+    # ----------------------------------------------------------
+
     uniche = {}
 
     for squadra in squadre:
@@ -3781,7 +3798,6 @@ def aggiorna_probabili_web():
         uniche.values()
     )
 
-    # Controllo forte: non sovrascrive la cache con dati incompleti.
     non_valide = [
         s.get(
             "squadra",
@@ -3803,15 +3819,32 @@ def aggiorna_probabili_web():
         or non_valide
     ):
 
+        nomi = ", ".join(
+            s.get(
+                "squadra",
+                "?"
+            )
+            for s in squadre
+        )
+
         raise RuntimeError(
             "Aggiornamento annullato: Fantacalcio.it ha restituito "
-            f"{len(squadre)} squadre valide su 20. "
-            "La cache precedente non è stata modificata."
+            f"{len(squadre)} squadre valide su 20."
+            + (
+                " Squadre riconosciute: "
+                + nomi
+                if nomi
+                else ""
+            )
         )
+
+    # ----------------------------------------------------------
+    # 4. Salvataggio.
+    # ----------------------------------------------------------
 
     dati = {
         "versione_dati":
-            11,
+            12,
 
         "fonte":
             "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558",
@@ -3830,7 +3863,7 @@ def aggiorna_probabili_web():
     }
 
     salva_config_generica(
-        "formazioni_tipo_fantacalcio_v11",
+        "formazioni_tipo_fantacalcio_v12",
         json.dumps(
             dati,
             ensure_ascii=False
@@ -3842,7 +3875,7 @@ def aggiorna_probabili_web():
 def carica_probabili_web():
 
     raw = leggi_config_generica(
-        "formazioni_tipo_fantacalcio_v11",
+        "formazioni_tipo_fantacalcio_v12",
         ""
     )
 
@@ -3862,7 +3895,7 @@ def carica_probabili_web():
             )
             and dati.get(
                 "versione_dati"
-            ) == 11
+            ) == 12
         ):
 
             squadre = (
