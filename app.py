@@ -8,6 +8,7 @@ import sqlite3
 import re
 import urllib.request
 import unicodedata
+import unicodedata
 from html.parser import HTMLParser
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -3089,12 +3090,76 @@ class GoalTextParser(HTMLParser):
             self.items.append(x)
 
 
+def _goal_nome_valido(nome):
+    nome = re.sub(
+        r"\s+",
+        " ",
+        str(nome or "")
+    ).strip(" .:-")
+
+    if not nome:
+        return False
+
+    testo = nome.lower()
+
+    rumore = (
+        "pubblicità",
+        "pubblicita",
+        "advertisement",
+        "continua a leggere",
+        "leggi anche",
+        "scopri di più",
+        "scopri di piu",
+        "guarda il video",
+        "newsletter",
+        "cookie",
+        "privacy",
+        "scarica l'app",
+        "seguici",
+        "condividi",
+        "copyright",
+        "tutti i diritti"
+    )
+
+    if any(x in testo for x in rumore):
+        return False
+
+    if len(nome) > 38:
+        return False
+
+    return bool(
+        re.search(
+            r"[A-Za-zÀ-ÖØ-öø-ÿ]",
+            nome
+        )
+    )
+
+
 def _goal_split_names(text):
-    return [
-        re.sub(r"\s+", " ", x).strip(" .")
-        for x in str(text).split(",")
-        if re.sub(r"\s+", " ", x).strip(" .")
-    ]
+    risultato = []
+
+    for pezzo in str(text).split(","):
+
+        nome = re.sub(
+            r"\s+",
+            " ",
+            pezzo
+        ).strip(" .:-")
+
+        nome = re.split(
+            r"\b(?:Pubblicità|Pubblicita|Advertisement|Continua a leggere)\b",
+            nome,
+            maxsplit=1,
+            flags=re.IGNORECASE
+        )[0].strip(" .:-")
+
+        if (
+            _goal_nome_valido(nome)
+            and nome not in risultato
+        ):
+            risultato.append(nome)
+
+    return risultato
 
 
 def _goal_parse_formation_line(line):
@@ -3624,19 +3689,12 @@ def _normalizza_nome_goal(nome):
     ).strip()
 
 
-def _trova_giocatore_listone(nome_goal):
-    """
-    Collega il nome GOAL al listone già caricato nell'app.
-
-    Strategia:
-    1. match esatto normalizzato;
-    2. match per cognome / token principale;
-    3. se ambiguo, preferisce il nome più simile per insieme di token.
-    """
-
+def _trova_giocatore_listone(
+    nome_goal,
+    squadra_goal=""
+):
     if (
-        "df_completo"
-        not in globals()
+        "df_completo" not in globals()
         or df_completo is None
         or df_completo.empty
         or "Nome" not in df_completo.columns
@@ -3645,6 +3703,10 @@ def _trova_giocatore_listone(nome_goal):
 
     target = _normalizza_nome_goal(
         nome_goal
+    )
+
+    squadra_target = _normalizza_nome_goal(
+        squadra_goal
     )
 
     if not target:
@@ -3661,12 +3723,39 @@ def _trova_giocatore_listone(nome_goal):
             )
         )
 
+        squadra_listone = str(
+            riga.get(
+                "Squadra",
+                ""
+            )
+        )
+
         normalizzato = _normalizza_nome_goal(
             nome_listone
         )
 
+        squadra_norm = _normalizza_nome_goal(
+            squadra_listone
+        )
+
         if not normalizzato:
             continue
+
+        bonus_squadra = 0
+
+        if squadra_target:
+
+            if squadra_norm == squadra_target:
+                bonus_squadra = 30
+
+            elif (
+                squadra_target in squadra_norm
+                or squadra_norm in squadra_target
+            ):
+                bonus_squadra = 20
+
+            else:
+                continue
 
         if normalizzato == target:
             return riga
@@ -3684,13 +3773,13 @@ def _trova_giocatore_listone(nome_goal):
             & token_listone
         )
 
-        # Cognome / token condiviso.
         if intersezione:
+
             punteggio = (
-                len(
+                bonus_squadra
+                + len(
                     intersezione
-                )
-                * 10
+                ) * 10
                 - abs(
                     len(
                         token_target
@@ -3701,7 +3790,6 @@ def _trova_giocatore_listone(nome_goal):
                 )
             )
 
-            # Bonus se uno dei due testi contiene interamente l'altro.
             if (
                 target in normalizzato
                 or normalizzato in target
@@ -3723,24 +3811,24 @@ def _trova_giocatore_listone(nome_goal):
         reverse=True
     )
 
-    # Evita associazioni troppo deboli.
-    if candidati[
-        0
-    ][
-        0
-    ] < 9:
+    soglia = (
+        20
+        if squadra_target
+        else 9
+    )
+
+    if candidati[0][0] < soglia:
         return None
 
-    return candidati[
-        0
-    ][
-        1
-    ]
+    return candidati[0][1]
 
-
-def _ruoli_mantra_goal(nome_goal):
+def _ruoli_mantra_goal(
+    nome_goal,
+    squadra_goal=""
+):
     riga = _trova_giocatore_listone(
-        nome_goal
+        nome_goal,
+        squadra_goal
     )
 
     if riga is None:
@@ -3999,10 +4087,22 @@ def _assegna_alternative_a_linee(
         )
     }
 
-    alternative = squadra.get(
-        "alternative",
-        []
-    ) or []
+    alternative = [
+        alternativa
+        for alternativa in (
+            squadra.get(
+                "alternative",
+                []
+            )
+            or []
+        )
+        if _goal_nome_valido(
+            alternativa.get(
+                "nome",
+                ""
+            )
+        )
+    ]
 
     for alternativa in alternative:
 
@@ -4012,7 +4112,11 @@ def _assegna_alternative_a_linee(
         )
 
         ruoli = _ruoli_mantra_goal(
-            nome
+            nome,
+            squadra.get(
+                "squadra",
+                ""
+            )
         )
 
         # Proviamo tutti i ruoli del giocatore.
@@ -4190,7 +4294,13 @@ def mostra_probabile(
         giocatori_html = ""
 
         for indice_slot, nome_raw in enumerate(
-            linea
+            [
+                nome
+                for nome in linea
+                if _goal_nome_valido(
+                    nome
+                )
+            ]
         ):
 
             nome = html.escape(
@@ -4200,7 +4310,11 @@ def mostra_probabile(
             )
 
             ruoli = _ruoli_mantra_goal(
-                nome_raw
+                nome_raw,
+                squadra.get(
+                    "squadra",
+                    ""
+                )
             )
 
             ruolo = html.escape(
@@ -9284,70 +9398,102 @@ st.markdown("""
 }
 
 .pf-player-goal{
-    width:122px !important;
-    min-height:48px !important;
-    padding:7px 5px !important;
+    width:150px !important;
+    min-height:62px !important;
+    padding:8px 8px !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
 }
 
 .pf-main-player,
 .pf-sub-player{
-    display:flex;
-    align-items:baseline;
-    justify-content:center;
-    gap:5px;
-    width:100%;
-    white-space:nowrap;
+    display:block !important;
+    width:100% !important;
+    text-align:center !important;
+    white-space:normal !important;
+    overflow:hidden !important;
 }
 
 .pf-main-player .pf-name{
-    font-size:.82rem !important;
+    display:block !important;
+    width:100% !important;
+    font-size:.90rem !important;
+    line-height:1.12 !important;
     font-weight:900 !important;
-    overflow:hidden;
-    text-overflow:ellipsis;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+    white-space:nowrap !important;
 }
 
 .pf-mantra-role{
-    color:#475569;
-    font-size:.64rem;
-    font-weight:900;
-    flex:0 0 auto;
+    display:block !important;
+    margin-top:3px !important;
+    color:#475569 !important;
+    font-size:.69rem !important;
+    line-height:1 !important;
+    font-weight:900 !important;
 }
 
 .pf-sub-player{
-    margin-top:5px;
-    padding-top:4px;
-    border-top:1px solid #dbeafe;
+    margin-top:7px !important;
+    padding-top:6px !important;
+    border-top:1px solid #cbd5e1 !important;
 }
 
 .pf-sub-name{
-    color:#2563eb;
-    font-size:.76rem;
-    font-weight:900;
-    overflow:hidden;
-    text-overflow:ellipsis;
+    display:block !important;
+    width:100% !important;
+    color:#2563eb !important;
+    font-size:.84rem !important;
+    line-height:1.10 !important;
+    font-weight:900 !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+    white-space:nowrap !important;
 }
 
 .pf-sub-role{
-    color:#2563eb;
-    font-size:.62rem;
-    font-weight:900;
-    flex:0 0 auto;
+    display:block !important;
+    margin-top:3px !important;
+    color:#2563eb !important;
+    font-size:.67rem !important;
+    line-height:1 !important;
+    font-weight:900 !important;
+}
+
+.pf-line{
+    gap:12px !important;
+    padding:4px 0 !important;
 }
 
 @media(max-width:768px){
+    .pf-pitch{
+        min-height:430px !important;
+        padding-left:3px !important;
+        padding-right:3px !important;
+    }
+
+    .pf-line{
+        gap:4px !important;
+    }
+
     .pf-player-goal{
-        width:88px !important;
-        padding:5px 3px !important;
+        width:94px !important;
+        min-height:58px !important;
+        padding:6px 4px !important;
     }
+
     .pf-main-player .pf-name{
-        font-size:.66rem !important;
+        font-size:.71rem !important;
     }
+
     .pf-sub-name{
-        font-size:.62rem !important;
+        font-size:.67rem !important;
     }
+
     .pf-mantra-role,
     .pf-sub-role{
-        font-size:.54rem !important;
+        font-size:.56rem !important;
     }
 }
 </style>
