@@ -3128,145 +3128,468 @@ def _goal_parse_formation_line(line):
 
 def aggiorna_probabili_web():
     """
-    Source: GOAL Italia, seasonal Serie A formations.
+    Aggiorna le formazioni tipo stagionali da GOAL Italia.
 
-    Reliability rules:
-    - reads GOAL's explicit FORMATION TYPE, not inferred percentages;
-    - keeps semicolon-separated tactical lines exactly as published;
-    - accepts a team only when the source supplies exactly 11 starters;
-    - 'Altri possibili titolari' are stored as BALLOTTAGGIO;
-    - no player is invented and no reserve is inferred.
+    FIX V2:
+    GOAL non espone sempre i blocchi come elementi HTML separati.
+    Per questo non cerchiamo più una sequenza rigida di tag, ma:
+    1) estraiamo tutto il testo leggibile della pagina;
+    2) lo normalizziamo in una singola stringa;
+    3) individuiamo ogni blocco "PROBABILE FORMAZIONE ...";
+    4) leggiamo modulo e XI esattamente come pubblicati;
+    5) accettiamo solo squadre con esattamente 11 giocatori.
+
+    Nessun giocatore viene ricollocato o inventato.
     """
-    req = urllib.request.Request(
+
+    richiesta = urllib.request.Request(
         URL_PROBABILI_FORMAZIONI,
         headers={
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 Chrome/152 Safari/537.36"
             ),
-            "Accept-Language": "it-IT,it;q=0.9,en;q=0.7"
+            "Accept-Language":
+                "it-IT,it;q=0.9,en;q=0.7"
         }
     )
 
-    with urllib.request.urlopen(req, timeout=25) as r:
-        raw = r.read().decode("utf-8", "ignore")
+    with urllib.request.urlopen(
+        richiesta,
+        timeout=25
+    ) as risposta:
+
+        raw = risposta.read().decode(
+            "utf-8",
+            "ignore"
+        )
 
     parser = GoalTextParser()
-    parser.feed(raw)
+    parser.feed(
+        raw
+    )
 
-    # Collapse duplicate consecutive fragments.
-    items = []
-    for x in parser.items:
-        if not items or items[-1] != x:
-            items.append(x)
+    # ----------------------------------------------------------
+    # 1. Costruiamo un testo continuo e pulito.
+    # ----------------------------------------------------------
 
-    teams = []
-    i = 0
-    while i < len(items):
-        head = re.match(
-            r"^PROBABILE FORMAZIONE\s+(.+)$",
-            items[i],
+    parti = []
+
+    for elemento in parser.items:
+
+        testo = re.sub(
+            r"\s+",
+            " ",
+            str(
+                elemento
+            )
+        ).strip()
+
+        if testo:
+            parti.append(
+                testo
+            )
+
+    testo_completo = " ".join(
+        parti
+    )
+
+    # Entità / spazi non separabili che possono comparire
+    # nella pagina.
+    testo_completo = (
+        testo_completo
+        .replace("\xa0", " ")
+        .replace("–", "-")
+        .replace("—", "-")
+    )
+
+    testo_completo = re.sub(
+        r"\s+",
+        " ",
+        testo_completo
+    ).strip()
+
+    # ----------------------------------------------------------
+    # 2. Isoliamo i blocchi squadra.
+    # ----------------------------------------------------------
+
+    pattern_blocchi = re.compile(
+        r"PROBABILE FORMAZIONE\s+"
+        r"(?P<squadra>[A-ZÀ-ÖØ-Ý' .-]+?)\s+"
+        r"FORMAZIONE TIPO"
+        r"(?P<contenuto>.*?)"
+        r"(?="
+            r"PROBABILE FORMAZIONE\s+"
+            r"[A-ZÀ-ÖØ-Ý' .-]+?\s+"
+            r"FORMAZIONE TIPO"
+            r"|TI È PIACIUTA QUESTA STORIA"
+            r"|$"
+        r")",
+        flags=re.IGNORECASE
+    )
+
+    squadre = []
+
+    for match in pattern_blocchi.finditer(
+        testo_completo
+    ):
+
+        nome_squadra = re.sub(
+            r"\s+",
+            " ",
+            match.group(
+                "squadra"
+            )
+        ).strip(
+            " -"
+        )
+
+        blocco = match.group(
+            "contenuto"
+        )
+
+        # Allenatore facoltativo.
+        allenatore = ""
+
+        match_allenatore = re.search(
+            r"\(Allenatore\s*:\s*([^)]+)\)",
+            blocco,
             flags=re.IGNORECASE
         )
-        if not head:
-            i += 1
-            continue
 
-        team = head.group(1).strip().title()
-        j = i + 1
-        formation = None
-        alternatives = []
-        coach = ""
+        if match_allenatore:
 
-        while j < len(items):
-            if re.match(r"^PROBABILE FORMAZIONE\s+", items[j], re.I):
-                break
+            allenatore = (
+                match_allenatore
+                .group(
+                    1
+                )
+                .strip()
+            )
 
-            if items[j].upper().startswith("FORMAZIONE TIPO"):
-                cm = re.search(r"Allenatore\s*:\s*([^)]+)", items[j], re.I)
-                if cm:
-                    coach = cm.group(1).strip()
+        # ------------------------------------------------------
+        # 3. Modulo + XI.
+        #
+        # Esempio GOAL:
+        # (3-5-2): Martinez; Bisseck, Akanji, Bastoni;
+        # Spence, Barella, ...; Lautaro, Thuram.
+        # ------------------------------------------------------
 
-            parsed = _goal_parse_formation_line(items[j])
-            if parsed and formation is None:
-                formation = parsed
-
-            if items[j].lower().startswith("altri possibili titolari"):
-                tail = items[j].split(":", 1)[1] if ":" in items[j] else ""
-                alternatives = _goal_split_names(tail)
-
-            j += 1
-
-        if formation:
-            teams.append({
-                "squadra": team,
-                "allenatore": coach,
-                "modulo": formation["modulo"],
-                "linee_fonte": formation["linee_fonte"],
-                "formazione": [
-                    {"nome": n, "status": "TITOLARE"}
-                    for n in formation["titolari"]
-                ],
-                "alternative": [
-                    {"nome": n, "status": "BALLOTTAGGIO"}
-                    for n in alternatives
-                ]
-            })
-
-        i = max(j, i + 1)
-
-    # Deduplicate teams.
-    unique = {}
-    for s in teams:
-        unique[s["squadra"].upper()] = s
-    teams = list(unique.values())
-
-    # Strict: all 20 teams and 11 starters each.
-    invalid = [
-        s["squadra"] for s in teams
-        if len(s.get("formazione", [])) != 11
-    ]
-    if len(teams) != 20 or invalid:
-        raise RuntimeError(
-            "Aggiornamento annullato: GOAL ha restituito "
-            f"{len(teams)} squadre valide su 20"
-            + (f"; formazioni non valide: {', '.join(invalid)}" if invalid else "")
-            + ". La cache precedente non è stata modificata."
+        match_formazione = re.search(
+            r"\(([1-5](?:-[1-5]){2,4})\)\s*:\s*"
+            r"(.+?)"
+            r"(?="
+                r"\s+Altri possibili titolari\s*:"
+                r"|$"
+            r")",
+            blocco,
+            flags=re.IGNORECASE
         )
 
+        if not match_formazione:
+
+            continue
+
+        modulo = (
+            match_formazione
+            .group(
+                1
+            )
+            .strip()
+        )
+
+        testo_formazione = (
+            match_formazione
+            .group(
+                2
+            )
+            .strip()
+            .rstrip(
+                "."
+            )
+        )
+
+        # Le linee tattiche di GOAL sono separate da ";"
+        linee_fonte = []
+
+        for gruppo in testo_formazione.split(
+            ";"
+        ):
+
+            nomi = _goal_split_names(
+                gruppo
+            )
+
+            if nomi:
+
+                linee_fonte.append(
+                    nomi
+                )
+
+        titolari = [
+            nome
+            for linea in linee_fonte
+            for nome in linea
+        ]
+
+        # Controllo fondamentale:
+        # non salviamo mai una formazione incompleta.
+        if len(
+            titolari
+        ) != 11:
+
+            continue
+
+        # ------------------------------------------------------
+        # 4. Altri possibili titolari.
+        # ------------------------------------------------------
+
+        alternative = []
+
+        match_alternative = re.search(
+            r"Altri possibili titolari\s*:\s*"
+            r"(.+?)"
+            r"(?="
+                r"\s+PROBABILE FORMAZIONE"
+                r"|$"
+            r")",
+            blocco,
+            flags=re.IGNORECASE
+        )
+
+        if match_alternative:
+
+            testo_alternative = (
+                match_alternative
+                .group(
+                    1
+                )
+                .strip()
+                .rstrip(
+                    "."
+                )
+            )
+
+            # Pulizia di eventuali elementi editoriali che,
+            # in alcune versioni della pagina, seguono la lista.
+            testo_alternative = re.split(
+                r"\s+(?:TI È PIACIUTA|Aggiungi GOAL|Segui GOAL)\b",
+                testo_alternative,
+                maxsplit=1,
+                flags=re.IGNORECASE
+            )[0]
+
+            alternative = (
+                _goal_split_names(
+                    testo_alternative
+                )
+            )
+
+        squadre.append({
+            "squadra":
+                nome_squadra.title(),
+
+            "allenatore":
+                allenatore,
+
+            "modulo":
+                modulo,
+
+            # Manteniamo esattamente le linee pubblicate dalla fonte.
+            "linee_fonte":
+                linee_fonte,
+
+            "formazione": [
+                {
+                    "nome":
+                        nome,
+                    "status":
+                        "TITOLARE"
+                }
+                for nome in titolari
+            ],
+
+            "alternative": [
+                {
+                    "nome":
+                        nome,
+                    "status":
+                        "BALLOTTAGGIO"
+                }
+                for nome in alternative
+            ]
+        })
+
+    # ----------------------------------------------------------
+    # 5. Deduplica.
+    # ----------------------------------------------------------
+
+    uniche = {}
+
+    for squadra in squadre:
+
+        chiave = str(
+            squadra.get(
+                "squadra",
+                ""
+            )
+        ).strip().upper()
+
+        if (
+            chiave
+            and chiave
+            not in uniche
+        ):
+
+            uniche[
+                chiave
+            ] = squadra
+
+    squadre = list(
+        uniche.values()
+    )
+
+    # ----------------------------------------------------------
+    # 6. Validazione.
+    # ----------------------------------------------------------
+
+    non_valide = [
+        s.get(
+            "squadra",
+            "?"
+        )
+        for s in squadre
+        if len(
+            s.get(
+                "formazione",
+                []
+            )
+        ) != 11
+    ]
+
+    if (
+        len(
+            squadre
+        ) != 20
+        or non_valide
+    ):
+
+        nomi_trovati = ", ".join(
+            s.get(
+                "squadra",
+                "?"
+            )
+            for s in squadre
+        )
+
+        raise RuntimeError(
+            "Aggiornamento annullato: sono state riconosciute "
+            f"{len(squadre)} squadre valide su 20. "
+            + (
+                "Formazioni incomplete: "
+                + ", ".join(
+                    non_valide
+                )
+                + ". "
+                if non_valide
+                else ""
+            )
+            + (
+                "Squadre riconosciute: "
+                + nomi_trovati
+                if nomi_trovati
+                else "Nessuna squadra riconosciuta."
+            )
+        )
+
+    # ----------------------------------------------------------
+    # 7. Salvataggio nuova cache V4.
+    # ----------------------------------------------------------
+
     dati = {
-        "versione_dati": 3,
-        "fonte": URL_PROBABILI_FORMAZIONI,
-        "scaricato_il": datetime.now(
-            ZoneInfo("Europe/Rome")
-        ).strftime("%d/%m/%Y %H:%M"),
-        "squadre": teams
+        "versione_dati":
+            4,
+
+        "fonte":
+            URL_PROBABILI_FORMAZIONI,
+
+        "scaricato_il":
+            datetime.now(
+                ZoneInfo(
+                    "Europe/Rome"
+                )
+            ).strftime(
+                "%d/%m/%Y %H:%M"
+            ),
+
+        "squadre":
+            squadre
     }
 
     salva_config_generica(
-        "formazioni_tipo_goal_v1",
-        json.dumps(dati, ensure_ascii=False)
+        "formazioni_tipo_goal_v2",
+        json.dumps(
+            dati,
+            ensure_ascii=False
+        )
     )
+
     return dati
 
-
 def carica_probabili_web():
-    raw = leggi_config_generica("formazioni_tipo_goal_v1", "")
+
+    raw = leggi_config_generica(
+        "formazioni_tipo_goal_v2",
+        ""
+    )
+
     if not raw:
         return None
+
     try:
-        dati = json.loads(raw)
-        if isinstance(dati, dict) and dati.get("versione_dati") == 3:
-            # Refuse malformed cache too.
-            squadre = dati.get("squadre", [])
-            if len(squadre) == 20 and all(
-                len(s.get("formazione", [])) == 11 for s in squadre
+
+        dati = json.loads(
+            raw
+        )
+
+        if (
+            isinstance(
+                dati,
+                dict
+            )
+            and dati.get(
+                "versione_dati"
+            ) == 4
+        ):
+
+            squadre = (
+                dati.get(
+                    "squadre",
+                    []
+                )
+            )
+
+            if (
+                len(
+                    squadre
+                ) == 20
+                and all(
+                    len(
+                        s.get(
+                            "formazione",
+                            []
+                        )
+                    ) == 11
+                    for s in squadre
+                )
             ):
+
                 return dati
+
     except Exception:
         pass
-    return None
 
+    return None
 
 def _goal_visual_lines(squadra):
     """
