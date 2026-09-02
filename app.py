@@ -4057,19 +4057,9 @@ def mostra_probabile(
                     )
                 )
 
-                if status == "BALLOTTAGGIO":
-                    etichetta_alt = (
-                        "Ballottaggio: "
-                    )
-                else:
-                    etichetta_alt = (
-                        "Riserva: "
-                    )
-
                 alternativa_html = (
                     '<div class="pf-alt">'
-                    + etichetta_alt
-                    + '<span style="color:'
+                    '<span style="color:'
                     + colore_alt
                     + ';">'
                     + nome_alt
@@ -4093,9 +4083,6 @@ def mostra_probabile(
                 + ';">'
                 + nome
                 + '</div>'
-                '<div class="pf-role">'
-                'Giocatore titolare'
-                '</div>'
                 + alternativa_html
                 + '</div>'
             )
@@ -9087,8 +9074,8 @@ with m8:
 st.markdown('''<style>
 .pf-team{background:#071a2f;color:white;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:900;display:flex;justify-content:space-between}.pf-team span{color:#f5b51b}
 .pf-pitch{min-height:420px;padding:16px 7px;border:3px solid white;border-radius:0 0 11px 11px;background:repeating-linear-gradient(90deg,#16863b 0,#16863b 46px,#118039 46px,#118039 92px);display:flex;flex-direction:column;justify-content:space-around;box-shadow:0 3px 12px #0002}
-.pf-line{display:flex;justify-content:space-around;gap:4px}.pf-player{width:105px;min-height:72px;background:#fffffff2;border-radius:8px;padding:6px 4px;text-align:center;box-shadow:0 2px 6px #0003}.pf-name{font-size:.72rem;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pf-role{font-size:.58rem;color:#64748b;font-weight:700;margin-top:3px}.pf-alt{font-size:.56rem;color:#64748b;margin-top:4px;line-height:1.12}.pf-alt span{font-weight:900}
-@media(max-width:768px){.pf-pitch{min-height:410px}.pf-player{width:76px;min-height:74px}.pf-name{font-size:.60rem}.pf-role,.pf-alt{font-size:.50rem}}
+.pf-line{display:flex;justify-content:space-around;gap:4px}.pf-player{width:112px;min-height:58px;background:#fffffff2;border-radius:8px;padding:7px 5px;text-align:center;box-shadow:0 2px 6px #0003}.pf-name{font-size:.82rem;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pf-alt{font-size:.82rem;margin-top:6px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pf-alt span{font-size:.82rem;font-weight:900}
+@media(max-width:768px){.pf-pitch{min-height:410px}.pf-player{width:82px;min-height:58px}.pf-name,.pf-alt,.pf-alt span{font-size:.66rem}}
 </style>''',unsafe_allow_html=True)
 
 # ============================================================
