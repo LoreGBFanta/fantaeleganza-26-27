@@ -4373,8 +4373,25 @@ def mostra_probabile(
                 + '</div>'
             )
 
+        numero_card_linea = max(
+            1,
+            len(
+                [
+                    nome
+                    for nome in linea
+                    if _goal_nome_valido(
+                        nome
+                    )
+                ]
+            )
+        )
+
         righe_html += (
-            '<div class="pf-line">'
+            '<div class="pf-line pf-line-count-'
+            + str(
+                numero_card_linea
+            )
+            + '">'
             + giocatori_html
             + '</div>'
         )
@@ -9396,129 +9413,192 @@ st.markdown("""
     margin:2px 10px 2px 0;
 }
 
-.pf-player-goal{
-    width:230px !important;
-    min-width:230px !important;
-    min-height:96px !important;
-    padding:10px 12px !important;
+.pf-line{
+    width:100% !important;
+    max-width:100% !important;
     box-sizing:border-box !important;
-    overflow:visible !important;
+    gap:10px !important;
+    padding:7px 8px !important;
+    align-items:stretch !important;
+    justify-content:center !important;
+    overflow:hidden !important;
+}
+
+.pf-player-goal{
+    /* La larghezza reale viene determinata dalla linea.
+       Mai più una min-width fissa che possa far uscire la card. */
+    width:auto !important;
+    min-width:0 !important;
+    max-width:230px !important;
+    flex:1 1 0 !important;
+
+    min-height:92px !important;
+    padding:9px 8px !important;
+    box-sizing:border-box !important;
+
     border:1px solid rgba(15,23,42,.10) !important;
     border-radius:14px !important;
     background:rgba(255,255,255,.97) !important;
 
-    /* FIX DECISIVO: titolare sopra, alternativa sotto */
     display:flex !important;
     flex-direction:column !important;
     align-items:stretch !important;
     justify-content:center !important;
+
+    overflow:hidden !important;
 }
 
-.pf-main-player{
-    display:flex !important;
-    flex:0 0 auto !important;
-    align-items:baseline !important;
-    justify-content:center !important;
-    gap:7px !important;
-    width:100% !important;
-    text-align:center !important;
-    white-space:nowrap !important;
-    overflow:visible !important;
-}
-
-.pf-main-player .pf-name{
-    display:inline !important;
-    color:#16a34a !important;
-    font-size:1.00rem !important;
-    line-height:1.10 !important;
-    font-weight:900 !important;
-    white-space:nowrap !important;
-    overflow:visible !important;
-    text-overflow:clip !important;
-}
-
-.pf-mantra-role{
-    display:inline !important;
-    margin:0 !important;
-    color:#111827 !important;
-    font-size:.82rem !important;
-    line-height:1 !important;
-    font-weight:900 !important;
-    white-space:nowrap !important;
-}
-
+.pf-main-player,
 .pf-sub-player{
     display:flex !important;
     flex:0 0 auto !important;
     align-items:baseline !important;
     justify-content:center !important;
-    gap:7px !important;
+    gap:5px !important;
     width:100% !important;
-    text-align:center !important;
+
     white-space:nowrap !important;
-    overflow:visible !important;
-    margin-top:14px !important;
-    padding-top:0 !important;
-    border-top:0 !important;
+    overflow:hidden !important;
 }
 
+.pf-main-player .pf-name,
 .pf-sub-name{
-    display:inline !important;
-    color:#2563eb !important;
-    font-size:1.00rem !important;
+    display:inline-block !important;
+    min-width:0 !important;
+    max-width:100% !important;
+
+    font-size:.96rem !important;
     line-height:1.10 !important;
     font-weight:900 !important;
+
     white-space:nowrap !important;
     overflow:visible !important;
     text-overflow:clip !important;
 }
 
+.pf-main-player .pf-name{
+    color:#16a34a !important;
+}
+
+.pf-sub-name{
+    color:#2563eb !important;
+}
+
+.pf-mantra-role,
 .pf-sub-role{
-    display:inline !important;
+    display:inline-block !important;
+    flex:0 0 auto !important;
+
     margin:0 !important;
     color:#111827 !important;
-    font-size:.82rem !important;
+
+    font-size:.75rem !important;
     line-height:1 !important;
     font-weight:900 !important;
+
     white-space:nowrap !important;
 }
 
-.pf-line{
-    gap:16px !important;
-    padding:8px 0 !important;
-    align-items:stretch !important;
+.pf-sub-player{
+    margin-top:10px !important;
+    padding-top:0 !important;
+    border-top:0 !important;
+}
+
+/* ==========================================================
+   RIDUZIONE PROGRESSIVA DEI CARATTERI
+   Più giocatori ci sono nella linea, più la card si restringe.
+   ========================================================== */
+
+.pf-line-count-1 .pf-player-goal{
+    max-width:260px !important;
+}
+
+.pf-line-count-2 .pf-player-goal{
+    max-width:245px !important;
+}
+
+.pf-line-count-3 .pf-player-goal{
+    max-width:220px !important;
+}
+
+.pf-line-count-4 .pf-main-player .pf-name,
+.pf-line-count-4 .pf-sub-name{
+    font-size:.83rem !important;
+}
+
+.pf-line-count-4 .pf-mantra-role,
+.pf-line-count-4 .pf-sub-role{
+    font-size:.65rem !important;
+}
+
+.pf-line-count-5 .pf-main-player .pf-name,
+.pf-line-count-5 .pf-sub-name{
+    font-size:.73rem !important;
+}
+
+.pf-line-count-5 .pf-mantra-role,
+.pf-line-count-5 .pf-sub-role{
+    font-size:.57rem !important;
+}
+
+.pf-line-count-5{
+    gap:6px !important;
+    padding-left:5px !important;
+    padding-right:5px !important;
 }
 
 @media(max-width:768px){
     .pf-pitch{
         min-height:470px !important;
+        padding-left:1px !important;
+        padding-right:1px !important;
+    }
+
+    .pf-line{
+        gap:3px !important;
         padding-left:2px !important;
         padding-right:2px !important;
     }
 
-    .pf-line{
-        gap:4px !important;
-    }
-
     .pf-player-goal{
-        width:132px !important;
-        min-width:132px !important;
-        min-height:84px !important;
-        padding:7px 6px !important;
+        min-height:78px !important;
+        padding:6px 3px !important;
+        border-radius:9px !important;
     }
 
     .pf-main-player .pf-name,
     .pf-sub-name{
-        font-size:.76rem !important;
+        font-size:.68rem !important;
     }
 
     .pf-mantra-role,
     .pf-sub-role{
-        font-size:.61rem !important;
+        font-size:.52rem !important;
+    }
+
+    .pf-line-count-4 .pf-main-player .pf-name,
+    .pf-line-count-4 .pf-sub-name{
+        font-size:.58rem !important;
+    }
+
+    .pf-line-count-4 .pf-mantra-role,
+    .pf-line-count-4 .pf-sub-role{
+        font-size:.46rem !important;
+    }
+
+    .pf-line-count-5 .pf-main-player .pf-name,
+    .pf-line-count-5 .pf-sub-name{
+        font-size:.51rem !important;
+    }
+
+    .pf-line-count-5 .pf-mantra-role,
+    .pf-line-count-5 .pf-sub-role{
+        font-size:.41rem !important;
     }
 
     .pf-sub-player{
-        margin-top:10px !important;
+        margin-top:7px !important;
     }
 }
 </style>
