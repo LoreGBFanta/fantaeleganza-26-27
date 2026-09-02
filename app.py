@@ -66,7 +66,7 @@ MAX_UNDO = 10
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "fantacalcio.db"
-URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558"
+URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio.it/amp/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558"
 
 MAX_SNAPSHOT = 30
 
@@ -3457,13 +3457,13 @@ def _fc_parse_formazione(
 
 def _fc_parse_ballottaggi(testo):
     """
-    Restituisce le coppie nell'ordine pubblicato dalla fonte.
+    Legge i ballottaggi espliciti pubblicati da Fantacalcio.it.
 
-    Esempio:
-        Bellanova/Zappacosta;
-        Kristensen/Hien
+    La fonte usa sia ";" sia "," per separare le coppie:
+        Zappacosta/Bellanova; Hien/Kolasinac
+        Stones/Bisseck, Diouf/Luis Henrique
 
-    Eventuali note tra parentesi vengono rimosse.
+    Le note editoriali tra parentesi vengono eliminate.
     """
 
     testo = re.sub(
@@ -3477,8 +3477,10 @@ def _fc_parse_ballottaggi(testo):
 
     coppie = []
 
-    for blocco in testo.split(
-        ";"
+    # Fantacalcio.it usa indifferentemente virgole e punti e virgola.
+    for blocco in re.split(
+        r"[;,]",
+        testo
     ):
 
         blocco = re.sub(
@@ -3518,19 +3520,11 @@ def _fc_parse_ballottaggi(testo):
         ):
 
             coppie.append({
-                "a":
-                    parti[
-                        0
-                    ],
-
-                "b":
-                    parti[
-                        1
-                    ]
+                "a": parti[0],
+                "b": parti[1]
             })
 
     return coppie
-
 
 def aggiorna_probabili_web():
     """
@@ -3546,26 +3540,75 @@ def aggiorna_probabili_web():
     Nessuna "riserva" viene inventata.
     """
 
-    richiesta = urllib.request.Request(
-        URL_PROBABILI_FORMAZIONI,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 Chrome/152 Safari/537.36"
-            ),
-            "Accept-Language":
-                "it-IT,it;q=0.9,en;q=0.7"
-        }
-    )
+    urls_da_provare = [
+        "https://www.fantacalcio.it/amp/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558",
+        "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558"
+    ]
 
-    with urllib.request.urlopen(
-        richiesta,
-        timeout=25
-    ) as risposta:
+    raw = ""
+    ultimo_errore = None
 
-        raw = risposta.read().decode(
-            "utf-8",
-            "ignore"
+    for url_download in urls_da_provare:
+
+        try:
+
+            richiesta = urllib.request.Request(
+                url_download,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 Chrome/152 Safari/537.36"
+                    ),
+                    "Accept":
+                        "text/html,application/xhtml+xml",
+                    "Accept-Language":
+                        "it-IT,it;q=0.9,en;q=0.7",
+                    "Cache-Control":
+                        "no-cache"
+                }
+            )
+
+            with urllib.request.urlopen(
+                richiesta,
+                timeout=25
+            ) as risposta:
+
+                raw = risposta.read().decode(
+                    "utf-8",
+                    "ignore"
+                )
+
+            # Controllo immediato: non basta ricevere HTTP 200.
+            # La pagina deve contenere realmente i dati editoriali.
+            if (
+                "Probabile formazione" in raw
+                and "Ballottaggi" in raw
+                and "ATALANTA" in raw.upper()
+            ):
+                break
+
+            raw = ""
+
+        except Exception as exc:
+
+            ultimo_errore = exc
+            raw = ""
+
+    if not raw:
+
+        dettaglio = (
+            str(
+                ultimo_errore
+            )
+            if ultimo_errore
+            else "pagina ricevuta senza contenuto utile"
+        )
+
+        raise RuntimeError(
+            "Fantacalcio.it è raggiungibile ma il server dell'app "
+            "non ha ricevuto il contenuto delle formazioni. "
+            "Dettaglio: "
+            + dettaglio
         )
 
     parser = (
@@ -3768,10 +3811,10 @@ def aggiorna_probabili_web():
 
     dati = {
         "versione_dati":
-            10,
+            11,
 
         "fonte":
-            URL_PROBABILI_FORMAZIONI,
+            "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558",
 
         "scaricato_il":
             datetime.now(
@@ -3787,7 +3830,7 @@ def aggiorna_probabili_web():
     }
 
     salva_config_generica(
-        "formazioni_tipo_fantacalcio_v10",
+        "formazioni_tipo_fantacalcio_v11",
         json.dumps(
             dati,
             ensure_ascii=False
@@ -3799,7 +3842,7 @@ def aggiorna_probabili_web():
 def carica_probabili_web():
 
     raw = leggi_config_generica(
-        "formazioni_tipo_fantacalcio_v10",
+        "formazioni_tipo_fantacalcio_v11",
         ""
     )
 
@@ -3819,7 +3862,7 @@ def carica_probabili_web():
             )
             and dati.get(
                 "versione_dati"
-            ) == 10
+            ) == 11
         ):
 
             squadre = (
