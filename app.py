@@ -7,6 +7,7 @@ import os
 import sqlite3
 import re
 import urllib.request
+import unicodedata
 from html.parser import HTMLParser
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -3591,35 +3592,697 @@ def carica_probabili_web():
 
     return None
 
-def _goal_visual_lines(squadra):
+def _normalizza_nome_goal(nome):
+    testo = unicodedata.normalize(
+        "NFKD",
+        str(
+            nome
+            or ""
+        )
+    )
+
+    testo = "".join(
+        carattere
+        for carattere in testo
+        if not unicodedata.combining(
+            carattere
+        )
+    )
+
+    testo = testo.lower()
+
+    testo = re.sub(
+        r"[^a-z0-9 ]",
+        " ",
+        testo
+    )
+
+    return re.sub(
+        r"\s+",
+        " ",
+        testo
+    ).strip()
+
+
+def _trova_giocatore_listone(nome_goal):
     """
-    GOAL line order is goalkeeper -> defence -> midfield/... -> attack.
-    The pitch is rendered attack -> ... -> goalkeeper.
+    Collega il nome GOAL al listone già caricato nell'app.
+
+    Strategia:
+    1. match esatto normalizzato;
+    2. match per cognome / token principale;
+    3. se ambiguo, preferisce il nome più simile per insieme di token.
     """
-    linee = squadra.get("linee_fonte", []) or []
-    return list(reversed(linee))
 
+    if (
+        "df_completo"
+        not in globals()
+        or df_completo is None
+        or df_completo.empty
+        or "Nome" not in df_completo.columns
+    ):
+        return None
 
-def mostra_probabile(squadra):
-    linee = _goal_visual_lines(squadra)
-    rows = ""
+    target = _normalizza_nome_goal(
+        nome_goal
+    )
 
-    # Only GOAL's exact starting XI goes on the pitch.
-    for linea in linee:
-        players = ""
-        for nome_raw in linea:
-            nome = html.escape(str(nome_raw))
-            players += (
-                '<div class="pf-player pf-player-goal">'
-                '<div class="pf-name" style="color:#16a34a;">'
-                + nome +
-                '</div>'
-                '</div>'
+    if not target:
+        return None
+
+    candidati = []
+
+    for _, riga in df_completo.iterrows():
+
+        nome_listone = str(
+            riga.get(
+                "Nome",
+                ""
             )
-        rows += '<div class="pf-line">' + players + '</div>'
+        )
 
-    titolo = html.escape(str(squadra.get("squadra", "")))
-    modulo = html.escape(str(squadra.get("modulo", "")))
+        normalizzato = _normalizza_nome_goal(
+            nome_listone
+        )
+
+        if not normalizzato:
+            continue
+
+        if normalizzato == target:
+            return riga
+
+        token_target = set(
+            target.split()
+        )
+
+        token_listone = set(
+            normalizzato.split()
+        )
+
+        intersezione = (
+            token_target
+            & token_listone
+        )
+
+        # Cognome / token condiviso.
+        if intersezione:
+            punteggio = (
+                len(
+                    intersezione
+                )
+                * 10
+                - abs(
+                    len(
+                        token_target
+                    )
+                    - len(
+                        token_listone
+                    )
+                )
+            )
+
+            # Bonus se uno dei due testi contiene interamente l'altro.
+            if (
+                target in normalizzato
+                or normalizzato in target
+            ):
+                punteggio += 8
+
+            candidati.append(
+                (
+                    punteggio,
+                    riga
+                )
+            )
+
+    if not candidati:
+        return None
+
+    candidati.sort(
+        key=lambda x: x[0],
+        reverse=True
+    )
+
+    # Evita associazioni troppo deboli.
+    if candidati[
+        0
+    ][
+        0
+    ] < 9:
+        return None
+
+    return candidati[
+        0
+    ][
+        1
+    ]
+
+
+def _ruoli_mantra_goal(nome_goal):
+    riga = _trova_giocatore_listone(
+        nome_goal
+    )
+
+    if riga is None:
+        return []
+
+    rm = str(
+        riga.get(
+            "RM",
+            ""
+        )
+        or ""
+    ).strip()
+
+    if not rm:
+        return []
+
+    return [
+        ruolo.strip()
+        for ruolo in rm.split(
+            ";"
+        )
+        if ruolo.strip()
+    ]
+
+
+def _gruppo_tattico_da_ruolo(ruolo):
+    ruolo = str(
+        ruolo
+        or ""
+    ).strip().upper()
+
+    if ruolo == "POR":
+        return "P"
+
+    if ruolo in {
+        "DC",
+        "B",
+        "DD",
+        "DS"
+    }:
+        return "D"
+
+    if ruolo in {
+        "E",
+        "M",
+        "C"
+    }:
+        return "C"
+
+    if ruolo in {
+        "W",
+        "T",
+        "A",
+        "PC"
+    }:
+        return "A"
+
+    return ""
+
+
+def _ruolo_singolo_per_linea(
+    ruoli,
+    gruppo_linea
+):
+    """
+    Mostra UN SOLO ruolo Mantra, scegliendo quello più coerente
+    con la linea tattica in cui il giocatore viene collocato.
+    """
+
+    ruoli = [
+        str(
+            r
+        ).strip()
+        for r in (
+            ruoli
+            or []
+        )
+        if str(
+            r
+        ).strip()
+    ]
+
+    if not ruoli:
+        return "—"
+
+    preferenze = {
+        "P": [
+            "Por"
+        ],
+        "D": [
+            "Ds",
+            "Dd",
+            "Dc",
+            "B"
+        ],
+        "C": [
+            "E",
+            "M",
+            "C"
+        ],
+        "A": [
+            "W",
+            "T",
+            "A",
+            "Pc"
+        ]
+    }
+
+    for preferito in preferenze.get(
+        gruppo_linea,
+        []
+    ):
+
+        for ruolo in ruoli:
+
+            if ruolo.upper() == preferito.upper():
+                return ruolo
+
+    return ruoli[
+        0
+    ]
+
+
+def _gruppi_linee_goal(
+    modulo,
+    numero_linee
+):
+    """
+    Le linee GOAL arrivano come:
+    P ; D ; C/... ; A
+
+    Restituiamo il gruppo tattico di ciascuna linea
+    nello stesso ordine della fonte.
+    """
+
+    if numero_linee <= 1:
+        return [
+            "P"
+        ]
+
+    # Prima linea = portiere.
+    gruppi = [
+        "P"
+    ]
+
+    # Seconda = difesa.
+    if numero_linee >= 2:
+        gruppi.append(
+            "D"
+        )
+
+    # Ultima = attacco.
+    linee_intermedie = max(
+        0,
+        numero_linee - 3
+    )
+
+    for indice in range(
+        linee_intermedie
+    ):
+        # Se ci sono più linee tra difesa e attacco,
+        # l'ultima intermedia è più offensiva.
+        if (
+            linee_intermedie > 1
+            and indice
+            == linee_intermedie - 1
+        ):
+            gruppi.append(
+                "A"
+            )
+        else:
+            gruppi.append(
+                "C"
+            )
+
+    if numero_linee >= 3:
+        gruppi.append(
+            "A"
+        )
+
+    return gruppi[
+        :numero_linee
+    ]
+
+
+def _goal_visual_lines(
+    squadra
+):
+    """
+    Mantiene ESATTAMENTE le linee tattiche pubblicate da GOAL.
+    Restituisce attacco -> ... -> portiere, come richiesto dal campo.
+    """
+
+    linee = squadra.get(
+        "linee_fonte",
+        []
+    ) or []
+
+    gruppi = _gruppi_linee_goal(
+        squadra.get(
+            "modulo",
+            ""
+        ),
+        len(
+            linee
+        )
+    )
+
+    coppie = list(
+        zip(
+            linee,
+            gruppi
+        )
+    )
+
+    return list(
+        reversed(
+            coppie
+        )
+    )
+
+
+def _assegna_alternative_a_linee(
+    squadra
+):
+    """
+    Colloca gli 'altri possibili titolari' DENTRO il campo.
+
+    La fonte GOAL non indica quale titolare venga sfidato:
+    quindi non inventiamo un accoppiamento individuale.
+    Li assegniamo soltanto alla LINEA TATTICA coerente
+    con un singolo ruolo Mantra ricavato dal listone.
+    """
+
+    linee = squadra.get(
+        "linee_fonte",
+        []
+    ) or []
+
+    gruppi = _gruppi_linee_goal(
+        squadra.get(
+            "modulo",
+            ""
+        ),
+        len(
+            linee
+        )
+    )
+
+    per_linea = {
+        indice: []
+        for indice in range(
+            len(
+                linee
+            )
+        )
+    }
+
+    alternative = squadra.get(
+        "alternative",
+        []
+    ) or []
+
+    for alternativa in alternative:
+
+        nome = alternativa.get(
+            "nome",
+            ""
+        )
+
+        ruoli = _ruoli_mantra_goal(
+            nome
+        )
+
+        # Proviamo tutti i ruoli del giocatore.
+        gruppi_possibili = [
+            _gruppo_tattico_da_ruolo(
+                ruolo
+            )
+            for ruolo in ruoli
+        ]
+
+        gruppi_possibili = [
+            g
+            for g in gruppi_possibili
+            if g
+        ]
+
+        indice_scelto = None
+
+        # Preferisce una linea con gruppo esatto.
+        for gruppo in gruppi_possibili:
+
+            for indice, gruppo_linea in enumerate(
+                gruppi
+            ):
+
+                if gruppo_linea == gruppo:
+
+                    indice_scelto = indice
+
+                    # Per giocatori offensivi, preferisce la linea
+                    # offensiva più avanzata compatibile.
+                    if gruppo == "A":
+                        continue
+
+                    break
+
+            if indice_scelto is not None:
+                break
+
+        # Fallback prudente: centrocampo.
+        if indice_scelto is None:
+
+            candidati_c = [
+                indice
+                for indice, gruppo_linea in enumerate(
+                    gruppi
+                )
+                if gruppo_linea == "C"
+            ]
+
+            indice_scelto = (
+                candidati_c[
+                    0
+                ]
+                if candidati_c
+                else max(
+                    0,
+                    len(
+                        linee
+                    ) - 2
+                )
+            )
+
+        ruolo_singolo = (
+            _ruolo_singolo_per_linea(
+                ruoli,
+                gruppi[
+                    indice_scelto
+                ]
+                if indice_scelto
+                < len(
+                    gruppi
+                )
+                else ""
+            )
+        )
+
+        per_linea[
+            indice_scelto
+        ].append({
+            "nome":
+                nome,
+            "ruolo":
+                ruolo_singolo
+        })
+
+    return per_linea
+
+
+def mostra_probabile(
+    squadra
+):
+    """
+    Rendering:
+    - TITOLARI verdi;
+    - ruolo Mantra accanto al nome;
+    - ALTRI POSSIBILI TITOLARI blu;
+    - alternative direttamente sotto i titolari della stessa linea tattica.
+    """
+
+    linee_originali = squadra.get(
+        "linee_fonte",
+        []
+    ) or []
+
+    gruppi_originali = _gruppi_linee_goal(
+        squadra.get(
+            "modulo",
+            ""
+        ),
+        len(
+            linee_originali
+        )
+    )
+
+    alternative_per_linea = (
+        _assegna_alternative_a_linee(
+            squadra
+        )
+    )
+
+    righe_html = ""
+
+    # Visualizzazione dal reparto offensivo al portiere.
+    for indice_originale in reversed(
+        range(
+            len(
+                linee_originali
+            )
+        )
+    ):
+
+        linea = linee_originali[
+            indice_originale
+        ]
+
+        gruppo_linea = gruppi_originali[
+            indice_originale
+        ]
+
+        alternative_linea = list(
+            alternative_per_linea.get(
+                indice_originale,
+                []
+            )
+        )
+
+        numero_slot = max(
+            1,
+            len(
+                linea
+            )
+        )
+
+        # Distribuzione round-robin delle alternative sotto i titolari
+        # della stessa linea, senza inventare un ballottaggio specifico.
+        alternative_slot = {
+            indice: []
+            for indice in range(
+                numero_slot
+            )
+        }
+
+        for indice_alt, alternativa in enumerate(
+            alternative_linea
+        ):
+
+            alternative_slot[
+                indice_alt
+                % numero_slot
+            ].append(
+                alternativa
+            )
+
+        giocatori_html = ""
+
+        for indice_slot, nome_raw in enumerate(
+            linea
+        ):
+
+            nome = html.escape(
+                str(
+                    nome_raw
+                )
+            )
+
+            ruoli = _ruoli_mantra_goal(
+                nome_raw
+            )
+
+            ruolo = html.escape(
+                _ruolo_singolo_per_linea(
+                    ruoli,
+                    gruppo_linea
+                )
+            )
+
+            alternative_html = ""
+
+            for alternativa in alternative_slot.get(
+                indice_slot,
+                []
+            ):
+
+                nome_alt = html.escape(
+                    str(
+                        alternativa.get(
+                            "nome",
+                            ""
+                        )
+                    )
+                )
+
+                ruolo_alt = html.escape(
+                    str(
+                        alternativa.get(
+                            "ruolo",
+                            "—"
+                        )
+                    )
+                )
+
+                alternative_html += (
+                    '<div class="pf-sub-player">'
+                    '<span class="pf-sub-name">'
+                    + nome_alt
+                    + '</span>'
+                    '<span class="pf-sub-role">'
+                    + ruolo_alt
+                    + '</span>'
+                    '</div>'
+                )
+
+            giocatori_html += (
+                '<div class="pf-player pf-player-goal">'
+                '<div class="pf-main-player">'
+                '<span class="pf-name" style="color:#16a34a;">'
+                + nome
+                + '</span>'
+                '<span class="pf-mantra-role">'
+                + ruolo
+                + '</span>'
+                '</div>'
+                + alternative_html
+                + '</div>'
+            )
+
+        righe_html += (
+            '<div class="pf-line">'
+            + giocatori_html
+            + '</div>'
+        )
+
+    titolo = html.escape(
+        str(
+            squadra.get(
+                "squadra",
+                ""
+            )
+        )
+    )
+
+    modulo = html.escape(
+        str(
+            squadra.get(
+                "modulo",
+                ""
+            )
+        )
+    )
 
     st.markdown(
         '<div class="pf-team">'
@@ -3628,28 +4291,10 @@ def mostra_probabile(squadra):
         + modulo
         + '</span></div>'
         + '<div class="pf-pitch">'
-        + rows
+        + righe_html
         + '</div>',
         unsafe_allow_html=True
     )
-
-    # GOAL does not identify which exact starter each "possible starter"
-    # challenges. We therefore do not invent pairings or tactical positions.
-    alternatives = squadra.get("alternative", []) or []
-    if alternatives:
-        alt_html = "".join(
-            '<span class="pf-alt-chip">'
-            + html.escape(str(g.get("nome", "")))
-            + '</span>'
-            for g in alternatives
-        )
-        st.markdown(
-            '<div class="pf-alt-box">'
-            '<span class="pf-alt-title">ALTRI POSSIBILI TITOLARI</span>'
-            + alt_html +
-            '</div>',
-            unsafe_allow_html=True
-        )
 
 
 def leggi_budget_asta():
@@ -8636,6 +9281,74 @@ st.markdown("""
     font-size:.78rem;
     font-weight:900;
     margin:2px 10px 2px 0;
+}
+
+.pf-player-goal{
+    width:122px !important;
+    min-height:48px !important;
+    padding:7px 5px !important;
+}
+
+.pf-main-player,
+.pf-sub-player{
+    display:flex;
+    align-items:baseline;
+    justify-content:center;
+    gap:5px;
+    width:100%;
+    white-space:nowrap;
+}
+
+.pf-main-player .pf-name{
+    font-size:.82rem !important;
+    font-weight:900 !important;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.pf-mantra-role{
+    color:#475569;
+    font-size:.64rem;
+    font-weight:900;
+    flex:0 0 auto;
+}
+
+.pf-sub-player{
+    margin-top:5px;
+    padding-top:4px;
+    border-top:1px solid #dbeafe;
+}
+
+.pf-sub-name{
+    color:#2563eb;
+    font-size:.76rem;
+    font-weight:900;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.pf-sub-role{
+    color:#2563eb;
+    font-size:.62rem;
+    font-weight:900;
+    flex:0 0 auto;
+}
+
+@media(max-width:768px){
+    .pf-player-goal{
+        width:88px !important;
+        padding:5px 3px !important;
+    }
+    .pf-main-player .pf-name{
+        font-size:.66rem !important;
+    }
+    .pf-sub-name{
+        font-size:.62rem !important;
+    }
+    .pf-mantra-role,
+    .pf-sub-role{
+        font-size:.54rem !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
