@@ -6011,7 +6011,7 @@ def _ruolo_singolo_per_linea(
         []
     ):
 
-        for ruolo in ruoli:
+        for ruolo in reversed(ruoli):
 
             if ruolo.upper() == preferito.upper():
                 return ruolo
