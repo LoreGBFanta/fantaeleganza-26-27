@@ -64,7 +64,7 @@ MAX_UNDO = 10
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "fantacalcio.db"
-URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio-online.com/it/consigli-fantacalcio/formazioni-tipo-serie-a-2026-2027"
+URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio-online.com/it/consigli-fantacalcio/formazioni-tipo-serie-a-2026-2027/amp"
 
 MAX_SNAPSHOT = 30
 
@@ -3058,19 +3058,14 @@ def pf_num(x):
 
 def status_titolarita_da_consenso(percentuale):
     """
-    Converte il consenso delle guide in 3 status operativi.
+    Trasforma il consenso delle guide nei 3 status dell'app.
 
-    TITOLARE:
-        consenso >= 90%
+    TITOLARE      >= 90%
+    BALLOTTAGGIO  60% - 89%
+    RISERVA       < 60%
 
-    BALLOTTAGGIO:
-        consenso tra 60% e 89%
-
-    RISERVA:
-        consenso < 60%
-
-    La percentuale resta nel database come dato tecnico,
-    ma non viene mostrata nell'interfaccia.
+    La percentuale viene conservata solo come dato tecnico
+    e non viene mostrata nell'interfaccia.
     """
 
     try:
@@ -3091,6 +3086,7 @@ def status_titolarita_da_consenso(percentuale):
 
 
 def colore_status_titolarita(status):
+
     status = str(
         status
         or ""
@@ -3105,32 +3101,369 @@ def colore_status_titolarita(status):
     return "#dc2626"
 
 
+class FormazioniTipoAMPParser(HTMLParser):
+    """
+    Parser mirato alla pagina AMP di Fantacalcio-Online.
+
+    La pagina contiene blocchi:
+        <h3>Formazione tipo Atalanta — 4-3-3 (...)</h3>
+        <table>
+            R | Titolare | Probabilità di giocare | Quot.
+            ...
+        </table>
+
+    Leggiamo soltanto questi blocchi, ignorando tutto il resto
+    dell'articolo.
+    """
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.in_h3 = False
+        self.h3_parts = []
+
+        self.current_team = None
+        self.current_module = None
+
+        self.in_table = False
+        self.current_rows = []
+
+        self.in_cell = False
+        self.cell_parts = []
+        self.current_row = []
+
+        self.squadre = []
+
+
+    def handle_starttag(
+        self,
+        tag,
+        attrs
+    ):
+
+        tag = str(
+            tag
+        ).lower()
+
+        if tag == "h3":
+
+            self.in_h3 = True
+            self.h3_parts = []
+
+        elif (
+            tag == "table"
+            and self.current_team
+        ):
+
+            self.in_table = True
+            self.current_rows = []
+
+        elif (
+            tag == "tr"
+            and self.in_table
+        ):
+
+            self.current_row = []
+
+        elif (
+            tag in (
+                "td",
+                "th"
+            )
+            and self.in_table
+        ):
+
+            self.in_cell = True
+            self.cell_parts = []
+
+
+    def handle_data(
+        self,
+        data
+    ):
+
+        testo = re.sub(
+            r"\s+",
+            " ",
+            str(
+                data
+            )
+        ).strip()
+
+        if not testo:
+            return
+
+        if self.in_h3:
+
+            self.h3_parts.append(
+                testo
+            )
+
+        if self.in_cell:
+
+            self.cell_parts.append(
+                testo
+            )
+
+
+    def handle_endtag(
+        self,
+        tag
+    ):
+
+        tag = str(
+            tag
+        ).lower()
+
+        if tag == "h3":
+
+            self.in_h3 = False
+
+            titolo = " ".join(
+                self.h3_parts
+            ).strip()
+
+            # Esempio:
+            # Formazione tipo Atalanta — 4-3-3 (All. Sarri)
+            match = re.match(
+                r"^Formazione tipo\s+(.+?)\s+[—–-]\s+"
+                r"([1-5](?:-[1-5]){2,4})"
+                r"(?:\s+\(.*\))?$",
+                titolo,
+                flags=re.IGNORECASE
+            )
+
+            if match:
+
+                self.current_team = (
+                    match.group(
+                        1
+                    ).strip()
+                )
+
+                self.current_module = (
+                    match.group(
+                        2
+                    ).strip()
+                )
+
+            else:
+
+                # Se entra un altro h3, il blocco squadra precedente
+                # non deve contaminare eventuali tabelle successive.
+                self.current_team = None
+                self.current_module = None
+
+        elif (
+            tag in (
+                "td",
+                "th"
+            )
+            and self.in_cell
+        ):
+
+            self.in_cell = False
+
+            valore = " ".join(
+                self.cell_parts
+            ).strip()
+
+            self.current_row.append(
+                valore
+            )
+
+            self.cell_parts = []
+
+        elif (
+            tag == "tr"
+            and self.in_table
+        ):
+
+            if self.current_row:
+
+                self.current_rows.append(
+                    self.current_row
+                )
+
+            self.current_row = []
+
+        elif (
+            tag == "table"
+            and self.in_table
+        ):
+
+            self.in_table = False
+
+            squadra = (
+                self._costruisci_squadra(
+                    self.current_team,
+                    self.current_module,
+                    self.current_rows
+                )
+            )
+
+            if squadra:
+
+                self.squadre.append(
+                    squadra
+                )
+
+            self.current_rows = []
+            self.current_team = None
+            self.current_module = None
+
+
+    def _costruisci_squadra(
+        self,
+        nome_squadra,
+        modulo,
+        righe
+    ):
+
+        if (
+            not nome_squadra
+            or not modulo
+            or not righe
+        ):
+
+            return None
+
+        giocatori = []
+
+        for riga in righe:
+
+            if len(
+                riga
+            ) < 3:
+
+                continue
+
+            ruolo = str(
+                riga[
+                    0
+                ]
+            ).strip()
+
+            nome = str(
+                riga[
+                    1
+                ]
+            ).strip()
+
+            consenso_testo = str(
+                riga[
+                    2
+                ]
+            ).strip()
+
+            # Salta intestazione.
+            if (
+                nome.lower()
+                in (
+                    "titolare",
+                    "calciatore"
+                )
+                or "probabil" in consenso_testo.lower()
+            ):
+
+                continue
+
+            match_pct = re.search(
+                r"(\d{1,3})\s*%",
+                consenso_testo
+            )
+
+            if not match_pct:
+
+                continue
+
+            consenso = int(
+                match_pct.group(
+                    1
+                )
+            )
+
+            # La prima tabella valida di ogni squadra contiene
+            # esattamente la formazione tipo principale.
+            giocatori.append({
+                "nome":
+                    nome,
+
+                "ruolo_classic":
+                    ruolo,
+
+                "consenso":
+                    consenso,
+
+                "status":
+                    status_titolarita_da_consenso(
+                        consenso
+                    )
+            })
+
+        if len(
+            giocatori
+        ) < 9:
+
+            return None
+
+        # Il contenuto editoriale definisce questi come gli 11
+        # della formazione tipo. Se per un'anomalia HTML arrivasse
+        # qualche riga extra, prendiamo soltanto le prime 11.
+        formazione = (
+            giocatori[
+                :11
+            ]
+        )
+
+        return {
+            "squadra":
+                nome_squadra,
+
+            "modulo":
+                modulo,
+
+            "formazione":
+                formazione,
+
+            # La fonte AMP pubblica in questa tabella gli 11 della
+            # formazione tipo. Non inventiamo riserve non presenti
+            # in modo strutturato nella fonte.
+            "alternative":
+                [],
+
+            "giocatori":
+                giocatori
+        }
+
+
 def aggiorna_probabili_web():
     """
-    Scarica le formazioni tipo stagionali dal confronto pubblico
-    delle guide all'asta di Fantacalcio-Online.
+    Aggiorna le FORMAZIONI TIPO stagionali.
 
-    La percentuale di consenso viene utilizzata solo internamente
-    per assegnare uno dei 3 status:
-        TITOLARE / BALLOTTAGGIO / RISERVA.
+    Usa la pagina AMP pubblica di Fantacalcio-Online, perché la
+    struttura h3 + tabella è stabile e leggibile senza login.
 
-    I dati vengono salvati nel database dell'app e restano
-    consultabili anche senza connessione dopo l'aggiornamento.
+    I dati vengono salvati soltanto se vengono riconosciute almeno
+    18 squadre, così un cambiamento della pagina non sovrascrive
+    una cache valida con dati incompleti.
     """
 
-    req = urllib.request.Request(
+    richiesta = urllib.request.Request(
         URL_PROBABILI_FORMAZIONI,
         headers={
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 Chrome/152 Safari/537.36"
             ),
-            "Accept-Language": "it-IT,it;q=0.9"
+            "Accept-Language":
+                "it-IT,it;q=0.9,en;q=0.7"
         }
     )
 
     with urllib.request.urlopen(
-        req,
+        richiesta,
         timeout=25
     ) as risposta:
 
@@ -3139,16 +3472,68 @@ def aggiorna_probabili_web():
             "ignore"
         )
 
-    parser = PFParser()
+    parser = (
+        FormazioniTipoAMPParser()
+    )
+
     parser.feed(
         raw
     )
 
-    righe = []
+    # Deduplica eventuali blocchi ripetuti nella pagina AMP.
+    uniche = {}
 
-    for elemento in parser.x:
+    for squadra in (
+        parser.squadre
+    ):
 
-        elemento = re.sub(
+        nome = str(
+            squadra.get(
+                "squadra",
+                ""
+            )
+        ).strip()
+
+        if (
+            nome
+            and nome
+            not in uniche
+        ):
+
+            uniche[
+                nome
+            ] = squadra
+
+    squadre = list(
+        uniche.values()
+    )
+
+    if len(
+        squadre
+    ) < 18:
+
+        raise RuntimeError(
+            "La fonte è stata raggiunta, ma sono state riconosciute "
+            f"solo {len(squadre)} formazioni su 20. "
+            "L'aggiornamento è stato annullato per evitare dati errati."
+        )
+
+    # Ricaviamo la data editoriale direttamente dal testo della pagina.
+    estrattore_testo = (
+        PFParser()
+    )
+
+    estrattore_testo.feed(
+        raw
+    )
+
+    aggiornamento_fonte = ""
+
+    for elemento in (
+        estrattore_testo.x
+    ):
+
+        testo = re.sub(
             r"\s+",
             " ",
             str(
@@ -3156,345 +3541,23 @@ def aggiorna_probabili_web():
             )
         ).strip()
 
-        if not elemento:
-            continue
-
         if (
-            not righe
-            or righe[-1] != elemento
-        ):
-            righe.append(
-                elemento
-            )
-
-    # ----------------------------------------------------------
-    # Individuazione dei blocchi squadra.
-    # La pagina pubblica espone squadra, modulo e percentuali
-    # di consenso delle guide.
-    # ----------------------------------------------------------
-
-    squadre_trovate = []
-    i = 0
-
-    parole_da_escludere = {
-        "fonte",
-        "peso",
-        "perché",
-        "probabilità",
-        "consenso",
-        "rigorista",
-        "rigoristi",
-        "guida",
-        "guide",
-        "modulo",
-        "ruolo",
-        "r"
-    }
-
-    while i < len(
-        righe
-    ) - 3:
-
-        if (
-            i + 1 < len(
-                righe
-            )
-            and pf_mod(
-                righe[
-                    i + 1
-                ]
-            )
+            "aggiornato il" in testo.lower()
+            and len(
+                testo
+            ) < 120
         ):
 
-            nome_squadra = str(
-                righe[
-                    i
-                ]
-            ).strip()
-
-            modulo = str(
-                righe[
-                    i + 1
-                ]
-            ).strip()
-
-            nome_lower = (
-                nome_squadra.lower()
+            aggiornamento_fonte = (
+                testo
             )
 
-            if (
-                len(
-                    nome_squadra
-                ) <= 32
-                and nome_lower
-                not in parole_da_escludere
-                and not pf_pct(
-                    nome_squadra
-                )
-            ):
-
-                j = i + 2
-                giocatori = []
-
-                # Leggiamo fino al modulo/squadra successiva.
-                while (
-                    j < len(
-                        righe
-                    )
-                    and j < i + 120
-                ):
-
-                    if (
-                        j + 1 < len(
-                            righe
-                        )
-                        and pf_mod(
-                            righe[
-                                j + 1
-                            ]
-                        )
-                        and len(
-                            str(
-                                righe[
-                                    j
-                                ]
-                            )
-                        ) <= 32
-                    ):
-                        break
-
-                    nome_giocatore = str(
-                        righe[
-                            j
-                        ]
-                    ).strip()
-
-                    percentuale = None
-
-                    # Caso più comune:
-                    # NOME -> 90%
-                    if (
-                        j + 1 < len(
-                            righe
-                        )
-                        and pf_pct(
-                            righe[
-                                j + 1
-                            ]
-                        )
-                    ):
-                        percentuale = (
-                            pf_num(
-                                righe[
-                                    j + 1
-                                ]
-                            )
-                        )
-
-                        j += 2
-
-                    # Caso alternativo:
-                    # NOME -> ruolo -> 90%
-                    elif (
-                        j + 2 < len(
-                            righe
-                        )
-                        and pf_pct(
-                            righe[
-                                j + 2
-                            ]
-                        )
-                        and len(
-                            nome_giocatore
-                        ) <= 45
-                    ):
-                        percentuale = (
-                            pf_num(
-                                righe[
-                                    j + 2
-                                ]
-                            )
-                        )
-
-                        j += 3
-
-                    else:
-
-                        j += 1
-
-                    if (
-                        percentuale is None
-                        or not nome_giocatore
-                    ):
-                        continue
-
-                    # Filtri di sicurezza per non interpretare
-                    # intestazioni e testi come calciatori.
-                    testo_lower = (
-                        nome_giocatore.lower()
-                    )
-
-                    if (
-                        testo_lower
-                        in parole_da_escludere
-                        or len(
-                            nome_giocatore
-                        ) > 45
-                    ):
-                        continue
-
-                    giocatori.append({
-                        "nome":
-                            nome_giocatore,
-
-                        "consenso":
-                            int(
-                                percentuale
-                            ),
-
-                        "status":
-                            status_titolarita_da_consenso(
-                                percentuale
-                            )
-                    })
-
-                # Deduplica per nome all'interno della squadra.
-                unici = {}
-
-                for g in giocatori:
-
-                    chiave = (
-                        g[
-                            "nome"
-                        ]
-                        .strip()
-                        .lower()
-                    )
-
-                    if not chiave:
-                        continue
-
-                    # Se lo stesso nome appare più volte,
-                    # teniamo il consenso maggiore.
-                    if (
-                        chiave
-                        not in unici
-                        or g[
-                            "consenso"
-                        ]
-                        > unici[
-                            chiave
-                        ][
-                            "consenso"
-                        ]
-                    ):
-
-                        unici[
-                            chiave
-                        ] = g
-
-                giocatori = list(
-                    unici.values()
-                )
-
-                if len(
-                    giocatori
-                ) >= 11:
-
-                    # La formazione tipo viene costruita sui primi
-                    # 11 nomi principali pubblicati dalla fonte.
-                    titolari_formazione = (
-                        giocatori[
-                            :11
-                        ]
-                    )
-
-                    alternative = (
-                        giocatori[
-                            11:
-                        ]
-                    )
-
-                    squadre_trovate.append({
-                        "squadra":
-                            nome_squadra,
-
-                        "modulo":
-                            modulo,
-
-                        "formazione":
-                            titolari_formazione,
-
-                        "alternative":
-                            alternative,
-
-                        "giocatori":
-                            giocatori
-                    })
-
-                    i = max(
-                        i + 2,
-                        j
-                    )
-
-                    continue
-
-        i += 1
-
-    # ----------------------------------------------------------
-    # Deduplica squadre.
-    # ----------------------------------------------------------
-
-    squadre_uniche = {}
-
-    for squadra in (
-        squadre_trovate
-    ):
-
-        nome = str(
-            squadra[
-                "squadra"
-            ]
-        ).strip()
-
-        if (
-            nome
-            and nome
-            not in squadre_uniche
-        ):
-
-            squadre_uniche[
-                nome
-            ] = squadra
-
-    squadre = list(
-        squadre_uniche.values()
-    )
-
-    if len(
-        squadre
-    ) < 10:
-
-        raise RuntimeError(
-            "La pagina è raggiungibile ma non sono riuscito "
-            "a riconoscere in modo affidabile le formazioni tipo. "
-            "I dati già salvati non sono stati modificati."
-        )
-
-    aggiornamenti = [
-        x
-        for x in righe
-        if (
-            "aggiornato" in x.lower()
-            or "ultimo aggiornamento"
-            in x.lower()
-        )
-        and len(
-            x
-        ) < 100
-    ]
+            break
 
     dati = {
+        "versione_dati":
+            2,
+
         "fonte":
             URL_PROBABILI_FORMAZIONI,
 
@@ -3508,20 +3571,16 @@ def aggiorna_probabili_web():
             ),
 
         "aggiornamento_fonte":
-            (
-                aggiornamenti[
-                    0
-                ]
-                if aggiornamenti
-                else ""
-            ),
+            aggiornamento_fonte,
 
         "squadre":
             squadre
     }
 
+    # Nuova chiave: non riutilizziamo i vecchi dati incompatibili
+    # generati dalla precedente fonte/parser.
     salva_config_generica(
-        "probabili_formazioni_web",
+        "formazioni_tipo_3_status_v2",
         json.dumps(
             dati,
             ensure_ascii=False
@@ -3532,13 +3591,19 @@ def aggiorna_probabili_web():
 
 
 def carica_probabili_web():
+    """
+    Carica esclusivamente la cache della nuova struttura V2.
+    In questo modo i vecchi dati della funzione Probabili Formazioni
+    non possono produrre campi vuoti.
+    """
 
     raw = leggi_config_generica(
-        "probabili_formazioni_web",
+        "formazioni_tipo_3_status_v2",
         ""
     )
 
     if not raw:
+
         return None
 
     try:
@@ -3547,10 +3612,16 @@ def carica_probabili_web():
             raw
         )
 
-        if isinstance(
-            dati,
-            dict
+        if (
+            isinstance(
+                dati,
+                dict
+            )
+            and dati.get(
+                "versione_dati"
+            ) == 2
         ):
+
             return dati
 
     except Exception:
@@ -3564,17 +3635,23 @@ def pf_linee(
     formazione
 ):
     """
-    Divide gli 11 giocatori nelle linee del modulo.
-    La visualizzazione è attacco -> centrocampo -> difesa -> portiere.
+    Dispone i giocatori sul campo usando il modulo della fonte.
+
+    La tabella della fonte è ordinata per ruolo Classic, non sempre
+    in ordine geometrico perfetto. Per la rappresentazione grafica:
+    - il primo portiere viene isolato;
+    - gli altri 10 vengono distribuiti sulle linee del modulo;
+    - il campo viene visualizzato attacco -> portiere.
     """
 
     try:
 
         numeri = [
             int(
-                x
+                valore
             )
-            for x in str(
+            for valore
+            in str(
                 modulo
             ).split(
                 "-"
@@ -3607,17 +3684,44 @@ def pf_linee(
         or []
     )
 
+    # Cerchiamo il portiere tramite il ruolo Classic P.
+    portieri = [
+        g
+        for g in giocatori
+        if str(
+            g.get(
+                "ruolo_classic",
+                ""
+            )
+        ).strip().upper()
+        == "P"
+    ]
+
     portiere = (
-        giocatori[
+        portieri[
+            :1
+        ]
+        if portieri
+        else giocatori[
             :1
         ]
     )
 
-    movimento = (
-        giocatori[
-            1:
-        ]
-    )
+    ids_portiere = {
+        id(
+            g
+        )
+        for g in portiere
+    }
+
+    movimento = [
+        g
+        for g in giocatori
+        if id(
+            g
+        )
+        not in ids_portiere
+    ]
 
     linee = []
     indice = 0
@@ -3650,7 +3754,7 @@ def mostra_probabile(
     squadra
 ):
 
-    rows = ""
+    righe_html = ""
 
     for linea in pf_linee(
         squadra.get(
@@ -3663,12 +3767,12 @@ def mostra_probabile(
         )
     ):
 
-        players = ""
+        giocatori_html = ""
 
-        for g in linea:
+        for giocatore in linea:
 
             status = str(
-                g.get(
+                giocatore.get(
                     "status",
                     "RISERVA"
                 )
@@ -3682,14 +3786,14 @@ def mostra_probabile(
 
             nome = html.escape(
                 str(
-                    g.get(
+                    giocatore.get(
                         "nome",
                         ""
                     )
                 )
             )
 
-            players += (
+            giocatori_html += (
                 '<div class="pf-player">'
                 '<div class="pf-name">'
                 + nome
@@ -3703,9 +3807,9 @@ def mostra_probabile(
                 '</div>'
             )
 
-        rows += (
+        righe_html += (
             '<div class="pf-line">'
-            + players
+            + giocatori_html
             + '</div>'
         )
 
@@ -3732,70 +3836,51 @@ def mostra_probabile(
         + titolo
         + '<span>'
         + modulo
-        + '</span></div>'
+        + '</span>'
+        + '</div>'
         + '<div class="pf-pitch">'
-        + rows
+        + righe_html
         + '</div>',
         unsafe_allow_html=True
     )
 
-    alternative = (
+    # Riepilogo testuale sotto al campo: utile anche da mobile.
+    formazione = (
         squadra.get(
-            "alternative",
+            "formazione",
             []
         )
     )
 
-    if alternative:
+    numero_titolari = sum(
+        1
+        for g in formazione
+        if g.get(
+            "status"
+        ) == "TITOLARE"
+    )
 
-        with st.expander(
-            "Alternative / riserve",
-            expanded=False
-        ):
+    numero_ballottaggi = sum(
+        1
+        for g in formazione
+        if g.get(
+            "status"
+        ) == "BALLOTTAGGIO"
+    )
 
-            colonne = st.columns(
-                2
-            )
+    numero_riserve = sum(
+        1
+        for g in formazione
+        if g.get(
+            "status"
+        ) == "RISERVA"
+    )
 
-            for indice, g in enumerate(
-                alternative
-            ):
-
-                status = str(
-                    g.get(
-                        "status",
-                        "RISERVA"
-                    )
-                ).upper()
-
-                colore = (
-                    colore_status_titolarita(
-                        status
-                    )
-                )
-
-                nome = html.escape(
-                    str(
-                        g.get(
-                            "nome",
-                            ""
-                        )
-                    )
-                )
-
-                colonne[
-                    indice % 2
-                ].markdown(
-                    "**"
-                    + nome
-                    + "** · "
-                    + "<span style='color:"
-                    + colore
-                    + ";font-weight:900;'>"
-                    + status
-                    + "</span>",
-                    unsafe_allow_html=True
-                )
+    st.caption(
+        f"🟢 {numero_titolari} titolari · "
+        f"🔵 {numero_ballottaggi} ballottaggi · "
+        f"🔴 {numero_riserve} riserve"
+    )
 
 
 def leggi_budget_asta():
@@ -10629,16 +10714,16 @@ elif sezione == "FORMAZIONI TIPO":
         else:
 
             st.info(
-                "Nessun dato salvato. "
-                "Collegati a Internet e premi "
-                "«AGGIORNA DAL WEB»."
+                "Nessuna formazione tipo ancora salvata. "
+                "Premi «AGGIORNA DAL WEB» per effettuare "
+                "il primo aggiornamento dalla nuova fonte."
             )
 
     st.caption(
-        "Fonte: Fantacalcio-Online — Formazioni tipo Serie A "
-        "da confronto fra guide all'asta. "
-        "La percentuale di consenso viene trasformata "
-        "in 3 status e non viene mostrata."
+        "Fonte: Fantacalcio-Online — confronto fra guide all'asta. "
+        "I dati sono stagionali, non riferiti alla singola giornata. "
+        "Il consenso delle guide viene trasformato in "
+        "TITOLARE / BALLOTTAGGIO / RISERVA."
     )
 
     legenda = (
