@@ -9406,10 +9406,17 @@ st.markdown("""
     border:1px solid rgba(15,23,42,.10) !important;
     border-radius:14px !important;
     background:rgba(255,255,255,.97) !important;
+
+    /* FIX DECISIVO: titolare sopra, alternativa sotto */
+    display:flex !important;
+    flex-direction:column !important;
+    align-items:stretch !important;
+    justify-content:center !important;
 }
 
 .pf-main-player{
     display:flex !important;
+    flex:0 0 auto !important;
     align-items:baseline !important;
     justify-content:center !important;
     gap:7px !important;
@@ -9442,6 +9449,7 @@ st.markdown("""
 
 .pf-sub-player{
     display:flex !important;
+    flex:0 0 auto !important;
     align-items:baseline !important;
     justify-content:center !important;
     gap:7px !important;
