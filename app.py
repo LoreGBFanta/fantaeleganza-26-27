@@ -9397,9 +9397,9 @@ st.markdown("""
 }
 
 .pf-player-goal{
-    width:178px !important;
-    min-width:178px !important;
-    min-height:68px !important;
+    width:210px !important;
+    min-width:210px !important;
+    min-height:60px !important;
     padding:8px 10px !important;
     box-sizing:border-box !important;
     overflow:visible !important;
@@ -9410,66 +9410,62 @@ st.markdown("""
 
 .pf-main-player,
 .pf-sub-player{
-    display:block !important;
+    display:flex !important;
+    align-items:baseline !important;
+    justify-content:center !important;
+    gap:6px !important;
     width:100% !important;
     text-align:center !important;
+    white-space:nowrap !important;
     overflow:visible !important;
 }
 
 .pf-main-player .pf-name{
-    display:block !important;
-    width:100% !important;
+    display:inline !important;
     color:#16a34a !important;
     font-size:.92rem !important;
-    line-height:1.14 !important;
+    line-height:1.10 !important;
     font-weight:900 !important;
-    white-space:normal !important;
+    white-space:nowrap !important;
     overflow:visible !important;
     text-overflow:clip !important;
-    overflow-wrap:anywhere !important;
 }
 
 .pf-mantra-role{
-    display:block !important;
-    width:100% !important;
-    margin-top:4px !important;
+    display:inline !important;
+    margin:0 !important;
     color:#334155 !important;
     font-size:.70rem !important;
-    line-height:1.10 !important;
+    line-height:1 !important;
     font-weight:900 !important;
-    white-space:normal !important;
-    overflow-wrap:anywhere !important;
+    white-space:nowrap !important;
 }
 
 .pf-sub-player{
-    margin-top:8px !important;
-    padding-top:7px !important;
-    border-top:1px solid #cbd5e1 !important;
+    margin-top:7px !important;
+    padding-top:0 !important;
+    border-top:0 !important;
 }
 
 .pf-sub-name{
-    display:block !important;
-    width:100% !important;
+    display:inline !important;
     color:#2563eb !important;
     font-size:.92rem !important;
-    line-height:1.14 !important;
+    line-height:1.10 !important;
     font-weight:900 !important;
-    white-space:normal !important;
+    white-space:nowrap !important;
     overflow:visible !important;
     text-overflow:clip !important;
-    overflow-wrap:anywhere !important;
 }
 
 .pf-sub-role{
-    display:block !important;
-    width:100% !important;
-    margin-top:4px !important;
+    display:inline !important;
+    margin:0 !important;
     color:#2563eb !important;
     font-size:.70rem !important;
-    line-height:1.10 !important;
+    line-height:1 !important;
     font-weight:900 !important;
-    white-space:normal !important;
-    overflow-wrap:anywhere !important;
+    white-space:nowrap !important;
 }
 
 .pf-line{
@@ -9490,21 +9486,20 @@ st.markdown("""
     }
 
     .pf-player-goal{
-        width:104px !important;
-        min-width:104px !important;
-        min-height:64px !important;
+        width:118px !important;
+        min-width:118px !important;
+        min-height:56px !important;
         padding:6px 5px !important;
     }
 
     .pf-main-player .pf-name,
     .pf-sub-name{
-        font-size:.72rem !important;
-        line-height:1.10 !important;
+        font-size:.70rem !important;
     }
 
     .pf-mantra-role,
     .pf-sub-role{
-        font-size:.57rem !important;
+        font-size:.55rem !important;
     }
 }
 </style>
