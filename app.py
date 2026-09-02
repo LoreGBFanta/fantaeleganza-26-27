@@ -3630,18 +3630,250 @@ def carica_probabili_web():
     return None
 
 
+def _cognome_normalizzato(nome):
+    return re.sub(
+        r"[^a-z0-9]",
+        "",
+        str(nome).lower()
+    )
+
+
+def _ruolo_classic_gruppo(ruolo):
+    ruolo = str(
+        ruolo
+        or ""
+    ).strip().upper()
+
+    if ruolo == "P":
+        return "P"
+
+    if ruolo in {
+        "D",
+        "DC",
+        "DD",
+        "DS"
+    }:
+        return "D"
+
+    if ruolo in {
+        "C",
+        "M",
+        "E",
+        "W",
+        "T"
+    }:
+        return "C"
+
+    if ruolo in {
+        "A",
+        "PC"
+    }:
+        return "A"
+
+    return ruolo[:1]
+
+
+def _scegli_alternativa(
+    squadra,
+    titolare
+):
+    """
+    Cerca un'alternativa sensata per il giocatore schierato:
+    - se è BALLOTTAGGIO, preferisce un altro BALLOTTAGGIO dello stesso gruppo ruolo;
+    - se è TITOLARE, preferisce una RISERVA dello stesso gruppo ruolo;
+    - fallback: qualsiasi giocatore non schierato dello stesso gruppo ruolo.
+    """
+
+    tutti = list(
+        squadra.get(
+            "giocatori",
+            []
+        )
+        or []
+    )
+
+    nome_titolare = _cognome_normalizzato(
+        titolare.get(
+            "nome",
+            ""
+        )
+    )
+
+    gruppo = _ruolo_classic_gruppo(
+        titolare.get(
+            "ruolo_classic",
+            ""
+        )
+    )
+
+    candidati = [
+        g
+        for g in tutti
+        if _cognome_normalizzato(
+            g.get(
+                "nome",
+                ""
+            )
+        ) != nome_titolare
+        and _ruolo_classic_gruppo(
+            g.get(
+                "ruolo_classic",
+                ""
+            )
+        ) == gruppo
+    ]
+
+    status_titolare = str(
+        titolare.get(
+            "status",
+            ""
+        )
+    ).upper()
+
+    if status_titolare == "BALLOTTAGGIO":
+
+        prioritari = [
+            g
+            for g in candidati
+            if str(
+                g.get(
+                    "status",
+                    ""
+                )
+            ).upper()
+            == "BALLOTTAGGIO"
+        ]
+
+        if prioritari:
+            return prioritari[
+                0
+            ]
+
+    if status_titolare == "TITOLARE":
+
+        prioritari = [
+            g
+            for g in candidati
+            if str(
+                g.get(
+                    "status",
+                    ""
+                )
+            ).upper()
+            == "RISERVA"
+        ]
+
+        if prioritari:
+            return prioritari[
+                0
+            ]
+
+    return (
+        candidati[
+            0
+        ]
+        if candidati
+        else None
+    )
+
+
+def _formazione_schierabile(
+    squadra
+):
+    """
+    In campo vanno SOLO TITOLARI e BALLOTTAGGIO.
+    Le RISERVE non vengono mai schierate come slot principali.
+    """
+
+    formazione = list(
+        squadra.get(
+            "formazione",
+            []
+        )
+        or []
+    )
+
+    schierabili = [
+        g
+        for g in formazione
+        if str(
+            g.get(
+                "status",
+                ""
+            )
+        ).upper()
+        in {
+            "TITOLARE",
+            "BALLOTTAGGIO"
+        }
+    ]
+
+    # Se la fonte ha meno di 11 schierabili nei primi 11,
+    # completa con altri TITOLARI/BALLOTTAGGIO presenti nel blocco squadra.
+    if len(
+        schierabili
+    ) < 11:
+
+        gia = {
+            _cognome_normalizzato(
+                g.get(
+                    "nome",
+                    ""
+                )
+            )
+            for g in schierabili
+        }
+
+        for g in squadra.get(
+            "giocatori",
+            []
+        ):
+
+            if str(
+                g.get(
+                    "status",
+                    ""
+                )
+            ).upper() not in {
+                "TITOLARE",
+                "BALLOTTAGGIO"
+            }:
+                continue
+
+            chiave = _cognome_normalizzato(
+                g.get(
+                    "nome",
+                    ""
+                )
+            )
+
+            if chiave in gia:
+                continue
+
+            schierabili.append(
+                g
+            )
+
+            gia.add(
+                chiave
+            )
+
+            if len(
+                schierabili
+            ) >= 11:
+                break
+
+    return schierabili[
+        :11
+    ]
+
+
 def pf_linee(
     modulo,
     formazione
 ):
     """
-    Dispone i giocatori sul campo usando il modulo della fonte.
-
-    La tabella della fonte è ordinata per ruolo Classic, non sempre
-    in ordine geometrico perfetto. Per la rappresentazione grafica:
-    - il primo portiere viene isolato;
-    - gli altri 10 vengono distribuiti sulle linee del modulo;
-    - il campo viene visualizzato attacco -> portiere.
+    Dispone gli 11 schierabili sulle linee del modulo.
     """
 
     try:
@@ -3684,17 +3916,15 @@ def pf_linee(
         or []
     )
 
-    # Cerchiamo il portiere tramite il ruolo Classic P.
     portieri = [
         g
         for g in giocatori
-        if str(
+        if _ruolo_classic_gruppo(
             g.get(
                 "ruolo_classic",
                 ""
             )
-        ).strip().upper()
-        == "P"
+        ) == "P"
     ]
 
     portiere = (
@@ -3754,6 +3984,12 @@ def mostra_probabile(
     squadra
 ):
 
+    formazione = (
+        _formazione_schierabile(
+            squadra
+        )
+    )
+
     righe_html = ""
 
     for linea in pf_linee(
@@ -3761,10 +3997,7 @@ def mostra_probabile(
             "modulo",
             ""
         ),
-        squadra.get(
-            "formazione",
-            []
-        )
+        formazione
     ):
 
         giocatori_html = ""
@@ -3793,18 +4026,78 @@ def mostra_probabile(
                 )
             )
 
+            alternativa = (
+                _scegli_alternativa(
+                    squadra,
+                    giocatore
+                )
+            )
+
+            if alternativa:
+
+                nome_alt = html.escape(
+                    str(
+                        alternativa.get(
+                            "nome",
+                            ""
+                        )
+                    )
+                )
+
+                status_alt = str(
+                    alternativa.get(
+                        "status",
+                        "RISERVA"
+                    )
+                ).upper()
+
+                colore_alt = (
+                    colore_status_titolarita(
+                        status_alt
+                    )
+                )
+
+                if status == "BALLOTTAGGIO":
+                    etichetta_alt = (
+                        "Ballottaggio: "
+                    )
+                else:
+                    etichetta_alt = (
+                        "Riserva: "
+                    )
+
+                alternativa_html = (
+                    '<div class="pf-alt">'
+                    + etichetta_alt
+                    + '<span style="color:'
+                    + colore_alt
+                    + ';">'
+                    + nome_alt
+                    + '</span>'
+                    + '</div>'
+                )
+
+            else:
+
+                alternativa_html = (
+                    '<div class="pf-alt">'
+                    '—'
+                    '</div>'
+                )
+
             giocatori_html += (
                 '<div class="pf-player">'
-                '<div class="pf-name">'
-                + nome
-                + '</div>'
-                '<div class="pf-status" '
+                '<div class="pf-name" '
                 'style="color:'
                 + colore
-                + '">'
-                + status
+                + ';">'
+                + nome
                 + '</div>'
+                '<div class="pf-role">'
+                'Giocatore titolare'
                 '</div>'
+                + alternativa_html
+                + '</div>'
             )
 
         righe_html += (
@@ -3844,44 +4137,8 @@ def mostra_probabile(
         unsafe_allow_html=True
     )
 
-    # Riepilogo testuale sotto al campo: utile anche da mobile.
-    formazione = (
-        squadra.get(
-            "formazione",
-            []
-        )
-    )
-
-    numero_titolari = sum(
-        1
-        for g in formazione
-        if g.get(
-            "status"
-        ) == "TITOLARE"
-    )
-
-    numero_ballottaggi = sum(
-        1
-        for g in formazione
-        if g.get(
-            "status"
-        ) == "BALLOTTAGGIO"
-    )
-
-    numero_riserve = sum(
-        1
-        for g in formazione
-        if g.get(
-            "status"
-        ) == "RISERVA"
-    )
-
-    st.caption(
-        f"🟢 {numero_titolari} titolari · "
-        f"🔵 {numero_ballottaggi} ballottaggi · "
-        f"🔴 {numero_riserve} riserve"
-    )
-
+    # Nessun riepilogo status sotto al campo:
+    # il colore del nome comunica già lo status.
 
 def leggi_budget_asta():
 
@@ -8830,8 +9087,8 @@ with m8:
 st.markdown('''<style>
 .pf-team{background:#071a2f;color:white;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:900;display:flex;justify-content:space-between}.pf-team span{color:#f5b51b}
 .pf-pitch{min-height:420px;padding:16px 7px;border:3px solid white;border-radius:0 0 11px 11px;background:repeating-linear-gradient(90deg,#16863b 0,#16863b 46px,#118039 46px,#118039 92px);display:flex;flex-direction:column;justify-content:space-around;box-shadow:0 3px 12px #0002}
-.pf-line{display:flex;justify-content:space-around;gap:4px}.pf-player{width:92px;background:#fffffff2;border-radius:8px;padding:6px 3px;text-align:center;box-shadow:0 2px 6px #0003}.pf-name{font-size:.70rem;font-weight:850;color:#071a2f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pf-status{font-size:.61rem;font-weight:900;margin-top:4px;letter-spacing:.02em}
-@media(max-width:768px){.pf-pitch{min-height:380px}.pf-player{width:64px}.pf-name{font-size:.58rem}}
+.pf-line{display:flex;justify-content:space-around;gap:4px}.pf-player{width:105px;min-height:72px;background:#fffffff2;border-radius:8px;padding:6px 4px;text-align:center;box-shadow:0 2px 6px #0003}.pf-name{font-size:.72rem;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pf-role{font-size:.58rem;color:#64748b;font-weight:700;margin-top:3px}.pf-alt{font-size:.56rem;color:#64748b;margin-top:4px;line-height:1.12}.pf-alt span{font-weight:900}
+@media(max-width:768px){.pf-pitch{min-height:410px}.pf-player{width:76px;min-height:74px}.pf-name{font-size:.60rem}.pf-role,.pf-alt{font-size:.50rem}}
 </style>''',unsafe_allow_html=True)
 
 # ============================================================
