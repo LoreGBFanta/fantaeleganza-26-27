@@ -3872,42 +3872,42 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "Carnesecchi"
       ],
       [
-        "Zappacosta",
-        "Hien",
+        "Bellanova",
+        "Kristensen",
         "Scalvini",
         "Bernasconi"
       ],
       [
-        "Samardzic",
+        "Kessie",
         "Gaetano",
         "Ederson"
       ],
       [
         "De Ketelaere",
         "Scamacca",
-        "Raspadori"
+        "Rowe"
       ]
     ],
     "ballottaggi": [
       {
-        "a": "Zappacosta",
-        "b": "Bellanova"
+        "a": "Bellanova",
+        "b": "Zappacosta"
       },
       {
-        "a": "Hien",
-        "b": "Kolasinac"
+        "a": "Kristensen",
+        "b": "Hien"
       },
       {
-        "a": "Bernasconi",
-        "b": "Ahanor"
-      },
-      {
-        "a": "Samardzic",
-        "b": "Pasalic"
+        "a": "Kessie",
+        "b": "Samardzic"
       },
       {
         "a": "Scamacca",
         "b": "Krstovic"
+      },
+      {
+        "a": "Rowe",
+        "b": "Raspadori"
       }
     ],
     "formazione": [
@@ -3915,10 +3915,10 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Carnesecchi"
       },
       {
-        "nome": "Zappacosta"
+        "nome": "Bellanova"
       },
       {
-        "nome": "Hien"
+        "nome": "Kristensen"
       },
       {
         "nome": "Scalvini"
@@ -3927,7 +3927,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Bernasconi"
       },
       {
-        "nome": "Samardzic"
+        "nome": "Kessie"
       },
       {
         "nome": "Gaetano"
@@ -3942,14 +3942,14 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Scamacca"
       },
       {
-        "nome": "Raspadori"
+        "nome": "Rowe"
       }
     ]
   },
   {
     "squadra": "Bologna",
     "allenatore": "Domenico Tedesco",
-    "modulo": "4-2-3-1",
+    "modulo": "4-3-3",
     "linee_fonte": [
       [
         "Skorupski"
@@ -3957,38 +3957,40 @@ FANTACALCIO_SNAPSHOT_V15 = [
       [
         "Zortea",
         "Heggem",
-        "Lucumì",
+        "Theate",
         "Miranda"
       ],
       [
-        "Moro",
-        "Ferguson"
+        "Odgaard",
+        "Ferguson",
+        "Pobega"
       ],
       [
         "Orsolini",
-        "Bernardeschi",
-        "Rowe"
-      ],
-      [
-        "Dovbyk"
+        "Dovbyk",
+        "Cambiaghi"
       ]
     ],
     "ballottaggi": [
       {
-        "a": "Heggem",
-        "b": "Vitik"
+        "a": "Pobega",
+        "b": "Moro"
       },
       {
-        "a": "Bernardeschi",
+        "a": "Odgaard",
         "b": "Amondarain"
       },
       {
-        "a": "Rowe",
-        "b": "Cambiaghi"
+        "a": "Orsolini",
+        "b": "Bernardeschi"
       },
       {
-        "a": "Bernardeschi",
-        "b": "Odgaard"
+        "a": "Dovbyk",
+        "b": "Piccoli"
+      },
+      {
+        "a": "Cambiaghi",
+        "b": "Mbangula"
       }
     ],
     "formazione": [
@@ -4002,28 +4004,28 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Heggem"
       },
       {
-        "nome": "Lucumì"
+        "nome": "Theate"
       },
       {
         "nome": "Miranda"
       },
       {
-        "nome": "Moro"
+        "nome": "Odgaard"
       },
       {
         "nome": "Ferguson"
       },
       {
+        "nome": "Pobega"
+      },
+      {
         "nome": "Orsolini"
       },
       {
-        "nome": "Bernardeschi"
-      },
-      {
-        "nome": "Rowe"
-      },
-      {
         "nome": "Dovbyk"
+      },
+      {
+        "nome": "Cambiaghi"
       }
     ]
   },
@@ -4048,26 +4050,22 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "Fazzini"
       ],
       [
-        "Mendy",
-        "Maldini"
+        "Maldini",
+        "Kevin Carlos"
       ]
     ],
     "ballottaggi": [
       {
         "a": "Ze Pedro",
-        "b": "Zappa"
+        "b": "Sugawara"
       },
       {
-        "a": "Rodriguez",
-        "b": "Kofler"
+        "a": "Adopo",
+        "b": "Fadera"
       },
       {
-        "a": "Romano",
-        "b": "Felici"
-      },
-      {
-        "a": "Mendy",
-        "b": "Kingstone Mutandwa"
+        "a": "Kevin Carlos",
+        "b": "Nzola"
       }
     ],
     "formazione": [
@@ -4099,10 +4097,10 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Fazzini"
       },
       {
-        "nome": "Mendy"
+        "nome": "Maldini"
       },
       {
-        "nome": "Maldini"
+        "nome": "Kevin Carlos"
       }
     ]
   },
@@ -4118,7 +4116,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "Couto",
         "Chalobah",
         "Ramon",
-        "Kaiki"
+        "Valle"
       ],
       [
         "Da Cunha",
@@ -4130,7 +4128,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "Baturina"
       ],
       [
-        "Douvikas"
+        "Kean"
       ]
     ],
     "ballottaggi": [
@@ -4139,12 +4137,8 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "b": "Smolcic"
       },
       {
-        "a": "Chalobah",
-        "b": "Kempf"
-      },
-      {
-        "a": "Kaiki",
-        "b": "Valle"
+        "a": "Valle",
+        "b": "Kaiki"
       },
       {
         "a": "Diao",
@@ -4152,7 +4146,11 @@ FANTACALCIO_SNAPSHOT_V15 = [
       },
       {
         "a": "Baturina",
-        "b": "Caqueret"
+        "b": "Milla"
+      },
+      {
+        "a": "Kean",
+        "b": "Douvikas"
       }
     ],
     "formazione": [
@@ -4169,7 +4167,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Ramon"
       },
       {
-        "nome": "Kaiki"
+        "nome": "Valle"
       },
       {
         "nome": "Da Cunha"
@@ -4187,7 +4185,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Baturina"
       },
       {
-        "nome": "Douvikas"
+        "nome": "Kean"
       }
     ]
   },
@@ -4207,35 +4205,35 @@ FANTACALCIO_SNAPSHOT_V15 = [
       ],
       [
         "Ndour",
-        "Oulai",
+        "Fagioli",
         "Atta"
       ],
       [
         "Mastantuono",
-        "Kean",
-        "Gudmundsson"
+        "Beto",
+        "Goncalves"
       ]
     ],
     "ballottaggi": [
       {
         "a": "Jimenez",
-        "b": "Dodò"
-      },
-      {
-        "a": "Valdepenas",
         "b": "Joao Mario"
       },
       {
         "a": "Viery",
-        "b": "Ranieri"
+        "b": "Pongracic"
       },
       {
-        "a": "Oulai",
-        "b": "Fagioli"
+        "a": "Fagioli",
+        "b": "Oulai"
       },
       {
-        "a": "Ndour",
-        "b": "Mandragora"
+        "a": "Goncalves",
+        "b": "Njie"
+      },
+      {
+        "a": "Beto",
+        "b": "Pellegrino"
       }
     ],
     "formazione": [
@@ -4258,7 +4256,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Ndour"
       },
       {
-        "nome": "Oulai"
+        "nome": "Fagioli"
       },
       {
         "nome": "Atta"
@@ -4267,57 +4265,59 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Mastantuono"
       },
       {
-        "nome": "Kean"
+        "nome": "Beto"
       },
       {
-        "nome": "Gudmundsson"
+        "nome": "Goncalves"
       }
     ]
   },
   {
     "squadra": "Frosinone",
     "allenatore": "Massimiliano Alvini",
-    "modulo": "4-3-3",
+    "modulo": "4-2-3-1",
     "linee_fonte": [
       [
         "Palmisani"
       ],
       [
-        "A. Oyono",
-        "Monterisi",
+        "Tchato",
         "Calvani",
+        "Monterisi",
         "Bracaglia"
       ],
       [
-        "Koutsoupias",
-        "Calò",
-        "Cichella"
+        "Grillitsch",
+        "Calò"
       ],
       [
         "Ghedjemis",
-        "Raimondo",
+        "Schimd",
         "Kvernadze"
+      ],
+      [
+        "Raimondo"
       ]
     ],
     "ballottaggi": [
       {
-        "a": "Palmisani",
-        "b": "Desplanches"
+        "a": "Tchato",
+        "b": "Oyono"
       },
       {
-        "a": "Calvani",
-        "b": "Akpoguma"
+        "a": "Bracaglia",
+        "b": "Terzic"
       },
       {
-        "a": "Cichella",
-        "b": "Gelli"
+        "a": "Grillitsch",
+        "b": "Cichella"
       },
       {
-        "a": "Koutsoupias",
-        "b": "Hasa"
+        "a": "Raimondo",
+        "b": "Bobcek"
       },
       {
-        "a": "Kvernadze",
+        "a": "Ghedjemis",
         "b": "Zerbin"
       }
     ],
@@ -4326,34 +4326,34 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Palmisani"
       },
       {
-        "nome": "A. Oyono"
-      },
-      {
-        "nome": "Monterisi"
+        "nome": "Tchato"
       },
       {
         "nome": "Calvani"
       },
       {
+        "nome": "Monterisi"
+      },
+      {
         "nome": "Bracaglia"
       },
       {
-        "nome": "Koutsoupias"
+        "nome": "Grillitsch"
       },
       {
         "nome": "Calò"
       },
       {
-        "nome": "Cichella"
-      },
-      {
         "nome": "Ghedjemis"
       },
       {
-        "nome": "Raimondo"
+        "nome": "Schimd"
       },
       {
         "nome": "Kvernadze"
+      },
+      {
+        "nome": "Raimondo"
       }
     ]
   },
@@ -4371,10 +4371,10 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "Vasquez"
       ],
       [
-        "Norton-Cuffy",
+        "Ellertsson",
         "Frendrup",
         "Sow",
-        "Ellertsson"
+        "Mitaj"
       ],
       [
         "Baldanzi",
@@ -4386,20 +4386,16 @@ FANTACALCIO_SNAPSHOT_V15 = [
     ],
     "ballottaggi": [
       {
-        "a": "Ellertsson",
-        "b": "Martin"
+        "a": "Mitaj",
+        "b": "Puczka"
       },
       {
         "a": "Sow",
         "b": "Amorim"
       },
       {
-        "a": "Baldanzi",
-        "b": "Traoré"
-      },
-      {
         "a": "Vitinha",
-        "b": "Meichtry"
+        "b": "Osmajic"
       }
     ],
     "formazione": [
@@ -4416,7 +4412,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Vasquez"
       },
       {
-        "nome": "Norton-Cuffy"
+        "nome": "Ellertsson"
       },
       {
         "nome": "Frendrup"
@@ -4425,7 +4421,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Sow"
       },
       {
-        "nome": "Ellertsson"
+        "nome": "Mitaj"
       },
       {
         "nome": "Baldanzi"
@@ -4447,15 +4443,15 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "Martinez"
       ],
       [
+        "Bisseck",
         "Akanji",
-        "Stones",
         "Bastoni"
       ],
       [
-        "Diouf",
+        "Spence",
         "Barella",
         "Calhanoglu",
-        "Zielinski",
+        "Jones",
         "Dimarco"
       ],
       [
@@ -4465,16 +4461,16 @@ FANTACALCIO_SNAPSHOT_V15 = [
     ],
     "ballottaggi": [
       {
-        "a": "Stones",
-        "b": "Bisseck"
+        "a": "Bisseck",
+        "b": "Stones"
       },
       {
-        "a": "Diouf",
-        "b": "Luis Henrique"
+        "a": "Spence",
+        "b": "Diouf"
       },
       {
-        "a": "Zielinski",
-        "b": "Sucic"
+        "a": "Jones",
+        "b": "Zielinski"
       },
       {
         "a": "Thuram",
@@ -4486,16 +4482,16 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Martinez"
       },
       {
-        "nome": "Akanji"
+        "nome": "Bisseck"
       },
       {
-        "nome": "Stones"
+        "nome": "Akanji"
       },
       {
         "nome": "Bastoni"
       },
       {
-        "nome": "Diouf"
+        "nome": "Spence"
       },
       {
         "nome": "Barella"
@@ -4504,7 +4500,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Calhanoglu"
       },
       {
-        "nome": "Zielinski"
+        "nome": "Jones"
       },
       {
         "nome": "Dimarco"
@@ -4523,22 +4519,22 @@ FANTACALCIO_SNAPSHOT_V15 = [
     "modulo": "4-2-3-1",
     "linee_fonte": [
       [
-        "Di Gregorio"
+        "Vicario"
       ],
       [
         "Kalulu",
         "Bremer",
-        "Kelly",
-        "Cambiaso"
+        "Lucumì",
+        "Celik"
       ],
       [
         "Locatelli",
-        "McKennie"
+        "Sarr"
       ],
       [
         "Conceicao",
-        "Alajbegovic",
-        "Yildiz"
+        "McKennie",
+        "Gonzalez"
       ],
       [
         "Kolo Muani"
@@ -4546,21 +4542,29 @@ FANTACALCIO_SNAPSHOT_V15 = [
     ],
     "ballottaggi": [
       {
-        "a": "Kelly",
-        "b": "Celik"
+        "a": "Lucumì",
+        "b": "Kelly"
       },
       {
-        "a": "McKennie",
-        "b": "Thuram"
+        "a": "Celik",
+        "b": "Cambiaso"
       },
       {
-        "a": "Alajbegovic",
-        "b": "Thuram"
+        "a": "Sarr",
+        "b": "Douglas Luiz"
+      },
+      {
+        "a": "Gonzalez",
+        "b": "Alajbegovic"
+      },
+      {
+        "a": "Kolo Muani",
+        "b": "Woltemade"
       }
     ],
     "formazione": [
       {
-        "nome": "Di Gregorio"
+        "nome": "Vicario"
       },
       {
         "nome": "Kalulu"
@@ -4569,25 +4573,25 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Bremer"
       },
       {
-        "nome": "Kelly"
+        "nome": "Lucumì"
       },
       {
-        "nome": "Cambiaso"
+        "nome": "Celik"
       },
       {
         "nome": "Locatelli"
       },
       {
-        "nome": "McKennie"
+        "nome": "Sarr"
       },
       {
         "nome": "Conceicao"
       },
       {
-        "nome": "Alajbegovic"
+        "nome": "McKennie"
       },
       {
-        "nome": "Yildiz"
+        "nome": "Gonzalez"
       },
       {
         "nome": "Kolo Muani"
@@ -4597,46 +4601,48 @@ FANTACALCIO_SNAPSHOT_V15 = [
   {
     "squadra": "Lazio",
     "allenatore": "Gennaro Gattuso",
-    "modulo": "4-2-3-1",
+    "modulo": "4-3-3",
     "linee_fonte": [
       [
         "Mandas"
       ],
       [
         "Marusic",
-        "Doekhi",
-        "Romagnoli",
-        "Pedraza"
+        "Sutalo",
+        "Provstgaard",
+        "Tavares"
       ],
       [
+        "Frattesi",
         "Rovella",
         "Taylor"
       ],
       [
-        "Cancellieri",
-        "Dia",
+        "Isaksen",
+        "Pinamonti",
         "Zaccagni"
-      ],
-      [
-        "Ratkov"
       ]
     ],
     "ballottaggi": [
       {
         "a": "Marusic",
-        "b": "Floriani Mussolini"
+        "b": "Floriani"
       },
       {
-        "a": "Pedraza",
-        "b": "Tavares"
+        "a": "Sutalo",
+        "b": "Doekhi"
       },
       {
-        "a": "Cancellieri",
-        "b": "Isaksen"
+        "a": "Tavares",
+        "b": "Pedraza"
       },
       {
-        "a": "Dia",
-        "b": "Dele-Bashiru"
+        "a": "Isaksen",
+        "b": "Cancellieri"
+      },
+      {
+        "a": "Pinamonti",
+        "b": "Gudmundsson"
       }
     ],
     "formazione": [
@@ -4647,13 +4653,16 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Marusic"
       },
       {
-        "nome": "Doekhi"
+        "nome": "Sutalo"
       },
       {
-        "nome": "Romagnoli"
+        "nome": "Provstgaard"
       },
       {
-        "nome": "Pedraza"
+        "nome": "Tavares"
+      },
+      {
+        "nome": "Frattesi"
       },
       {
         "nome": "Rovella"
@@ -4662,23 +4671,20 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Taylor"
       },
       {
-        "nome": "Cancellieri"
+        "nome": "Isaksen"
       },
       {
-        "nome": "Dia"
+        "nome": "Pinamonti"
       },
       {
         "nome": "Zaccagni"
-      },
-      {
-        "nome": "Ratkov"
       }
     ]
   },
   {
     "squadra": "Lecce",
     "allenatore": "Eusebio Di Francesco",
-    "modulo": "4-2-3-1",
+    "modulo": "4-3-3",
     "linee_fonte": [
       [
         "Falcone"
@@ -4691,23 +4697,19 @@ FANTACALCIO_SNAPSHOT_V15 = [
       ],
       [
         "Coulibaly",
-        "Ngom",
+        "Ilic",
         "Berisha"
       ],
       [
         "Pierotti",
         "Geubbels",
-        "N’Dri"
+        "Monteiro"
       ]
     ],
     "ballottaggi": [
       {
-        "a": "Gaspar",
-        "b": "Siebert"
-      },
-      {
-        "a": "Ngom",
-        "b": "Gorter"
+        "a": "Ilic",
+        "b": "Ngom"
       },
       {
         "a": "Berisha",
@@ -4716,6 +4718,10 @@ FANTACALCIO_SNAPSHOT_V15 = [
       {
         "a": "Geubbels",
         "b": "Stulic"
+      },
+      {
+        "a": "Monteiro",
+        "b": "Fatah"
       }
     ],
     "formazione": [
@@ -4738,7 +4744,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Coulibaly"
       },
       {
-        "nome": "Ngom"
+        "nome": "Ilic"
       },
       {
         "nome": "Berisha"
@@ -4750,7 +4756,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Geubbels"
       },
       {
-        "nome": "N’Dri"
+        "nome": "Monteiro"
       }
     ]
   },
@@ -4768,14 +4774,14 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "Pavlovic"
       ],
       [
-        "Saelemakers",
+        "Moreira",
         "Modric",
-        "Rabiot",
+        "Musah",
         "Bartesaghi"
       ],
       [
-        "Pulisic",
-        "Leao"
+        "Rabiot",
+        "Pulisic"
       ],
       [
         "Ramos"
@@ -4784,15 +4790,19 @@ FANTACALCIO_SNAPSHOT_V15 = [
     "ballottaggi": [
       {
         "a": "Gabbia",
-        "b": "Tomori"
+        "b": "De Winter"
       },
       {
-        "a": "Saelemaekers",
+        "a": "Bartesaghi",
         "b": "Chukwueze"
       },
       {
-        "a": "Leao",
-        "b": "Nkunku"
+        "a": "Musah",
+        "b": "Loftus-Cheek"
+      },
+      {
+        "a": "Pulisic",
+        "b": "Saelemaekers"
       }
     ],
     "formazione": [
@@ -4809,22 +4819,22 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Pavlovic"
       },
       {
-        "nome": "Saelemakers"
+        "nome": "Moreira"
       },
       {
         "nome": "Modric"
       },
       {
-        "nome": "Rabiot"
+        "nome": "Musah"
       },
       {
         "nome": "Bartesaghi"
       },
       {
-        "nome": "Pulisic"
+        "nome": "Rabiot"
       },
       {
-        "nome": "Leao"
+        "nome": "Pulisic"
       },
       {
         "nome": "Ramos"
@@ -4837,59 +4847,67 @@ FANTACALCIO_SNAPSHOT_V15 = [
     "modulo": "3-4-2-1",
     "linee_fonte": [
       [
-        "Thiam"
+        "Tornqvist"
       ],
       [
-        "Kouadio",
-        "Delli Carri",
-        "Lucchesi"
+        "Ziolkowski",
+        "Lucchesi",
+        "Carboni"
       ],
       [
         "Birindelli",
-        "Pessina",
+        "Tourè",
         "Akinsanmiro",
         "Mangas"
       ],
       [
-        "Colpani",
-        "Mota"
+        "Ngonge",
+        "Folorunsho"
       ],
       [
-        "Cutrone"
+        "Varela"
       ]
     ],
     "ballottaggi": [
       {
-        "a": "Lucchesi",
-        "b": "Carboni"
+        "a": "Ziolkowski",
+        "b": "Kouadio"
+      },
+      {
+        "a": "Ngonge",
+        "b": "Colpani"
+      },
+      {
+        "a": "Varela",
+        "b": "Cutrone"
+      },
+      {
+        "a": "Tourè",
+        "b": "Mout"
       },
       {
         "a": "Birindelli",
-        "b": "Bakoune"
-      },
-      {
-        "a": "Akinsanmiro",
-        "b": "Colombo L."
+        "b": "Zeballos"
       }
     ],
     "formazione": [
       {
-        "nome": "Thiam"
+        "nome": "Tornqvist"
       },
       {
-        "nome": "Kouadio"
-      },
-      {
-        "nome": "Delli Carri"
+        "nome": "Ziolkowski"
       },
       {
         "nome": "Lucchesi"
       },
       {
+        "nome": "Carboni"
+      },
+      {
         "nome": "Birindelli"
       },
       {
-        "nome": "Pessina"
+        "nome": "Tourè"
       },
       {
         "nome": "Akinsanmiro"
@@ -4898,13 +4916,13 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Mangas"
       },
       {
-        "nome": "Colpani"
+        "nome": "Ngonge"
       },
       {
-        "nome": "Mota"
+        "nome": "Folorunsho"
       },
       {
-        "nome": "Cutrone"
+        "nome": "Varela"
       }
     ]
   },
@@ -4919,7 +4937,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
       [
         "Di Lorenzo",
         "Rrahmani",
-        "Beukema",
+        "Badiashile",
         "Spinazzola"
       ],
       [
@@ -4935,7 +4953,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
     ],
     "ballottaggi": [
       {
-        "a": "Beukema",
+        "a": "Badiashile",
         "b": "Buongiorno"
       },
       {
@@ -4947,12 +4965,8 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "b": "Anguissa"
       },
       {
-        "a": "De Bruyne",
-        "b": "Vergara"
-      },
-      {
         "a": "Politano",
-        "b": "Neres"
+        "b": "Vergara"
       }
     ],
     "formazione": [
@@ -4966,7 +4980,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Rrahmani"
       },
       {
-        "nome": "Beukema"
+        "nome": "Badiashile"
       },
       {
         "nome": "Spinazzola"
@@ -4994,72 +5008,74 @@ FANTACALCIO_SNAPSHOT_V15 = [
   {
     "squadra": "Parma",
     "allenatore": "Carlos Cuesta",
-    "modulo": "4-3-3",
+    "modulo": "4-3-1-2",
     "linee_fonte": [
       [
-        "Suzuki"
+        "Corvi"
       ],
       [
         "Delprato",
-        "Circati",
-        "Valenti",
+        "Troilo",
+        "Diego Carlos",
         "Valeri"
       ],
       [
+        "Fabbian",
         "Keita",
-        "Nicolussi Caviglia",
-        "Bernabé"
+        "Ordonez"
       ],
       [
-        "Almqvist",
-        "Pellegrino",
+        "Bernabè"
+      ],
+      [
+        "Romero",
         "Tourè"
       ]
     ],
     "ballottaggi": [
       {
-        "a": "Almqvist",
-        "b": "Ondrejka"
+        "a": "Corvi",
+        "b": "Daffara"
       },
       {
-        "a": "Nicolussi Caviglia",
-        "b": "Sorensen"
+        "a": "Romero",
+        "b": "Elphege"
       },
       {
-        "a": "Almqvist",
-        "b": "Troilo"
+        "a": "Fabbian",
+        "b": "Britschgi"
       }
     ],
     "formazione": [
       {
-        "nome": "Suzuki"
+        "nome": "Corvi"
       },
       {
         "nome": "Delprato"
       },
       {
-        "nome": "Circati"
+        "nome": "Troilo"
       },
       {
-        "nome": "Valenti"
+        "nome": "Diego Carlos"
       },
       {
         "nome": "Valeri"
       },
       {
+        "nome": "Fabbian"
+      },
+      {
         "nome": "Keita"
       },
       {
-        "nome": "Nicolussi Caviglia"
+        "nome": "Ordonez"
       },
       {
-        "nome": "Bernabé"
+        "nome": "Bernabè"
       },
       {
-        "nome": "Almqvist"
-      },
-      {
-        "nome": "Pellegrino"
+        "nome": "Romero"
       },
       {
         "nome": "Tourè"
@@ -5080,14 +5096,14 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "Hermoso"
       ],
       [
-        "Rensch",
+        "Molina",
         "Koné",
         "Cristante",
         "Wesley"
       ],
       [
-        "Soulé",
-        "Dybala"
+        "Dybala",
+        "Mora"
       ],
       [
         "Malen"
@@ -5099,7 +5115,11 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "b": "Koulierakis"
       },
       {
-        "a": "Soulé",
+        "a": "Mora",
+        "b": "Soulè"
+      },
+      {
+        "a": "Dybala",
         "b": "Castro"
       }
     ],
@@ -5117,7 +5137,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Hermoso"
       },
       {
-        "nome": "Rensch"
+        "nome": "Molina"
       },
       {
         "nome": "Koné"
@@ -5129,10 +5149,10 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Wesley"
       },
       {
-        "nome": "Soulé"
+        "nome": "Dybala"
       },
       {
-        "nome": "Dybala"
+        "nome": "Mora"
       },
       {
         "nome": "Malen"
@@ -5142,41 +5162,43 @@ FANTACALCIO_SNAPSHOT_V15 = [
   {
     "squadra": "Sassuolo",
     "allenatore": "Alberto Aquilani",
-    "modulo": "4-2-3-1",
+    "modulo": "4-3-3",
     "linee_fonte": [
       [
         "Muric"
       ],
       [
-        "Walukiewicz",
+        "Van der Brempt",
         "Idzes",
-        "Candé",
-        "Doig"
+        "Caleta-Car",
+        "Obrador"
       ],
       [
         "Thorstvedt",
-        "Matic"
+        "Matic",
+        "Adzic"
       ],
       [
         "Berardi",
-        "Adzic",
+        "Esposito",
         "Laurientè"
-      ],
-      [
-        "Pinamonti"
       ]
     ],
     "ballottaggi": [
       {
-        "a": "Walukiewicz",
-        "b": "Missori"
+        "a": "Caleta-Car",
+        "b": "Leysen"
+      },
+      {
+        "a": "Obrador",
+        "b": "Doig"
       },
       {
         "a": "Adzic",
         "b": "Bakola"
       },
       {
-        "a": "Pinamonti",
+        "a": "Esposito",
         "b": "Bowie"
       }
     ],
@@ -5185,16 +5207,16 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Muric"
       },
       {
-        "nome": "Walukiewicz"
+        "nome": "Van der Brempt"
       },
       {
         "nome": "Idzes"
       },
       {
-        "nome": "Candé"
+        "nome": "Caleta-Car"
       },
       {
-        "nome": "Doig"
+        "nome": "Obrador"
       },
       {
         "nome": "Thorstvedt"
@@ -5203,16 +5225,16 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Matic"
       },
       {
-        "nome": "Berardi"
-      },
-      {
         "nome": "Adzic"
       },
       {
-        "nome": "Laurientè"
+        "nome": "Berardi"
       },
       {
-        "nome": "Pinamonti"
+        "nome": "Esposito"
+      },
+      {
+        "nome": "Laurientè"
       }
     ]
   },
@@ -5222,16 +5244,16 @@ FANTACALCIO_SNAPSHOT_V15 = [
     "modulo": "3-4-2-1",
     "linee_fonte": [
       [
-        "Paleari"
+        "Perri"
       ],
       [
         "Comuzzo",
-        "Ismajli",
+        "Coco",
         "Comert"
       ],
       [
-        "Pedersen",
-        "Gineitis",
+        "Belghali",
+        "Mandragora",
         "Fitz-Jim",
         "Cacciamani"
       ],
@@ -5245,36 +5267,40 @@ FANTACALCIO_SNAPSHOT_V15 = [
     ],
     "ballottaggi": [
       {
-        "a": "Comuzzo",
-        "b": "Coco"
+        "a": "Coco",
+        "b": "Ismajli"
       },
       {
-        "a": "Ismajli",
-        "b": "Coco"
+        "a": "Belghali",
+        "b": "Patterson"
+      },
+      {
+        "a": "Cacciamani",
+        "b": "Fortini"
       },
       {
         "a": "Casadei",
-        "b": "Oristanio"
+        "b": "Braganca"
       }
     ],
     "formazione": [
       {
-        "nome": "Paleari"
+        "nome": "Perri"
       },
       {
         "nome": "Comuzzo"
       },
       {
-        "nome": "Ismajli"
+        "nome": "Coco"
       },
       {
         "nome": "Comert"
       },
       {
-        "nome": "Pedersen"
+        "nome": "Belghali"
       },
       {
-        "nome": "Gineitis"
+        "nome": "Mandragora"
       },
       {
         "nome": "Fitz-Jim"
@@ -5302,8 +5328,8 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "Okoye"
       ],
       [
-        "Bertola",
-        "Kristensen",
+        "Palma",
+        "Kabasele",
         "Solet"
       ],
       [
@@ -5322,12 +5348,8 @@ FANTACALCIO_SNAPSHOT_V15 = [
     ],
     "ballottaggi": [
       {
-        "a": "Bertola",
-        "b": "Kabasele"
-      },
-      {
-        "a": "Ekkelenkamp",
-        "b": "Unai Gomez"
+        "a": "Palma",
+        "b": "Abankwah"
       },
       {
         "a": "Piotrowski",
@@ -5339,10 +5361,10 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Okoye"
       },
       {
-        "nome": "Bertola"
+        "nome": "Palma"
       },
       {
-        "nome": "Kristensen"
+        "nome": "Kabasele"
       },
       {
         "nome": "Solet"
@@ -5381,14 +5403,14 @@ FANTACALCIO_SNAPSHOT_V15 = [
       [
         "Schingtienne",
         "Bella-Kotchap",
-        "Halhal"
+        "Juan Jesus"
       ],
       [
-        "Correia",
+        "Mazzocchi",
         "Kike Perez",
         "Busio",
         "Basic",
-        "Hainaut"
+        "Haps"
       ],
       [
         "Yeboah",
@@ -5397,24 +5419,24 @@ FANTACALCIO_SNAPSHOT_V15 = [
     ],
     "ballottaggi": [
       {
-        "a": "Halhal",
-        "b": "Moreno"
+        "a": "Juan Jesus",
+        "b": "Halhal"
       },
       {
-        "a": "Correia",
-        "b": "Sagrado"
+        "a": "Mazzocchi",
+        "b": "Hainaut"
+      },
+      {
+        "a": "Haps",
+        "b": "Correia"
       },
       {
         "a": "Kike Perez",
         "b": "Sohm"
       },
       {
-        "a": "Yeboah",
-        "b": "Rrahmani"
-      },
-      {
         "a": "Akor Adams",
-        "b": "Adorante"
+        "b": "Rrahmani"
       }
     ],
     "formazione": [
@@ -5428,10 +5450,10 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Bella-Kotchap"
       },
       {
-        "nome": "Halhal"
+        "nome": "Juan Jesus"
       },
       {
-        "nome": "Correia"
+        "nome": "Mazzocchi"
       },
       {
         "nome": "Kike Perez"
@@ -5443,7 +5465,7 @@ FANTACALCIO_SNAPSHOT_V15 = [
         "nome": "Basic"
       },
       {
-        "nome": "Hainaut"
+        "nome": "Haps"
       },
       {
         "nome": "Yeboah"
@@ -5455,14 +5477,13 @@ FANTACALCIO_SNAPSHOT_V15 = [
   }
 ]
 
-
 def _fc_snapshot_v15():
     return {
         "versione_dati": 15,
         "fonte": "Fantacalcio.it",
         "url_fonte": URL_PROBABILI_FORMAZIONI,
         "metodo_import": "snapshot_verificato",
-        "scaricato_il": "02/09/2026 16:55",
+        "scaricato_il": "02/09/2026 13:39",
         "squadre": FANTACALCIO_SNAPSHOT_V15
     }
 
