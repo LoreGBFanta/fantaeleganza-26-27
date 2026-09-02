@@ -64,7 +64,7 @@ MAX_UNDO = 10
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "fantacalcio.db"
-URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio.it/probabili-formazioni-serie-a"
+URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio-online.com/it/consigli-fantacalcio/formazioni-tipo-serie-a-2026-2027"
 
 MAX_SNAPSHOT = 30
 
@@ -3056,77 +3056,747 @@ def pf_pct(x): return bool(re.fullmatch(r"\d{1,3}\s*%",str(x).strip()))
 def pf_num(x):
     m=re.search(r"\d{1,3}",str(x)); return int(m.group()) if m else 0
 
+def status_titolarita_da_consenso(percentuale):
+    """
+    Converte il consenso delle guide in 3 status operativi.
+
+    TITOLARE:
+        consenso >= 90%
+
+    BALLOTTAGGIO:
+        consenso tra 60% e 89%
+
+    RISERVA:
+        consenso < 60%
+
+    La percentuale resta nel database come dato tecnico,
+    ma non viene mostrata nell'interfaccia.
+    """
+
+    try:
+        valore = int(
+            percentuale
+            or 0
+        )
+    except Exception:
+        valore = 0
+
+    if valore >= 90:
+        return "TITOLARE"
+
+    if valore >= 60:
+        return "BALLOTTAGGIO"
+
+    return "RISERVA"
+
+
+def colore_status_titolarita(status):
+    status = str(
+        status
+        or ""
+    ).upper()
+
+    if status == "TITOLARE":
+        return "#16a34a"
+
+    if status == "BALLOTTAGGIO":
+        return "#2563eb"
+
+    return "#dc2626"
+
+
 def aggiorna_probabili_web():
-    req=urllib.request.Request(URL_PROBABILI_FORMAZIONI,headers={"User-Agent":"Mozilla/5.0","Accept-Language":"it-IT,it;q=0.9"})
-    with urllib.request.urlopen(req,timeout=20) as r: raw=r.read().decode("utf-8","ignore")
-    p=PFParser(); p.feed(raw); righe=[]
-    for x in p.x:
-        if not righe or righe[-1]!=x: righe.append(x)
-    trovate=[]; i=0
-    while i<len(righe)-3:
-        if pf_mod(righe[i+1]) and len(righe[i])<32:
-            nome,modulo=righe[i],righe[i+1]; j=i+2; tit=[]
-            while j+1<len(righe) and len(tit)<11:
-                if righe[j].lower()=="panchina": break
-                if pf_pct(righe[j+1]):
-                    tit.append({"nome":righe[j],"percentuale":pf_num(righe[j+1])}); j+=2
-                else: j+=1
-            if len(tit)>=9:
-                bench=[]
-                while j<len(righe) and righe[j].lower()!="panchina" and j<i+75: j+=1
-                if j<len(righe): j+=1
-                stop={"presentazione squadre","dettaglio calciatori","ballottaggi","squalificati","diffidati","infortunati","in dubbio"}
-                while j+1<len(righe) and len(bench)<18:
-                    if pf_mod(righe[j+1]) or righe[j].lower() in stop: break
-                    if pf_pct(righe[j+1]):
-                        bench.append({"nome":righe[j],"percentuale":pf_num(righe[j+1])}); j+=2
-                    else: j+=1
-                trovate.append({"squadra":nome,"modulo":modulo,"titolari":tit[:11],"panchina":bench})
-                i=max(i+2,j); continue
-        i+=1
-    uniche={}
-    for s in trovate:
-        if s["squadra"] not in uniche: uniche[s["squadra"]]=s
-    squadre=list(uniche.values())
-    if len(squadre)<10: raise RuntimeError("La pagina è raggiungibile ma la struttura non è stata riconosciuta. I dati precedenti non sono stati cancellati.")
-    ag=[x.replace("Ultimo aggiornamento","").strip() for x in righe if x.lower().startswith("ultimo aggiornamento")]
-    dati={"scaricato_il":datetime.now(ZoneInfo("Europe/Rome")).strftime("%d/%m/%Y %H:%M"),"aggiornamento_fonte":ag[0] if ag else "","squadre":squadre}
-    salva_config_generica("probabili_formazioni_web",json.dumps(dati,ensure_ascii=False))
+    """
+    Scarica le formazioni tipo stagionali dal confronto pubblico
+    delle guide all'asta di Fantacalcio-Online.
+
+    La percentuale di consenso viene utilizzata solo internamente
+    per assegnare uno dei 3 status:
+        TITOLARE / BALLOTTAGGIO / RISERVA.
+
+    I dati vengono salvati nel database dell'app e restano
+    consultabili anche senza connessione dopo l'aggiornamento.
+    """
+
+    req = urllib.request.Request(
+        URL_PROBABILI_FORMAZIONI,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 Chrome/152 Safari/537.36"
+            ),
+            "Accept-Language": "it-IT,it;q=0.9"
+        }
+    )
+
+    with urllib.request.urlopen(
+        req,
+        timeout=25
+    ) as risposta:
+
+        raw = risposta.read().decode(
+            "utf-8",
+            "ignore"
+        )
+
+    parser = PFParser()
+    parser.feed(
+        raw
+    )
+
+    righe = []
+
+    for elemento in parser.x:
+
+        elemento = re.sub(
+            r"\s+",
+            " ",
+            str(
+                elemento
+            )
+        ).strip()
+
+        if not elemento:
+            continue
+
+        if (
+            not righe
+            or righe[-1] != elemento
+        ):
+            righe.append(
+                elemento
+            )
+
+    # ----------------------------------------------------------
+    # Individuazione dei blocchi squadra.
+    # La pagina pubblica espone squadra, modulo e percentuali
+    # di consenso delle guide.
+    # ----------------------------------------------------------
+
+    squadre_trovate = []
+    i = 0
+
+    parole_da_escludere = {
+        "fonte",
+        "peso",
+        "perché",
+        "probabilità",
+        "consenso",
+        "rigorista",
+        "rigoristi",
+        "guida",
+        "guide",
+        "modulo",
+        "ruolo",
+        "r"
+    }
+
+    while i < len(
+        righe
+    ) - 3:
+
+        if (
+            i + 1 < len(
+                righe
+            )
+            and pf_mod(
+                righe[
+                    i + 1
+                ]
+            )
+        ):
+
+            nome_squadra = str(
+                righe[
+                    i
+                ]
+            ).strip()
+
+            modulo = str(
+                righe[
+                    i + 1
+                ]
+            ).strip()
+
+            nome_lower = (
+                nome_squadra.lower()
+            )
+
+            if (
+                len(
+                    nome_squadra
+                ) <= 32
+                and nome_lower
+                not in parole_da_escludere
+                and not pf_pct(
+                    nome_squadra
+                )
+            ):
+
+                j = i + 2
+                giocatori = []
+
+                # Leggiamo fino al modulo/squadra successiva.
+                while (
+                    j < len(
+                        righe
+                    )
+                    and j < i + 120
+                ):
+
+                    if (
+                        j + 1 < len(
+                            righe
+                        )
+                        and pf_mod(
+                            righe[
+                                j + 1
+                            ]
+                        )
+                        and len(
+                            str(
+                                righe[
+                                    j
+                                ]
+                            )
+                        ) <= 32
+                    ):
+                        break
+
+                    nome_giocatore = str(
+                        righe[
+                            j
+                        ]
+                    ).strip()
+
+                    percentuale = None
+
+                    # Caso più comune:
+                    # NOME -> 90%
+                    if (
+                        j + 1 < len(
+                            righe
+                        )
+                        and pf_pct(
+                            righe[
+                                j + 1
+                            ]
+                        )
+                    ):
+                        percentuale = (
+                            pf_num(
+                                righe[
+                                    j + 1
+                                ]
+                            )
+                        )
+
+                        j += 2
+
+                    # Caso alternativo:
+                    # NOME -> ruolo -> 90%
+                    elif (
+                        j + 2 < len(
+                            righe
+                        )
+                        and pf_pct(
+                            righe[
+                                j + 2
+                            ]
+                        )
+                        and len(
+                            nome_giocatore
+                        ) <= 45
+                    ):
+                        percentuale = (
+                            pf_num(
+                                righe[
+                                    j + 2
+                                ]
+                            )
+                        )
+
+                        j += 3
+
+                    else:
+
+                        j += 1
+
+                    if (
+                        percentuale is None
+                        or not nome_giocatore
+                    ):
+                        continue
+
+                    # Filtri di sicurezza per non interpretare
+                    # intestazioni e testi come calciatori.
+                    testo_lower = (
+                        nome_giocatore.lower()
+                    )
+
+                    if (
+                        testo_lower
+                        in parole_da_escludere
+                        or len(
+                            nome_giocatore
+                        ) > 45
+                    ):
+                        continue
+
+                    giocatori.append({
+                        "nome":
+                            nome_giocatore,
+
+                        "consenso":
+                            int(
+                                percentuale
+                            ),
+
+                        "status":
+                            status_titolarita_da_consenso(
+                                percentuale
+                            )
+                    })
+
+                # Deduplica per nome all'interno della squadra.
+                unici = {}
+
+                for g in giocatori:
+
+                    chiave = (
+                        g[
+                            "nome"
+                        ]
+                        .strip()
+                        .lower()
+                    )
+
+                    if not chiave:
+                        continue
+
+                    # Se lo stesso nome appare più volte,
+                    # teniamo il consenso maggiore.
+                    if (
+                        chiave
+                        not in unici
+                        or g[
+                            "consenso"
+                        ]
+                        > unici[
+                            chiave
+                        ][
+                            "consenso"
+                        ]
+                    ):
+
+                        unici[
+                            chiave
+                        ] = g
+
+                giocatori = list(
+                    unici.values()
+                )
+
+                if len(
+                    giocatori
+                ) >= 11:
+
+                    # La formazione tipo viene costruita sui primi
+                    # 11 nomi principali pubblicati dalla fonte.
+                    titolari_formazione = (
+                        giocatori[
+                            :11
+                        ]
+                    )
+
+                    alternative = (
+                        giocatori[
+                            11:
+                        ]
+                    )
+
+                    squadre_trovate.append({
+                        "squadra":
+                            nome_squadra,
+
+                        "modulo":
+                            modulo,
+
+                        "formazione":
+                            titolari_formazione,
+
+                        "alternative":
+                            alternative,
+
+                        "giocatori":
+                            giocatori
+                    })
+
+                    i = max(
+                        i + 2,
+                        j
+                    )
+
+                    continue
+
+        i += 1
+
+    # ----------------------------------------------------------
+    # Deduplica squadre.
+    # ----------------------------------------------------------
+
+    squadre_uniche = {}
+
+    for squadra in (
+        squadre_trovate
+    ):
+
+        nome = str(
+            squadra[
+                "squadra"
+            ]
+        ).strip()
+
+        if (
+            nome
+            and nome
+            not in squadre_uniche
+        ):
+
+            squadre_uniche[
+                nome
+            ] = squadra
+
+    squadre = list(
+        squadre_uniche.values()
+    )
+
+    if len(
+        squadre
+    ) < 10:
+
+        raise RuntimeError(
+            "La pagina è raggiungibile ma non sono riuscito "
+            "a riconoscere in modo affidabile le formazioni tipo. "
+            "I dati già salvati non sono stati modificati."
+        )
+
+    aggiornamenti = [
+        x
+        for x in righe
+        if (
+            "aggiornato" in x.lower()
+            or "ultimo aggiornamento"
+            in x.lower()
+        )
+        and len(
+            x
+        ) < 100
+    ]
+
+    dati = {
+        "fonte":
+            URL_PROBABILI_FORMAZIONI,
+
+        "scaricato_il":
+            datetime.now(
+                ZoneInfo(
+                    "Europe/Rome"
+                )
+            ).strftime(
+                "%d/%m/%Y %H:%M"
+            ),
+
+        "aggiornamento_fonte":
+            (
+                aggiornamenti[
+                    0
+                ]
+                if aggiornamenti
+                else ""
+            ),
+
+        "squadre":
+            squadre
+    }
+
+    salva_config_generica(
+        "probabili_formazioni_web",
+        json.dumps(
+            dati,
+            ensure_ascii=False
+        )
+    )
+
     return dati
 
+
 def carica_probabili_web():
-    x=leggi_config_generica("probabili_formazioni_web","")
-    try: return json.loads(x) if x else None
-    except Exception: return None
 
-def pf_colore(p):
-    p=int(p or 0)
-    return "#16a34a" if p>=80 else "#2563eb" if p>=60 else "#f59e0b" if p>=40 else "#dc2626"
+    raw = leggi_config_generica(
+        "probabili_formazioni_web",
+        ""
+    )
 
-def pf_linee(modulo,titolari):
-    try: nums=[int(x) for x in str(modulo).split("-")]
-    except Exception: nums=[4,4,2]
-    if sum(nums)!=10: nums=[4,4,2]
-    altri=list(titolari)[1:]; linee=[]; k=0
-    for n in nums: linee.append(altri[k:k+n]); k+=n
-    return list(reversed(linee))+[list(titolari)[:1]]
+    if not raw:
+        return None
 
-def mostra_probabile(s):
-    rows=""
-    for linea in pf_linee(s.get("modulo",""),s.get("titolari",[])):
-        players=""
+    try:
+
+        dati = json.loads(
+            raw
+        )
+
+        if isinstance(
+            dati,
+            dict
+        ):
+            return dati
+
+    except Exception:
+        pass
+
+    return None
+
+
+def pf_linee(
+    modulo,
+    formazione
+):
+    """
+    Divide gli 11 giocatori nelle linee del modulo.
+    La visualizzazione è attacco -> centrocampo -> difesa -> portiere.
+    """
+
+    try:
+
+        numeri = [
+            int(
+                x
+            )
+            for x in str(
+                modulo
+            ).split(
+                "-"
+            )
+        ]
+
+    except Exception:
+
+        numeri = [
+            4,
+            4,
+            2
+        ]
+
+    if (
+        not numeri
+        or sum(
+            numeri
+        ) != 10
+    ):
+
+        numeri = [
+            4,
+            4,
+            2
+        ]
+
+    giocatori = list(
+        formazione
+        or []
+    )
+
+    portiere = (
+        giocatori[
+            :1
+        ]
+    )
+
+    movimento = (
+        giocatori[
+            1:
+        ]
+    )
+
+    linee = []
+    indice = 0
+
+    for numero in numeri:
+
+        linee.append(
+            movimento[
+                indice:
+                indice
+                + numero
+            ]
+        )
+
+        indice += numero
+
+    return (
+        list(
+            reversed(
+                linee
+            )
+        )
+        + [
+            portiere
+        ]
+    )
+
+
+def mostra_probabile(
+    squadra
+):
+
+    rows = ""
+
+    for linea in pf_linee(
+        squadra.get(
+            "modulo",
+            ""
+        ),
+        squadra.get(
+            "formazione",
+            []
+        )
+    ):
+
+        players = ""
+
         for g in linea:
-            p=int(g.get("percentuale",0) or 0); col=pf_colore(p); nome=html.escape(str(g.get("nome","")))
-            players += '<div class="pf-player"><div class="pf-name">'+nome+'</div><div class="pf-pct" style="color:'+col+'">'+str(p)+'%</div></div>'
-        rows += '<div class="pf-line">'+players+'</div>'
-    titolo=html.escape(str(s.get("squadra",""))); modulo=html.escape(str(s.get("modulo","")))
-    st.markdown('<div class="pf-team">'+titolo+'<span>'+modulo+'</span></div><div class="pf-pitch">'+rows+'</div>',unsafe_allow_html=True)
-    if s.get("panchina"):
-        with st.expander("Panchina"):
-            cc=st.columns(2)
-            for n,g in enumerate(s["panchina"]):
-                p=int(g.get("percentuale",0) or 0); nome=html.escape(str(g.get("nome","")))
-                cc[n%2].markdown("**"+nome+"** <span style='color:"+pf_colore(p)+";font-weight:800'>"+str(p)+"%</span>",unsafe_allow_html=True)
+
+            status = str(
+                g.get(
+                    "status",
+                    "RISERVA"
+                )
+            ).upper()
+
+            colore = (
+                colore_status_titolarita(
+                    status
+                )
+            )
+
+            nome = html.escape(
+                str(
+                    g.get(
+                        "nome",
+                        ""
+                    )
+                )
+            )
+
+            players += (
+                '<div class="pf-player">'
+                '<div class="pf-name">'
+                + nome
+                + '</div>'
+                '<div class="pf-status" '
+                'style="color:'
+                + colore
+                + '">'
+                + status
+                + '</div>'
+                '</div>'
+            )
+
+        rows += (
+            '<div class="pf-line">'
+            + players
+            + '</div>'
+        )
+
+    titolo = html.escape(
+        str(
+            squadra.get(
+                "squadra",
+                ""
+            )
+        )
+    )
+
+    modulo = html.escape(
+        str(
+            squadra.get(
+                "modulo",
+                ""
+            )
+        )
+    )
+
+    st.markdown(
+        '<div class="pf-team">'
+        + titolo
+        + '<span>'
+        + modulo
+        + '</span></div>'
+        + '<div class="pf-pitch">'
+        + rows
+        + '</div>',
+        unsafe_allow_html=True
+    )
+
+    alternative = (
+        squadra.get(
+            "alternative",
+            []
+        )
+    )
+
+    if alternative:
+
+        with st.expander(
+            "Alternative / riserve",
+            expanded=False
+        ):
+
+            colonne = st.columns(
+                2
+            )
+
+            for indice, g in enumerate(
+                alternative
+            ):
+
+                status = str(
+                    g.get(
+                        "status",
+                        "RISERVA"
+                    )
+                ).upper()
+
+                colore = (
+                    colore_status_titolarita(
+                        status
+                    )
+                )
+
+                nome = html.escape(
+                    str(
+                        g.get(
+                            "nome",
+                            ""
+                        )
+                    )
+                )
+
+                colonne[
+                    indice % 2
+                ].markdown(
+                    "**"
+                    + nome
+                    + "** · "
+                    + "<span style='color:"
+                    + colore
+                    + ";font-weight:900;'>"
+                    + status
+                    + "</span>",
+                    unsafe_allow_html=True
+                )
+
 
 def leggi_budget_asta():
 
@@ -8075,7 +8745,7 @@ with m8:
 st.markdown('''<style>
 .pf-team{background:#071a2f;color:white;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:900;display:flex;justify-content:space-between}.pf-team span{color:#f5b51b}
 .pf-pitch{min-height:420px;padding:16px 7px;border:3px solid white;border-radius:0 0 11px 11px;background:repeating-linear-gradient(90deg,#16863b 0,#16863b 46px,#118039 46px,#118039 92px);display:flex;flex-direction:column;justify-content:space-around;box-shadow:0 3px 12px #0002}
-.pf-line{display:flex;justify-content:space-around;gap:4px}.pf-player{width:92px;background:#fffffff2;border-radius:8px;padding:6px 3px;text-align:center;box-shadow:0 2px 6px #0003}.pf-name{font-size:.70rem;font-weight:850;color:#071a2f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pf-pct{font-size:.69rem;font-weight:900;margin-top:3px}
+.pf-line{display:flex;justify-content:space-around;gap:4px}.pf-player{width:92px;background:#fffffff2;border-radius:8px;padding:6px 3px;text-align:center;box-shadow:0 2px 6px #0003}.pf-name{font-size:.70rem;font-weight:850;color:#071a2f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pf-status{font-size:.61rem;font-weight:900;margin-top:4px;letter-spacing:.02em}
 @media(max-width:768px){.pf-pitch{min-height:380px}.pf-player{width:64px}.pf-name{font-size:.58rem}}
 </style>''',unsafe_allow_html=True)
 
@@ -8089,7 +8759,7 @@ PAGINE = [
     ("🔨", "ASTA"),
     ("👕", "ROSA"),
     ("▣", "MODULI"),
-    ("⚽", "PROBABILI FORMAZIONI"),
+    ("⚽", "FORMAZIONI TIPO"),
     ("🔴", "VENDUTI AD AVVERSARI")
 ]
 
@@ -9876,33 +10546,199 @@ elif sezione == "ROSA":
 # PROBABILI FORMAZIONI
 # ============================================================
 
-elif sezione == "PROBABILI FORMAZIONI":
-    st.subheader("⚽ Probabili formazioni Serie A 2026/27")
-    dati=carica_probabili_web()
-    a,b=st.columns([1.35,4.65],vertical_alignment="center")
+elif sezione == "FORMAZIONI TIPO":
+
+    st.subheader(
+        "⚽ Formazioni tipo Serie A 2026/27"
+    )
+
+    dati = (
+        carica_probabili_web()
+    )
+
+    a, b = st.columns(
+        [
+            1.35,
+            4.65
+        ],
+        vertical_alignment="center"
+    )
+
     with a:
-        if st.button("🌐 AGGIORNA DAL WEB",type="primary",use_container_width=True,key="pf_update"):
+
+        if st.button(
+            "🌐 AGGIORNA DAL WEB",
+            type="primary",
+            use_container_width=True,
+            key="pf_update"
+        ):
+
             try:
-                with st.spinner("Aggiornamento dal web..."): dati=aggiorna_probabili_web()
-                st.success(f"Aggiornate {len(dati.get('squadre',[]))} squadre."); st.rerun()
-            except Exception as e:
-                st.error("Aggiornamento non riuscito. Gli eventuali dati già salvati restano disponibili."); st.caption(str(e))
+
+                with st.spinner(
+                    "Aggiornamento formazioni tipo..."
+                ):
+
+                    dati = (
+                        aggiorna_probabili_web()
+                    )
+
+                st.success(
+                    f"Aggiornate "
+                    f"{len(dati.get('squadre', []))} squadre."
+                )
+
+                st.rerun()
+
+            except Exception as errore:
+
+                st.error(
+                    "Aggiornamento non riuscito. "
+                    "Gli eventuali dati già salvati "
+                    "restano disponibili."
+                )
+
+                st.caption(
+                    str(
+                        errore
+                    )
+                )
+
     with b:
+
         if dati:
-            testo=f"Ultimo download: **{dati.get('scaricato_il','—')}**"
-            if dati.get("aggiornamento_fonte"): testo+=f" · Aggiornamento fonte: **{dati.get('aggiornamento_fonte')}**"
-            st.markdown(testo)
-        else: st.info("Nessun dato salvato. Collegati a Internet e premi «AGGIORNA DAL WEB».")
-    st.caption("Fonte: Fantacalcio.it · verde ≥80% · blu 60–79% · arancio 40–59% · rosso <40%. I dati restano salvati nell'app.")
+
+            testo = (
+                "Ultimo download: "
+                f"**{dati.get('scaricato_il', '—')}**"
+            )
+
+            if dati.get(
+                "aggiornamento_fonte"
+            ):
+
+                testo += (
+                    " · Fonte: "
+                    f"**{dati.get('aggiornamento_fonte')}**"
+                )
+
+            st.markdown(
+                testo
+            )
+
+        else:
+
+            st.info(
+                "Nessun dato salvato. "
+                "Collegati a Internet e premi "
+                "«AGGIORNA DAL WEB»."
+            )
+
+    st.caption(
+        "Fonte: Fantacalcio-Online — Formazioni tipo Serie A "
+        "da confronto fra guide all'asta. "
+        "La percentuale di consenso viene trasformata "
+        "in 3 status e non viene mostrata."
+    )
+
+    legenda = (
+        '<div style="display:flex;gap:10px;'
+        'flex-wrap:wrap;margin:6px 0 12px 0;">'
+
+        '<span style="background:#dcfce7;color:#15803d;'
+        'border-radius:7px;padding:5px 9px;font-weight:900;">'
+        '● TITOLARE</span>'
+
+        '<span style="background:#dbeafe;color:#1d4ed8;'
+        'border-radius:7px;padding:5px 9px;font-weight:900;">'
+        '● BALLOTTAGGIO</span>'
+
+        '<span style="background:#fee2e2;color:#b91c1c;'
+        'border-radius:7px;padding:5px 9px;font-weight:900;">'
+        '● RISERVA</span>'
+
+        '</div>'
+    )
+
+    st.markdown(
+        legenda,
+        unsafe_allow_html=True
+    )
+
     if dati:
-        squadre=dati.get("squadre",[]); nomi=[s.get("squadra","") for s in squadre]
-        filtro=st.selectbox("Vai a una squadra",["TUTTE"]+nomi,key="pf_filter")
-        vis=squadre if filtro=="TUTTE" else [s for s in squadre if s.get("squadra")==filtro]
-        for i in range(0,len(vis),2):
-            cols=st.columns(2)
-            for j in range(2):
-                if i+j<len(vis):
-                    with cols[j]: mostra_probabile(vis[i+j])
+
+        squadre = (
+            dati.get(
+                "squadre",
+                []
+            )
+        )
+
+        nomi = [
+            squadra.get(
+                "squadra",
+                ""
+            )
+            for squadra in squadre
+        ]
+
+        filtro = st.selectbox(
+            "Vai a una squadra",
+            [
+                "TUTTE"
+            ]
+            + nomi,
+            key="pf_filter"
+        )
+
+        visibili = (
+            squadre
+            if filtro == "TUTTE"
+            else [
+                squadra
+                for squadra in squadre
+                if squadra.get(
+                    "squadra"
+                ) == filtro
+            ]
+        )
+
+        for indice in range(
+            0,
+            len(
+                visibili
+            ),
+            2
+        ):
+
+            colonne = (
+                st.columns(
+                    2
+                )
+            )
+
+            for offset in range(
+                2
+            ):
+
+                posizione = (
+                    indice
+                    + offset
+                )
+
+                if posizione < len(
+                    visibili
+                ):
+
+                    with colonne[
+                        offset
+                    ]:
+
+                        mostra_probabile(
+                            visibili[
+                                posizione
+                            ]
+                        )
 
 
 # ============================================================
