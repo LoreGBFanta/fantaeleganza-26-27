@@ -3526,31 +3526,288 @@ def _fc_parse_ballottaggi(testo):
 
     return coppie
 
+def _fc_testo_da_jsonld(raw_html):
+    """
+    Cerca il contenuto dell'articolo nei blocchi JSON-LD.
+    È spesso la rappresentazione più stabile perché non dipende
+    dalla struttura grafica/DOM della pagina.
+    """
+
+    candidati = re.findall(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        raw_html,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    testi = []
+
+    for blocco in candidati:
+
+        blocco = blocco.strip()
+
+        if not blocco:
+            continue
+
+        try:
+            dati = json.loads(
+                blocco
+            )
+        except Exception:
+            continue
+
+        oggetti = (
+            dati
+            if isinstance(
+                dati,
+                list
+            )
+            else [
+                dati
+            ]
+        )
+
+        for oggetto in oggetti:
+
+            if not isinstance(
+                oggetto,
+                dict
+            ):
+                continue
+
+            # Gestisce anche @graph.
+            grafi = oggetto.get(
+                "@graph",
+                []
+            )
+
+            if isinstance(
+                grafi,
+                list
+            ):
+                oggetti.extend(
+                    [
+                        g
+                        for g in grafi
+                        if isinstance(
+                            g,
+                            dict
+                        )
+                    ]
+                )
+
+            corpo = oggetto.get(
+                "articleBody"
+            )
+
+            if corpo:
+
+                testo = re.sub(
+                    r"\s+",
+                    " ",
+                    str(
+                        corpo
+                    )
+                ).strip()
+
+                if (
+                    "Probabile formazione"
+                    in testo
+                    and "Ballottaggi"
+                    in testo
+                ):
+
+                    testi.append(
+                        testo
+                    )
+
+    if not testi:
+        return ""
+
+    return max(
+        testi,
+        key=len
+    )
+
+
+def _fc_testo_visibile(raw_html):
+    """
+    Fallback: estrae il testo visibile ignorando script/style.
+    """
+
+    parser = GoalTextParser()
+    parser.feed(
+        raw_html
+    )
+
+    parti = []
+
+    for elemento in parser.items:
+
+        testo = re.sub(
+            r"\s+",
+            " ",
+            str(
+                elemento
+            )
+        ).strip()
+
+        if testo:
+            parti.append(
+                testo
+            )
+
+    return re.sub(
+        r"\s+",
+        " ",
+        " ".join(
+            parti
+        )
+    ).strip()
+
+
+def _fc_normalizza_testo_articolo(testo):
+
+    testo = (
+        str(
+            testo
+            or ""
+        )
+        .replace(
+            "\xa0",
+            " "
+        )
+        .replace(
+            "’",
+            "'"
+        )
+        .replace(
+            "–",
+            "-"
+        )
+        .replace(
+            "—",
+            "-"
+        )
+    )
+
+    return re.sub(
+        r"\s+",
+        " ",
+        testo
+    ).strip()
+
+
+def _fc_squadre_attese():
+    """
+    Usa i nomi squadra del listone già caricato.
+    È molto più robusto che provare a capire i titoli dall'HTML.
+
+    La fonte dei dati sportivi resta esclusivamente Fantacalcio.it:
+    il listone serve solo per sapere quali nomi squadra cercare.
+    """
+
+    squadre = []
+
+    if (
+        "df_completo"
+        in globals()
+        and df_completo is not None
+        and not df_completo.empty
+        and "Squadra"
+        in df_completo.columns
+    ):
+
+        for valore in (
+            df_completo[
+                "Squadra"
+            ]
+            .dropna()
+            .astype(
+                str
+            )
+            .tolist()
+        ):
+
+            nome = re.sub(
+                r"\s+",
+                " ",
+                valore
+            ).strip()
+
+            if (
+                nome
+                and nome not in squadre
+            ):
+
+                squadre.append(
+                    nome
+                )
+
+    return squadre
+
+
+def _fc_estrai_blocco_squadra(
+    testo,
+    nome_squadra
+):
+    """
+    Cerca il blocco di una squadra usando il nome del club come ancora,
+    seguito dalle etichette Allenatore / Modulo / Probabile formazione.
+    """
+
+    nome_esc = re.escape(
+        nome_squadra
+    )
+
+    pattern = re.compile(
+        rf"(?<!\w){nome_esc}(?!\w)"
+        r"\s+Allenatore:\s*"
+        r"(?P<allenatore>.+?)"
+        r"\s+Modulo:\s*"
+        r"(?P<modulo>[1-5](?:-[1-5]){2,4})"
+        r"(?:\s*\([^)]*\))?"
+        r"\s+Probabile formazione"
+        r"(?:\s*\(da dx a sx\))?\s*:\s*"
+        r"(?P<formazione>.+?)"
+        r"\s+Ballottaggi:\s*"
+        r"(?P<ballottaggi>.+?)"
+        r"(?=\s+Rigoristi:|\s+Calci da fermo:|\s+[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ' .-]{2,25}\s+Allenatore:|$)",
+        flags=re.IGNORECASE
+    )
+
+    return pattern.search(
+        testo
+    )
+
+
 def aggiorna_probabili_web():
     """
-    V12 - Fantacalcio.it, parser a testo continuo.
+    V13 - SOLO FANTACALCIO.IT
 
-    Non dipende più dai tag H2 della pagina.
-    Cerca direttamente i blocchi:
-        SQUADRA
-        Allenatore:
-        Modulo:
-        Probabile formazione:
-        Ballottaggi:
-        Rigoristi:
-
-    Questo rende l'importazione molto più robusta su Streamlit Cloud.
+    Strategia:
+    - nessuna seconda fonte;
+    - prova la pagina AMP e la pagina standard di Fantacalcio.it;
+    - per ciascuna prova prima il JSON-LD articleBody;
+    - fallback al testo visibile;
+    - usa i nomi squadra del listone come ancore;
+    - salva solo se trova 20 squadre con 11 giocatori esatti.
     """
 
-    urls_da_provare = [
+    urls = [
         "https://www.fantacalcio.it/amp/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558",
         "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558"
     ]
 
-    raw = ""
-    ultimo_errore = None
+    squadre_attese = (
+        _fc_squadre_attese()
+    )
 
-    for url_download in urls_da_provare:
+    # Se il listone contiene esattamente le 20 squadre, usiamo quelle.
+    # Altrimenti il parser continuerà comunque a tentare i blocchi riconoscibili.
+    risultati_migliori = []
+    diagnostica = []
+
+    for url_download in urls:
 
         try:
 
@@ -3575,227 +3832,295 @@ def aggiorna_probabili_web():
                 timeout=25
             ) as risposta:
 
-                raw_candidate = risposta.read().decode(
+                raw = risposta.read().decode(
                     "utf-8",
                     "ignore"
                 )
 
-            # Basta verificare che il contenuto editoriale sia presente.
-            if (
-                "Probabile formazione" in raw_candidate
-                and "Ballottaggi" in raw_candidate
-                and "Allenatore" in raw_candidate
-            ):
+        except Exception as errore:
 
-                raw = raw_candidate
-                break
-
-        except Exception as exc:
-
-            ultimo_errore = exc
-
-    if not raw:
-
-        raise RuntimeError(
-            "Fantacalcio.it non ha restituito il contenuto utile "
-            "delle formazioni. "
-            + (
-                f"Dettaglio: {ultimo_errore}"
-                if ultimo_errore
-                else ""
-            )
-        )
-
-    # ----------------------------------------------------------
-    # 1. Estrazione del solo testo leggibile.
-    # Usiamo GoalTextParser, già presente nell'app, che ignora
-    # script/style/noscript.
-    # ----------------------------------------------------------
-
-    estrattore = GoalTextParser()
-    estrattore.feed(
-        raw
-    )
-
-    parti = []
-
-    for elemento in estrattore.items:
-
-        testo = re.sub(
-            r"\s+",
-            " ",
-            str(
-                elemento
-            )
-        ).strip()
-
-        if testo:
-            parti.append(
-                testo
+            diagnostica.append(
+                f"{url_download}: {errore}"
             )
 
-    testo_completo = " ".join(
-        parti
-    )
-
-    testo_completo = (
-        testo_completo
-        .replace(
-            "\xa0",
-            " "
-        )
-        .replace(
-            "’",
-            "'"
-        )
-    )
-
-    testo_completo = re.sub(
-        r"\s+",
-        " ",
-        testo_completo
-    ).strip()
-
-    # ----------------------------------------------------------
-    # 2. Individuazione dei 20 blocchi squadra.
-    #
-    # Non usiamo una lista hardcoded: la squadra viene riconosciuta
-    # perché precede immediatamente "Allenatore:".
-    # ----------------------------------------------------------
-
-    pattern_blocco = re.compile(
-        r"(?P<squadra>[A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' .-]{1,28})"
-        r"\s+Allenatore:\s*"
-        r"(?P<allenatore>.+?)"
-        r"\s+Modulo:\s*"
-        r"(?P<modulo>[1-5](?:-[1-5]){2,4})"
-        r"(?:\s*\([^)]*\))?"
-        r"\s+Probabile formazione"
-        r"(?:\s*\(da dx a sx\))?\s*:\s*"
-        r"(?P<formazione>.+?)"
-        r"\s+Ballottaggi:\s*"
-        r"(?P<ballottaggi>.+?)"
-        r"\s+Rigoristi:\s*"
-        r"(?P<rigoristi>.+?)"
-        r"(?=\s+Calci da fermo:)",
-        flags=re.IGNORECASE
-    )
-
-    squadre = []
-
-    for match in pattern_blocco.finditer(
-        testo_completo
-    ):
-
-        nome_squadra = re.sub(
-            r"\s+",
-            " ",
-            match.group(
-                "squadra"
-            )
-        ).strip()
-
-        allenatore = re.sub(
-            r"\s+",
-            " ",
-            match.group(
-                "allenatore"
-            )
-        ).strip()
-
-        modulo = (
-            match.group(
-                "modulo"
-            )
-            .strip()
-        )
-
-        testo_formazione = (
-            match.group(
-                "formazione"
-            )
-            .strip()
-        )
-
-        testo_ballottaggi = (
-            match.group(
-                "ballottaggi"
-            )
-            .strip()
-        )
-
-        parsed_formazione = (
-            _fc_parse_formazione(
-                testo_formazione,
-                modulo
-            )
-        )
-
-        if not parsed_formazione:
             continue
 
-        ballottaggi = (
-            _fc_parse_ballottaggi(
-                testo_ballottaggi
+        rappresentazioni = []
+
+        testo_jsonld = (
+            _fc_testo_da_jsonld(
+                raw
             )
         )
 
-        squadre.append({
-            "squadra":
-                nome_squadra.title(),
-
-            "allenatore":
-                allenatore,
-
-            "modulo":
-                modulo,
-
-            "linee_fonte":
-                parsed_formazione[
-                    "linee_fonte"
-                ],
-
-            "formazione": [
-                {
-                    "nome":
-                        nome
-                }
-                for nome in parsed_formazione[
-                    "titolari"
-                ]
-            ],
-
-            "ballottaggi":
-                ballottaggi
-        })
-
-    # ----------------------------------------------------------
-    # 3. Deduplica.
-    # ----------------------------------------------------------
-
-    uniche = {}
-
-    for squadra in squadre:
-
-        chiave = str(
-            squadra.get(
-                "squadra",
-                ""
+        if testo_jsonld:
+            rappresentazioni.append(
+                (
+                    "JSON-LD",
+                    _fc_normalizza_testo_articolo(
+                        testo_jsonld
+                    )
+                )
             )
-        ).strip().upper()
 
-        if (
-            chiave
-            and chiave
-            not in uniche
-        ):
+        testo_visibile = (
+            _fc_normalizza_testo_articolo(
+                _fc_testo_visibile(
+                    raw
+                )
+            )
+        )
 
-            uniche[
-                chiave
-            ] = squadra
+        if testo_visibile:
+            rappresentazioni.append(
+                (
+                    "HTML",
+                    testo_visibile
+                )
+            )
 
-    squadre = list(
-        uniche.values()
+        for tipo_rappresentazione, testo in rappresentazioni:
+
+            if (
+                "Probabile formazione"
+                not in testo
+                or "Ballottaggi"
+                not in testo
+            ):
+
+                continue
+
+            squadre = []
+
+            # --------------------------------------------------
+            # A. Metodo preferito: nomi club dal listone.
+            # --------------------------------------------------
+
+            for nome_squadra in squadre_attese:
+
+                match = (
+                    _fc_estrai_blocco_squadra(
+                        testo,
+                        nome_squadra
+                    )
+                )
+
+                if not match:
+                    continue
+
+                modulo = (
+                    match.group(
+                        "modulo"
+                    )
+                    .strip()
+                )
+
+                parsed_formazione = (
+                    _fc_parse_formazione(
+                        match.group(
+                            "formazione"
+                        ),
+                        modulo
+                    )
+                )
+
+                if not parsed_formazione:
+                    continue
+
+                ballottaggi = (
+                    _fc_parse_ballottaggi(
+                        match.group(
+                            "ballottaggi"
+                        )
+                    )
+                )
+
+                squadre.append({
+                    "squadra":
+                        nome_squadra,
+
+                    "allenatore":
+                        re.sub(
+                            r"\s+",
+                            " ",
+                            match.group(
+                                "allenatore"
+                            )
+                        ).strip(),
+
+                    "modulo":
+                        modulo,
+
+                    "linee_fonte":
+                        parsed_formazione[
+                            "linee_fonte"
+                        ],
+
+                    "formazione": [
+                        {
+                            "nome":
+                                nome
+                        }
+                        for nome in parsed_formazione[
+                            "titolari"
+                        ]
+                    ],
+
+                    "ballottaggi":
+                        ballottaggi
+                })
+
+            # --------------------------------------------------
+            # B. Fallback: individua tutti i blocchi generici.
+            # --------------------------------------------------
+
+            if len(
+                squadre
+            ) < 20:
+
+                pattern_generico = re.compile(
+                    r"(?P<squadra>[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ' .-]{2,25})"
+                    r"\s+Allenatore:\s*"
+                    r"(?P<allenatore>.+?)"
+                    r"\s+Modulo:\s*"
+                    r"(?P<modulo>[1-5](?:-[1-5]){2,4})"
+                    r"(?:\s*\([^)]*\))?"
+                    r"\s+Probabile formazione"
+                    r"(?:\s*\(da dx a sx\))?\s*:\s*"
+                    r"(?P<formazione>.+?)"
+                    r"\s+Ballottaggi:\s*"
+                    r"(?P<ballottaggi>.+?)"
+                    r"(?=\s+Rigoristi:|\s+Calci da fermo:|$)",
+                    flags=re.IGNORECASE
+                )
+
+                for match in pattern_generico.finditer(
+                    testo
+                ):
+
+                    nome_squadra = re.sub(
+                        r"\s+",
+                        " ",
+                        match.group(
+                            "squadra"
+                        )
+                    ).strip()
+
+                    modulo = (
+                        match.group(
+                            "modulo"
+                        )
+                        .strip()
+                    )
+
+                    parsed_formazione = (
+                        _fc_parse_formazione(
+                            match.group(
+                                "formazione"
+                            ),
+                            modulo
+                        )
+                    )
+
+                    if not parsed_formazione:
+                        continue
+
+                    squadre.append({
+                        "squadra":
+                            nome_squadra.title(),
+
+                        "allenatore":
+                            re.sub(
+                                r"\s+",
+                                " ",
+                                match.group(
+                                    "allenatore"
+                                )
+                            ).strip(),
+
+                        "modulo":
+                            modulo,
+
+                        "linee_fonte":
+                            parsed_formazione[
+                                "linee_fonte"
+                            ],
+
+                        "formazione": [
+                            {
+                                "nome":
+                                    nome
+                            }
+                            for nome in parsed_formazione[
+                                "titolari"
+                            ]
+                        ],
+
+                        "ballottaggi":
+                            _fc_parse_ballottaggi(
+                                match.group(
+                                    "ballottaggi"
+                                )
+                            )
+                    })
+
+            # Deduplica.
+            uniche = {}
+
+            for squadra in squadre:
+
+                chiave = (
+                    _normalizza_nome_goal(
+                        squadra.get(
+                            "squadra",
+                            ""
+                        )
+                    )
+                )
+
+                if (
+                    chiave
+                    and chiave
+                    not in uniche
+                ):
+
+                    uniche[
+                        chiave
+                    ] = squadra
+
+            squadre = list(
+                uniche.values()
+            )
+
+            risultati_migliori.append(
+                (
+                    len(
+                        squadre
+                    ),
+                    tipo_rappresentazione,
+                    url_download,
+                    squadre
+                )
+            )
+
+    if not risultati_migliori:
+
+        raise RuntimeError(
+            "Fantacalcio.it non ha restituito contenuti utilizzabili. "
+            + " | ".join(
+                diagnostica
+            )
+        )
+
+    risultati_migliori.sort(
+        key=lambda x: x[0],
+        reverse=True
+    )
+
+    numero_trovate, tipo_usato, url_usato, squadre = (
+        risultati_migliori[
+            0
+        ]
     )
 
     non_valide = [
@@ -3813,9 +4138,7 @@ def aggiorna_probabili_web():
     ]
 
     if (
-        len(
-            squadre
-        ) != 20
+        numero_trovate != 20
         or non_valide
     ):
 
@@ -3828,26 +4151,29 @@ def aggiorna_probabili_web():
         )
 
         raise RuntimeError(
-            "Aggiornamento annullato: Fantacalcio.it ha restituito "
-            f"{len(squadre)} squadre valide su 20."
+            "Aggiornamento annullato: dalla sola fonte Fantacalcio.it "
+            f"sono state riconosciute {numero_trovate} squadre valide su 20 "
+            f"tramite {tipo_usato}. "
             + (
-                " Squadre riconosciute: "
+                "Squadre riconosciute: "
                 + nomi
                 if nomi
                 else ""
             )
         )
 
-    # ----------------------------------------------------------
-    # 4. Salvataggio.
-    # ----------------------------------------------------------
-
     dati = {
         "versione_dati":
-            12,
+            13,
 
         "fonte":
-            "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558",
+            "Fantacalcio.it",
+
+        "url_fonte":
+            url_usato,
+
+        "metodo_import":
+            tipo_usato,
 
         "scaricato_il":
             datetime.now(
@@ -3863,7 +4189,7 @@ def aggiorna_probabili_web():
     }
 
     salva_config_generica(
-        "formazioni_tipo_fantacalcio_v12",
+        "formazioni_tipo_fantacalcio_v13",
         json.dumps(
             dati,
             ensure_ascii=False
@@ -3875,7 +4201,7 @@ def aggiorna_probabili_web():
 def carica_probabili_web():
 
     raw = leggi_config_generica(
-        "formazioni_tipo_fantacalcio_v12",
+        "formazioni_tipo_fantacalcio_v13",
         ""
     )
 
@@ -3895,7 +4221,7 @@ def carica_probabili_web():
             )
             and dati.get(
                 "versione_dati"
-            ) == 12
+            ) == 13
         ):
 
             squadre = (
