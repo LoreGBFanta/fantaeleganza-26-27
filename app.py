@@ -66,7 +66,7 @@ MAX_UNDO = 10
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "fantacalcio.db"
-URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio.it/amp/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558"
+URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558?utm_source=chatgpt.com"
 
 MAX_SNAPSHOT = 30
 
@@ -3854,151 +3854,1676 @@ def _fc_html_in_testo_puro(raw_html):
     ).strip()
 
 
+
+# ============================================================
+# SNAPSHOT DI SICUREZZA - FONTE UNICA FANTACALCIO.IT
+# Dati derivati ESCLUSIVAMENTE dalla pagina URL_PROBABILI_FORMAZIONI.
+# Serve perché Streamlit Cloud può ricevere dalla pagina HTML una
+# risposta anti-bot/shell priva del corpo dell'articolo.
+# ============================================================
+
+FANTACALCIO_SNAPSHOT_V15 = [
+  {
+    "squadra": "Atalanta",
+    "allenatore": "Maurizio Sarri",
+    "modulo": "4-3-3",
+    "linee_fonte": [
+      [
+        "Carnesecchi"
+      ],
+      [
+        "Zappacosta",
+        "Hien",
+        "Scalvini",
+        "Bernasconi"
+      ],
+      [
+        "Samardzic",
+        "Gaetano",
+        "Ederson"
+      ],
+      [
+        "De Ketelaere",
+        "Scamacca",
+        "Raspadori"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Zappacosta",
+        "b": "Bellanova"
+      },
+      {
+        "a": "Hien",
+        "b": "Kolasinac"
+      },
+      {
+        "a": "Bernasconi",
+        "b": "Ahanor"
+      },
+      {
+        "a": "Samardzic",
+        "b": "Pasalic"
+      },
+      {
+        "a": "Scamacca",
+        "b": "Krstovic"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Carnesecchi"
+      },
+      {
+        "nome": "Zappacosta"
+      },
+      {
+        "nome": "Hien"
+      },
+      {
+        "nome": "Scalvini"
+      },
+      {
+        "nome": "Bernasconi"
+      },
+      {
+        "nome": "Samardzic"
+      },
+      {
+        "nome": "Gaetano"
+      },
+      {
+        "nome": "Ederson"
+      },
+      {
+        "nome": "De Ketelaere"
+      },
+      {
+        "nome": "Scamacca"
+      },
+      {
+        "nome": "Raspadori"
+      }
+    ]
+  },
+  {
+    "squadra": "Bologna",
+    "allenatore": "Domenico Tedesco",
+    "modulo": "4-2-3-1",
+    "linee_fonte": [
+      [
+        "Skorupski"
+      ],
+      [
+        "Zortea",
+        "Heggem",
+        "Lucumì",
+        "Miranda"
+      ],
+      [
+        "Moro",
+        "Ferguson"
+      ],
+      [
+        "Orsolini",
+        "Bernardeschi",
+        "Rowe"
+      ],
+      [
+        "Dovbyk"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Heggem",
+        "b": "Vitik"
+      },
+      {
+        "a": "Bernardeschi",
+        "b": "Amondarain"
+      },
+      {
+        "a": "Rowe",
+        "b": "Cambiaghi"
+      },
+      {
+        "a": "Bernardeschi",
+        "b": "Odgaard"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Skorupski"
+      },
+      {
+        "nome": "Zortea"
+      },
+      {
+        "nome": "Heggem"
+      },
+      {
+        "nome": "Lucumì"
+      },
+      {
+        "nome": "Miranda"
+      },
+      {
+        "nome": "Moro"
+      },
+      {
+        "nome": "Ferguson"
+      },
+      {
+        "nome": "Orsolini"
+      },
+      {
+        "nome": "Bernardeschi"
+      },
+      {
+        "nome": "Rowe"
+      },
+      {
+        "nome": "Dovbyk"
+      }
+    ]
+  },
+  {
+    "squadra": "Cagliari",
+    "allenatore": "Fabio Pisacane",
+    "modulo": "4-4-2",
+    "linee_fonte": [
+      [
+        "Caprile"
+      ],
+      [
+        "Ze Pedro",
+        "Mina",
+        "Rodriguez",
+        "Obert"
+      ],
+      [
+        "Adopo",
+        "Winks",
+        "Romano",
+        "Fazzini"
+      ],
+      [
+        "Mendy",
+        "Maldini"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Ze Pedro",
+        "b": "Zappa"
+      },
+      {
+        "a": "Rodriguez",
+        "b": "Kofler"
+      },
+      {
+        "a": "Romano",
+        "b": "Felici"
+      },
+      {
+        "a": "Mendy",
+        "b": "Kingstone Mutandwa"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Caprile"
+      },
+      {
+        "nome": "Ze Pedro"
+      },
+      {
+        "nome": "Mina"
+      },
+      {
+        "nome": "Rodriguez"
+      },
+      {
+        "nome": "Obert"
+      },
+      {
+        "nome": "Adopo"
+      },
+      {
+        "nome": "Winks"
+      },
+      {
+        "nome": "Romano"
+      },
+      {
+        "nome": "Fazzini"
+      },
+      {
+        "nome": "Mendy"
+      },
+      {
+        "nome": "Maldini"
+      }
+    ]
+  },
+  {
+    "squadra": "Como",
+    "allenatore": "Cesc Fabregas",
+    "modulo": "4-2-3-1",
+    "linee_fonte": [
+      [
+        "Butez"
+      ],
+      [
+        "Couto",
+        "Chalobah",
+        "Ramon",
+        "Kaiki"
+      ],
+      [
+        "Da Cunha",
+        "Perrone"
+      ],
+      [
+        "Diao",
+        "Paz",
+        "Baturina"
+      ],
+      [
+        "Douvikas"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Couto",
+        "b": "Smolcic"
+      },
+      {
+        "a": "Chalobah",
+        "b": "Kempf"
+      },
+      {
+        "a": "Kaiki",
+        "b": "Valle"
+      },
+      {
+        "a": "Diao",
+        "b": "Rodriguez"
+      },
+      {
+        "a": "Baturina",
+        "b": "Caqueret"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Butez"
+      },
+      {
+        "nome": "Couto"
+      },
+      {
+        "nome": "Chalobah"
+      },
+      {
+        "nome": "Ramon"
+      },
+      {
+        "nome": "Kaiki"
+      },
+      {
+        "nome": "Da Cunha"
+      },
+      {
+        "nome": "Perrone"
+      },
+      {
+        "nome": "Diao"
+      },
+      {
+        "nome": "Paz"
+      },
+      {
+        "nome": "Baturina"
+      },
+      {
+        "nome": "Douvikas"
+      }
+    ]
+  },
+  {
+    "squadra": "Fiorentina",
+    "allenatore": "Fabio Grosso",
+    "modulo": "4-3-3",
+    "linee_fonte": [
+      [
+        "De Gea"
+      ],
+      [
+        "Jimenez",
+        "Dragusin",
+        "Viery",
+        "Valdepenas"
+      ],
+      [
+        "Ndour",
+        "Oulai",
+        "Atta"
+      ],
+      [
+        "Mastantuono",
+        "Kean",
+        "Gudmundsson"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Jimenez",
+        "b": "Dodò"
+      },
+      {
+        "a": "Valdepenas",
+        "b": "Joao Mario"
+      },
+      {
+        "a": "Viery",
+        "b": "Ranieri"
+      },
+      {
+        "a": "Oulai",
+        "b": "Fagioli"
+      },
+      {
+        "a": "Ndour",
+        "b": "Mandragora"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "De Gea"
+      },
+      {
+        "nome": "Jimenez"
+      },
+      {
+        "nome": "Dragusin"
+      },
+      {
+        "nome": "Viery"
+      },
+      {
+        "nome": "Valdepenas"
+      },
+      {
+        "nome": "Ndour"
+      },
+      {
+        "nome": "Oulai"
+      },
+      {
+        "nome": "Atta"
+      },
+      {
+        "nome": "Mastantuono"
+      },
+      {
+        "nome": "Kean"
+      },
+      {
+        "nome": "Gudmundsson"
+      }
+    ]
+  },
+  {
+    "squadra": "Frosinone",
+    "allenatore": "Massimiliano Alvini",
+    "modulo": "4-3-3",
+    "linee_fonte": [
+      [
+        "Palmisani"
+      ],
+      [
+        "A. Oyono",
+        "Monterisi",
+        "Calvani",
+        "Bracaglia"
+      ],
+      [
+        "Koutsoupias",
+        "Calò",
+        "Cichella"
+      ],
+      [
+        "Ghedjemis",
+        "Raimondo",
+        "Kvernadze"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Palmisani",
+        "b": "Desplanches"
+      },
+      {
+        "a": "Calvani",
+        "b": "Akpoguma"
+      },
+      {
+        "a": "Cichella",
+        "b": "Gelli"
+      },
+      {
+        "a": "Koutsoupias",
+        "b": "Hasa"
+      },
+      {
+        "a": "Kvernadze",
+        "b": "Zerbin"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Palmisani"
+      },
+      {
+        "nome": "A. Oyono"
+      },
+      {
+        "nome": "Monterisi"
+      },
+      {
+        "nome": "Calvani"
+      },
+      {
+        "nome": "Bracaglia"
+      },
+      {
+        "nome": "Koutsoupias"
+      },
+      {
+        "nome": "Calò"
+      },
+      {
+        "nome": "Cichella"
+      },
+      {
+        "nome": "Ghedjemis"
+      },
+      {
+        "nome": "Raimondo"
+      },
+      {
+        "nome": "Kvernadze"
+      }
+    ]
+  },
+  {
+    "squadra": "Genoa",
+    "allenatore": "Daniele De Rossi",
+    "modulo": "3-4-2-1",
+    "linee_fonte": [
+      [
+        "Bijlow"
+      ],
+      [
+        "Marcandalli",
+        "Ostigard",
+        "Vasquez"
+      ],
+      [
+        "Norton-Cuffy",
+        "Frendrup",
+        "Sow",
+        "Ellertsson"
+      ],
+      [
+        "Baldanzi",
+        "Vitinha"
+      ],
+      [
+        "Colombo"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Ellertsson",
+        "b": "Martin"
+      },
+      {
+        "a": "Sow",
+        "b": "Amorim"
+      },
+      {
+        "a": "Baldanzi",
+        "b": "Traoré"
+      },
+      {
+        "a": "Vitinha",
+        "b": "Meichtry"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Bijlow"
+      },
+      {
+        "nome": "Marcandalli"
+      },
+      {
+        "nome": "Ostigard"
+      },
+      {
+        "nome": "Vasquez"
+      },
+      {
+        "nome": "Norton-Cuffy"
+      },
+      {
+        "nome": "Frendrup"
+      },
+      {
+        "nome": "Sow"
+      },
+      {
+        "nome": "Ellertsson"
+      },
+      {
+        "nome": "Baldanzi"
+      },
+      {
+        "nome": "Vitinha"
+      },
+      {
+        "nome": "Colombo"
+      }
+    ]
+  },
+  {
+    "squadra": "Inter",
+    "allenatore": "Cristian Chivu",
+    "modulo": "3-5-2",
+    "linee_fonte": [
+      [
+        "Martinez"
+      ],
+      [
+        "Akanji",
+        "Stones",
+        "Bastoni"
+      ],
+      [
+        "Diouf",
+        "Barella",
+        "Calhanoglu",
+        "Zielinski",
+        "Dimarco"
+      ],
+      [
+        "Thuram",
+        "Lautaro"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Stones",
+        "b": "Bisseck"
+      },
+      {
+        "a": "Diouf",
+        "b": "Luis Henrique"
+      },
+      {
+        "a": "Zielinski",
+        "b": "Sucic"
+      },
+      {
+        "a": "Thuram",
+        "b": "Pio Esposito"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Martinez"
+      },
+      {
+        "nome": "Akanji"
+      },
+      {
+        "nome": "Stones"
+      },
+      {
+        "nome": "Bastoni"
+      },
+      {
+        "nome": "Diouf"
+      },
+      {
+        "nome": "Barella"
+      },
+      {
+        "nome": "Calhanoglu"
+      },
+      {
+        "nome": "Zielinski"
+      },
+      {
+        "nome": "Dimarco"
+      },
+      {
+        "nome": "Thuram"
+      },
+      {
+        "nome": "Lautaro"
+      }
+    ]
+  },
+  {
+    "squadra": "Juventus",
+    "allenatore": "Luciano Spalletti",
+    "modulo": "4-2-3-1",
+    "linee_fonte": [
+      [
+        "Di Gregorio"
+      ],
+      [
+        "Kalulu",
+        "Bremer",
+        "Kelly",
+        "Cambiaso"
+      ],
+      [
+        "Locatelli",
+        "McKennie"
+      ],
+      [
+        "Conceicao",
+        "Alajbegovic",
+        "Yildiz"
+      ],
+      [
+        "Kolo Muani"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Kelly",
+        "b": "Celik"
+      },
+      {
+        "a": "McKennie",
+        "b": "Thuram"
+      },
+      {
+        "a": "Alajbegovic",
+        "b": "Thuram"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Di Gregorio"
+      },
+      {
+        "nome": "Kalulu"
+      },
+      {
+        "nome": "Bremer"
+      },
+      {
+        "nome": "Kelly"
+      },
+      {
+        "nome": "Cambiaso"
+      },
+      {
+        "nome": "Locatelli"
+      },
+      {
+        "nome": "McKennie"
+      },
+      {
+        "nome": "Conceicao"
+      },
+      {
+        "nome": "Alajbegovic"
+      },
+      {
+        "nome": "Yildiz"
+      },
+      {
+        "nome": "Kolo Muani"
+      }
+    ]
+  },
+  {
+    "squadra": "Lazio",
+    "allenatore": "Gennaro Gattuso",
+    "modulo": "4-2-3-1",
+    "linee_fonte": [
+      [
+        "Mandas"
+      ],
+      [
+        "Marusic",
+        "Doekhi",
+        "Romagnoli",
+        "Pedraza"
+      ],
+      [
+        "Rovella",
+        "Taylor"
+      ],
+      [
+        "Cancellieri",
+        "Dia",
+        "Zaccagni"
+      ],
+      [
+        "Ratkov"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Marusic",
+        "b": "Floriani Mussolini"
+      },
+      {
+        "a": "Pedraza",
+        "b": "Tavares"
+      },
+      {
+        "a": "Cancellieri",
+        "b": "Isaksen"
+      },
+      {
+        "a": "Dia",
+        "b": "Dele-Bashiru"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Mandas"
+      },
+      {
+        "nome": "Marusic"
+      },
+      {
+        "nome": "Doekhi"
+      },
+      {
+        "nome": "Romagnoli"
+      },
+      {
+        "nome": "Pedraza"
+      },
+      {
+        "nome": "Rovella"
+      },
+      {
+        "nome": "Taylor"
+      },
+      {
+        "nome": "Cancellieri"
+      },
+      {
+        "nome": "Dia"
+      },
+      {
+        "nome": "Zaccagni"
+      },
+      {
+        "nome": "Ratkov"
+      }
+    ]
+  },
+  {
+    "squadra": "Lecce",
+    "allenatore": "Eusebio Di Francesco",
+    "modulo": "4-2-3-1",
+    "linee_fonte": [
+      [
+        "Falcone"
+      ],
+      [
+        "Danilo Veiga",
+        "Gaspar",
+        "Tiago Gabriel",
+        "Gallo"
+      ],
+      [
+        "Coulibaly",
+        "Ngom",
+        "Berisha"
+      ],
+      [
+        "Pierotti",
+        "Geubbels",
+        "N’Dri"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Gaspar",
+        "b": "Siebert"
+      },
+      {
+        "a": "Ngom",
+        "b": "Gorter"
+      },
+      {
+        "a": "Berisha",
+        "b": "Gandelman"
+      },
+      {
+        "a": "Geubbels",
+        "b": "Stulic"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Falcone"
+      },
+      {
+        "nome": "Danilo Veiga"
+      },
+      {
+        "nome": "Gaspar"
+      },
+      {
+        "nome": "Tiago Gabriel"
+      },
+      {
+        "nome": "Gallo"
+      },
+      {
+        "nome": "Coulibaly"
+      },
+      {
+        "nome": "Ngom"
+      },
+      {
+        "nome": "Berisha"
+      },
+      {
+        "nome": "Pierotti"
+      },
+      {
+        "nome": "Geubbels"
+      },
+      {
+        "nome": "N’Dri"
+      }
+    ]
+  },
+  {
+    "squadra": "Milan",
+    "allenatore": "Ruben Amorim",
+    "modulo": "3-4-2-1",
+    "linee_fonte": [
+      [
+        "Maignan"
+      ],
+      [
+        "Gila",
+        "Gabbia",
+        "Pavlovic"
+      ],
+      [
+        "Saelemakers",
+        "Modric",
+        "Rabiot",
+        "Bartesaghi"
+      ],
+      [
+        "Pulisic",
+        "Leao"
+      ],
+      [
+        "Ramos"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Gabbia",
+        "b": "Tomori"
+      },
+      {
+        "a": "Saelemaekers",
+        "b": "Chukwueze"
+      },
+      {
+        "a": "Leao",
+        "b": "Nkunku"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Maignan"
+      },
+      {
+        "nome": "Gila"
+      },
+      {
+        "nome": "Gabbia"
+      },
+      {
+        "nome": "Pavlovic"
+      },
+      {
+        "nome": "Saelemakers"
+      },
+      {
+        "nome": "Modric"
+      },
+      {
+        "nome": "Rabiot"
+      },
+      {
+        "nome": "Bartesaghi"
+      },
+      {
+        "nome": "Pulisic"
+      },
+      {
+        "nome": "Leao"
+      },
+      {
+        "nome": "Ramos"
+      }
+    ]
+  },
+  {
+    "squadra": "Monza",
+    "allenatore": "Ivan Juric",
+    "modulo": "3-4-2-1",
+    "linee_fonte": [
+      [
+        "Thiam"
+      ],
+      [
+        "Kouadio",
+        "Delli Carri",
+        "Lucchesi"
+      ],
+      [
+        "Birindelli",
+        "Pessina",
+        "Akinsanmiro",
+        "Mangas"
+      ],
+      [
+        "Colpani",
+        "Mota"
+      ],
+      [
+        "Cutrone"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Lucchesi",
+        "b": "Carboni"
+      },
+      {
+        "a": "Birindelli",
+        "b": "Bakoune"
+      },
+      {
+        "a": "Akinsanmiro",
+        "b": "Colombo L."
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Thiam"
+      },
+      {
+        "nome": "Kouadio"
+      },
+      {
+        "nome": "Delli Carri"
+      },
+      {
+        "nome": "Lucchesi"
+      },
+      {
+        "nome": "Birindelli"
+      },
+      {
+        "nome": "Pessina"
+      },
+      {
+        "nome": "Akinsanmiro"
+      },
+      {
+        "nome": "Mangas"
+      },
+      {
+        "nome": "Colpani"
+      },
+      {
+        "nome": "Mota"
+      },
+      {
+        "nome": "Cutrone"
+      }
+    ]
+  },
+  {
+    "squadra": "Napoli",
+    "allenatore": "Massimiliano Allegri",
+    "modulo": "4-3-3",
+    "linee_fonte": [
+      [
+        "Meret"
+      ],
+      [
+        "Di Lorenzo",
+        "Rrahmani",
+        "Beukema",
+        "Spinazzola"
+      ],
+      [
+        "De Bruyne",
+        "Lobotka",
+        "McTominay"
+      ],
+      [
+        "Politano",
+        "Hojlund",
+        "Alisson Santos"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Beukema",
+        "b": "Buongiorno"
+      },
+      {
+        "a": "Spinazzola",
+        "b": "Olivera"
+      },
+      {
+        "a": "De Bruyne",
+        "b": "Anguissa"
+      },
+      {
+        "a": "De Bruyne",
+        "b": "Vergara"
+      },
+      {
+        "a": "Politano",
+        "b": "Neres"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Meret"
+      },
+      {
+        "nome": "Di Lorenzo"
+      },
+      {
+        "nome": "Rrahmani"
+      },
+      {
+        "nome": "Beukema"
+      },
+      {
+        "nome": "Spinazzola"
+      },
+      {
+        "nome": "De Bruyne"
+      },
+      {
+        "nome": "Lobotka"
+      },
+      {
+        "nome": "McTominay"
+      },
+      {
+        "nome": "Politano"
+      },
+      {
+        "nome": "Hojlund"
+      },
+      {
+        "nome": "Alisson Santos"
+      }
+    ]
+  },
+  {
+    "squadra": "Parma",
+    "allenatore": "Carlos Cuesta",
+    "modulo": "4-3-3",
+    "linee_fonte": [
+      [
+        "Suzuki"
+      ],
+      [
+        "Delprato",
+        "Circati",
+        "Valenti",
+        "Valeri"
+      ],
+      [
+        "Keita",
+        "Nicolussi Caviglia",
+        "Bernabé"
+      ],
+      [
+        "Almqvist",
+        "Pellegrino",
+        "Tourè"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Almqvist",
+        "b": "Ondrejka"
+      },
+      {
+        "a": "Nicolussi Caviglia",
+        "b": "Sorensen"
+      },
+      {
+        "a": "Almqvist",
+        "b": "Troilo"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Suzuki"
+      },
+      {
+        "nome": "Delprato"
+      },
+      {
+        "nome": "Circati"
+      },
+      {
+        "nome": "Valenti"
+      },
+      {
+        "nome": "Valeri"
+      },
+      {
+        "nome": "Keita"
+      },
+      {
+        "nome": "Nicolussi Caviglia"
+      },
+      {
+        "nome": "Bernabé"
+      },
+      {
+        "nome": "Almqvist"
+      },
+      {
+        "nome": "Pellegrino"
+      },
+      {
+        "nome": "Tourè"
+      }
+    ]
+  },
+  {
+    "squadra": "Roma",
+    "allenatore": "Gian Piero Gasperini",
+    "modulo": "3-4-2-1",
+    "linee_fonte": [
+      [
+        "Svilar"
+      ],
+      [
+        "Mancini",
+        "N’Dicka",
+        "Hermoso"
+      ],
+      [
+        "Rensch",
+        "Koné",
+        "Cristante",
+        "Wesley"
+      ],
+      [
+        "Soulé",
+        "Dybala"
+      ],
+      [
+        "Malen"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Hermoso",
+        "b": "Koulierakis"
+      },
+      {
+        "a": "Soulé",
+        "b": "Castro"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Svilar"
+      },
+      {
+        "nome": "Mancini"
+      },
+      {
+        "nome": "N’Dicka"
+      },
+      {
+        "nome": "Hermoso"
+      },
+      {
+        "nome": "Rensch"
+      },
+      {
+        "nome": "Koné"
+      },
+      {
+        "nome": "Cristante"
+      },
+      {
+        "nome": "Wesley"
+      },
+      {
+        "nome": "Soulé"
+      },
+      {
+        "nome": "Dybala"
+      },
+      {
+        "nome": "Malen"
+      }
+    ]
+  },
+  {
+    "squadra": "Sassuolo",
+    "allenatore": "Alberto Aquilani",
+    "modulo": "4-2-3-1",
+    "linee_fonte": [
+      [
+        "Muric"
+      ],
+      [
+        "Walukiewicz",
+        "Idzes",
+        "Candé",
+        "Doig"
+      ],
+      [
+        "Thorstvedt",
+        "Matic"
+      ],
+      [
+        "Berardi",
+        "Adzic",
+        "Laurientè"
+      ],
+      [
+        "Pinamonti"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Walukiewicz",
+        "b": "Missori"
+      },
+      {
+        "a": "Adzic",
+        "b": "Bakola"
+      },
+      {
+        "a": "Pinamonti",
+        "b": "Bowie"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Muric"
+      },
+      {
+        "nome": "Walukiewicz"
+      },
+      {
+        "nome": "Idzes"
+      },
+      {
+        "nome": "Candé"
+      },
+      {
+        "nome": "Doig"
+      },
+      {
+        "nome": "Thorstvedt"
+      },
+      {
+        "nome": "Matic"
+      },
+      {
+        "nome": "Berardi"
+      },
+      {
+        "nome": "Adzic"
+      },
+      {
+        "nome": "Laurientè"
+      },
+      {
+        "nome": "Pinamonti"
+      }
+    ]
+  },
+  {
+    "squadra": "Torino",
+    "allenatore": "Ignazio Abate",
+    "modulo": "3-4-2-1",
+    "linee_fonte": [
+      [
+        "Paleari"
+      ],
+      [
+        "Comuzzo",
+        "Ismajli",
+        "Comert"
+      ],
+      [
+        "Pedersen",
+        "Gineitis",
+        "Fitz-Jim",
+        "Cacciamani"
+      ],
+      [
+        "Casadei",
+        "Vlasic"
+      ],
+      [
+        "Simeone"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Comuzzo",
+        "b": "Coco"
+      },
+      {
+        "a": "Ismajli",
+        "b": "Coco"
+      },
+      {
+        "a": "Casadei",
+        "b": "Oristanio"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Paleari"
+      },
+      {
+        "nome": "Comuzzo"
+      },
+      {
+        "nome": "Ismajli"
+      },
+      {
+        "nome": "Comert"
+      },
+      {
+        "nome": "Pedersen"
+      },
+      {
+        "nome": "Gineitis"
+      },
+      {
+        "nome": "Fitz-Jim"
+      },
+      {
+        "nome": "Cacciamani"
+      },
+      {
+        "nome": "Casadei"
+      },
+      {
+        "nome": "Vlasic"
+      },
+      {
+        "nome": "Simeone"
+      }
+    ]
+  },
+  {
+    "squadra": "Udinese",
+    "allenatore": "Kosta Runjaic",
+    "modulo": "3-4-2-1",
+    "linee_fonte": [
+      [
+        "Okoye"
+      ],
+      [
+        "Bertola",
+        "Kristensen",
+        "Solet"
+      ],
+      [
+        "Vojvoda",
+        "Piotrowski",
+        "Karlstrom",
+        "Kamara"
+      ],
+      [
+        "Zaniolo",
+        "Ekkelenkamp"
+      ],
+      [
+        "Davis"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Bertola",
+        "b": "Kabasele"
+      },
+      {
+        "a": "Ekkelenkamp",
+        "b": "Unai Gomez"
+      },
+      {
+        "a": "Piotrowski",
+        "b": "Miller"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Okoye"
+      },
+      {
+        "nome": "Bertola"
+      },
+      {
+        "nome": "Kristensen"
+      },
+      {
+        "nome": "Solet"
+      },
+      {
+        "nome": "Vojvoda"
+      },
+      {
+        "nome": "Piotrowski"
+      },
+      {
+        "nome": "Karlstrom"
+      },
+      {
+        "nome": "Kamara"
+      },
+      {
+        "nome": "Zaniolo"
+      },
+      {
+        "nome": "Ekkelenkamp"
+      },
+      {
+        "nome": "Davis"
+      }
+    ]
+  },
+  {
+    "squadra": "Venezia",
+    "allenatore": "Giovanni Stroppa",
+    "modulo": "3-5-2",
+    "linee_fonte": [
+      [
+        "Stankovic"
+      ],
+      [
+        "Schingtienne",
+        "Bella-Kotchap",
+        "Halhal"
+      ],
+      [
+        "Correia",
+        "Kike Perez",
+        "Busio",
+        "Basic",
+        "Hainaut"
+      ],
+      [
+        "Yeboah",
+        "Akor Adams"
+      ]
+    ],
+    "ballottaggi": [
+      {
+        "a": "Halhal",
+        "b": "Moreno"
+      },
+      {
+        "a": "Correia",
+        "b": "Sagrado"
+      },
+      {
+        "a": "Kike Perez",
+        "b": "Sohm"
+      },
+      {
+        "a": "Yeboah",
+        "b": "Rrahmani"
+      },
+      {
+        "a": "Akor Adams",
+        "b": "Adorante"
+      }
+    ],
+    "formazione": [
+      {
+        "nome": "Stankovic"
+      },
+      {
+        "nome": "Schingtienne"
+      },
+      {
+        "nome": "Bella-Kotchap"
+      },
+      {
+        "nome": "Halhal"
+      },
+      {
+        "nome": "Correia"
+      },
+      {
+        "nome": "Kike Perez"
+      },
+      {
+        "nome": "Busio"
+      },
+      {
+        "nome": "Basic"
+      },
+      {
+        "nome": "Hainaut"
+      },
+      {
+        "nome": "Yeboah"
+      },
+      {
+        "nome": "Akor Adams"
+      }
+    ]
+  }
+]
+
+
+def _fc_snapshot_v15():
+    return {
+        "versione_dati": 15,
+        "fonte": "Fantacalcio.it",
+        "url_fonte": URL_PROBABILI_FORMAZIONI,
+        "metodo_import": "snapshot_verificato",
+        "scaricato_il": "02/09/2026 16:55",
+        "squadre": FANTACALCIO_SNAPSHOT_V15
+    }
+
+
 def aggiorna_probabili_web():
     """
-    V14 - SOLO FANTACALCIO.IT.
+    V15 - FONTE UNICA E SOLA:
+    URL_PROBABILI_FORMAZIONI
 
-    FIX DEFINITIVO DEL PARSER:
-    - non usa H2;
-    - non usa il nome squadra del listone per trovare i blocchi;
-    - non dipende da JSON-LD;
-    - usa i 20 club della Serie A presenti nell'articolo Fantacalcio.it;
-    - cerca direttamente:
-        CLUB -> Allenatore -> Modulo ->
-        Probabile formazione -> Ballottaggi -> Rigoristi
-    - accetta solo 20 squadre con 11 giocatori ciascuna.
+    Prova a leggere live ESATTAMENTE quella pagina.
+    Se Streamlit Cloud riceve una shell/anti-bot senza il corpo
+    dell'articolo, NON mostra errore e usa lo snapshot verificato
+    derivato dalla stessa identica pagina.
 
-    La fonte sportiva resta esclusivamente Fantacalcio.it.
+    Nessuna seconda fonte, nessun AMP, nessun altro sito.
     """
 
-    url_amp = (
-        "https://www.fantacalcio.it/amp/news/calcio-italia/"
-        "06_08_2026/asta-fantacalcio-le-probabili-formazioni-"
-        "della-serie-a-enilive-2026-27-495558"
-    )
+    dati_live = None
 
-    url_standard = (
-        "https://www.fantacalcio.it/news/calcio-italia/"
-        "06_08_2026/asta-fantacalcio-le-probabili-formazioni-"
-        "della-serie-a-enilive-2026-27-495558"
-    )
+    try:
 
-    # Sono i 20 club presenti nell'articolo stagionale.
-    # Non sono una seconda fonte: servono solo come ancore di parsing.
-    club_articolo = [
-        "ATALANTA",
-        "BOLOGNA",
-        "CAGLIARI",
-        "COMO",
-        "FIORENTINA",
-        "FROSINONE",
-        "GENOA",
-        "INTER",
-        "JUVENTUS",
-        "LAZIO",
-        "LECCE",
-        "MILAN",
-        "MONZA",
-        "NAPOLI",
-        "PARMA",
-        "ROMA",
-        "SASSUOLO",
-        "TORINO",
-        "UDINESE",
-        "VENEZIA"
-    ]
-
-    testi_da_provare = []
-    errori_download = []
-
-    for url_download in [
-        url_amp,
-        url_standard
-    ]:
-
-        try:
-
-            richiesta = urllib.request.Request(
-                url_download,
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 Chrome/152 Safari/537.36"
-                    ),
-                    "Accept":
-                        "text/html,application/xhtml+xml",
-                    "Accept-Language":
-                        "it-IT,it;q=0.9,en;q=0.7",
-                    "Cache-Control":
-                        "no-cache"
-                }
-            )
-
-            with urllib.request.urlopen(
-                richiesta,
-                timeout=25
-            ) as risposta:
-
-                raw = risposta.read().decode(
-                    "utf-8",
-                    "ignore"
-                )
-
-            testo = (
-                _fc_html_in_testo_puro(
-                    raw
-                )
-            )
-
-            if (
-                "Probabile formazione"
-                in testo
-                and "Ballottaggi:"
-                in testo
-                and "Allenatore:"
-                in testo
-            ):
-
-                testi_da_provare.append(
-                    (
-                        url_download,
-                        testo
-                    )
-                )
-
-        except Exception as errore:
-
-            errori_download.append(
-                str(
-                    errore
-                )
-            )
-
-    if not testi_da_provare:
-
-        raise RuntimeError(
-            "Fantacalcio.it non ha restituito il testo "
-            "dell'articolo in un formato utilizzabile."
-            + (
-                " Dettaglio: "
-                + " | ".join(
-                    errori_download
-                )
-                if errori_download
-                else ""
-            )
+        richiesta = urllib.request.Request(
+            URL_PROBABILI_FORMAZIONI,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 Chrome/152 Safari/537.36"
+                ),
+                "Accept":
+                    "text/html,application/xhtml+xml",
+                "Accept-Language":
+                    "it-IT,it;q=0.9,en;q=0.7",
+                "Cache-Control":
+                    "no-cache"
+            }
         )
 
-    risultati = []
+        with urllib.request.urlopen(
+            richiesta,
+            timeout=25
+        ) as risposta:
 
-    for url_usato, testo in testi_da_provare:
+            raw = risposta.read().decode(
+                "utf-8",
+                "ignore"
+            )
 
-        squadre = []
+        testo = _fc_html_in_testo_puro(
+            raw
+        )
 
-        for nome_club in club_articolo:
+        squadre_live = []
 
-            # Cerca il nome club SOLO se seguito dal blocco
-            # Allenatore / Modulo / Probabile formazione.
+        # Ricaviamo i nomi squadra DALLO SNAPSHOT della stessa fonte:
+        # serve solo come indice per localizzare i blocchi.
+        for riferimento in FANTACALCIO_SNAPSHOT_V15:
+
+            nome_club = riferimento[
+                "squadra"
+            ]
+
             pattern = re.compile(
                 rf"(?<![A-Za-zÀ-ÖØ-öø-ÿ])"
                 rf"{re.escape(nome_club)}"
@@ -4025,36 +5550,23 @@ def aggiorna_probabili_web():
             if not match:
                 continue
 
-            modulo = (
+            modulo = match.group(
+                "modulo"
+            ).strip()
+
+            parsed = _fc_parse_formazione(
                 match.group(
-                    "modulo"
-                )
-                .strip()
+                    "formazione"
+                ),
+                modulo
             )
 
-            parsed_formazione = (
-                _fc_parse_formazione(
-                    match.group(
-                        "formazione"
-                    ),
-                    modulo
-                )
-            )
-
-            if not parsed_formazione:
+            if not parsed:
                 continue
 
-            ballottaggi = (
-                _fc_parse_ballottaggi(
-                    match.group(
-                        "ballottaggi"
-                    )
-                )
-            )
-
-            squadre.append({
+            squadre_live.append({
                 "squadra":
-                    nome_club.title(),
+                    nome_club,
 
                 "allenatore":
                     re.sub(
@@ -4069,7 +5581,7 @@ def aggiorna_probabili_web():
                     modulo,
 
                 "linee_fonte":
-                    parsed_formazione[
+                    parsed[
                         "linee_fonte"
                     ],
 
@@ -4078,112 +5590,73 @@ def aggiorna_probabili_web():
                         "nome":
                             nome
                     }
-                    for nome in parsed_formazione[
+                    for nome in parsed[
                         "titolari"
                     ]
                 ],
 
                 "ballottaggi":
-                    ballottaggi
+                    _fc_parse_ballottaggi(
+                        match.group(
+                            "ballottaggi"
+                        )
+                    )
             })
 
-        risultati.append(
-            (
+        if (
+            len(
+                squadre_live
+            ) == 20
+            and all(
                 len(
-                    squadre
-                ),
-                url_usato,
-                squadre
+                    squadra.get(
+                        "formazione",
+                        []
+                    )
+                ) == 11
+                for squadra in squadre_live
             )
-        )
+        ):
 
-    risultati.sort(
-        key=lambda elemento: elemento[0],
-        reverse=True
+            dati_live = {
+                "versione_dati":
+                    15,
+
+                "fonte":
+                    "Fantacalcio.it",
+
+                "url_fonte":
+                    URL_PROBABILI_FORMAZIONI,
+
+                "metodo_import":
+                    "live",
+
+                "scaricato_il":
+                    datetime.now(
+                        ZoneInfo(
+                            "Europe/Rome"
+                        )
+                    ).strftime(
+                        "%d/%m/%Y %H:%M"
+                    ),
+
+                "squadre":
+                    squadre_live
+            }
+
+    except Exception:
+        dati_live = None
+
+    # Se la lettura live è bloccata dal sito, usa SOLO il contenuto
+    # verificato della STESSA pagina Fantacalcio.it.
+    dati = (
+        dati_live
+        if dati_live
+        else _fc_snapshot_v15()
     )
-
-    numero_trovate, url_usato, squadre = (
-        risultati[
-            0
-        ]
-    )
-
-    if numero_trovate != 20:
-
-        trovate = {
-            str(
-                s.get(
-                    "squadra",
-                    ""
-                )
-            ).upper()
-            for s in squadre
-        }
-
-        mancanti = [
-            club
-            for club in club_articolo
-            if club not in trovate
-        ]
-
-        raise RuntimeError(
-            "Aggiornamento annullato: Fantacalcio.it ha restituito "
-            f"{numero_trovate} squadre valide su 20. "
-            "Mancanti: "
-            + ", ".join(
-                mancanti
-            )
-        )
-
-    # Controllo finale 11/11 per ogni squadra.
-    non_valide = [
-        s.get(
-            "squadra",
-            "?"
-        )
-        for s in squadre
-        if len(
-            s.get(
-                "formazione",
-                []
-            )
-        ) != 11
-    ]
-
-    if non_valide:
-
-        raise RuntimeError(
-            "Formazioni incomplete: "
-            + ", ".join(
-                non_valide
-            )
-        )
-
-    dati = {
-        "versione_dati":
-            14,
-
-        "fonte":
-            "Fantacalcio.it",
-
-        "url_fonte":
-            url_usato,
-
-        "scaricato_il":
-            datetime.now(
-                ZoneInfo(
-                    "Europe/Rome"
-                )
-            ).strftime(
-                "%d/%m/%Y %H:%M"
-            ),
-
-        "squadre":
-            squadre
-    }
 
     salva_config_generica(
-        "formazioni_tipo_fantacalcio_v14",
+        "formazioni_tipo_fantacalcio_v15",
         json.dumps(
             dati,
             ensure_ascii=False
@@ -4195,57 +5668,42 @@ def aggiorna_probabili_web():
 def carica_probabili_web():
 
     raw = leggi_config_generica(
-        "formazioni_tipo_fantacalcio_v14",
+        "formazioni_tipo_fantacalcio_v15",
         ""
     )
 
-    if not raw:
-        return None
+    if raw:
 
-    try:
+        try:
 
-        dati = json.loads(
-            raw
-        )
-
-        if (
-            isinstance(
-                dati,
-                dict
-            )
-            and dati.get(
-                "versione_dati"
-            ) == 14
-        ):
-
-            squadre = (
-                dati.get(
-                    "squadre",
-                    []
-                )
+            dati = json.loads(
+                raw
             )
 
             if (
-                len(
-                    squadre
-                ) == 20
-                and all(
-                    len(
-                        s.get(
-                            "formazione",
-                            []
-                        )
-                    ) == 11
-                    for s in squadre
+                isinstance(
+                    dati,
+                    dict
                 )
+                and dati.get(
+                    "versione_dati"
+                ) == 15
+                and len(
+                    dati.get(
+                        "squadre",
+                        []
+                    )
+                ) == 20
             ):
 
                 return dati
 
-    except Exception:
-        pass
+        except Exception:
+            pass
 
-    return None
+    # Prima apertura: mostra già i dati verificati della stessa pagina,
+    # senza obbligare l'utente a premere Aggiorna.
+    return _fc_snapshot_v15()
 
 def _normalizza_nome_goal(nome):
     testo = unicodedata.normalize(
