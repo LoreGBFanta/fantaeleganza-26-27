@@ -4180,18 +4180,12 @@ def _assegna_alternative_a_linee(
                 )
             )
 
-        ruolo_singolo = (
-            _ruolo_singolo_per_linea(
-                ruoli,
-                gruppi[
-                    indice_scelto
-                ]
-                if indice_scelto
-                < len(
-                    gruppi
-                )
-                else ""
+        ruolo_completo = (
+            ";".join(
+                ruoli
             )
+            if ruoli
+            else "—"
         )
 
         per_linea[
@@ -4200,7 +4194,7 @@ def _assegna_alternative_a_linee(
             "nome":
                 nome,
             "ruolo":
-                ruolo_singolo
+                ruolo_completo
         })
 
     return per_linea
@@ -4280,16 +4274,20 @@ def mostra_probabile(
             )
         }
 
+        # Massimo UNA alternativa per ciascun titolare.
+        # Se la fonte ne riporta più del numero di slot della linea,
+        # mostriamo soltanto le prime N coerenti con quella linea.
         for indice_alt, alternativa in enumerate(
-            alternative_linea
+            alternative_linea[
+                :numero_slot
+            ]
         ):
 
             alternative_slot[
                 indice_alt
-                % numero_slot
-            ].append(
+            ] = [
                 alternativa
-            )
+            ]
 
         giocatori_html = ""
 
@@ -4318,10 +4316,11 @@ def mostra_probabile(
             )
 
             ruolo = html.escape(
-                _ruolo_singolo_per_linea(
-                    ruoli,
-                    gruppo_linea
+                ";".join(
+                    ruoli
                 )
+                if ruoli
+                else "—"
             )
 
             alternative_html = ""
@@ -9398,11 +9397,15 @@ st.markdown("""
 }
 
 .pf-player-goal{
-    width:150px !important;
-    min-height:62px !important;
-    padding:8px 8px !important;
+    width:178px !important;
+    min-width:178px !important;
+    min-height:68px !important;
+    padding:8px 10px !important;
     box-sizing:border-box !important;
-    overflow:hidden !important;
+    overflow:visible !important;
+    border:1px solid rgba(15,23,42,.10) !important;
+    border-radius:9px !important;
+    background:rgba(255,255,255,.97) !important;
 }
 
 .pf-main-player,
@@ -9410,33 +9413,37 @@ st.markdown("""
     display:block !important;
     width:100% !important;
     text-align:center !important;
-    white-space:normal !important;
-    overflow:hidden !important;
+    overflow:visible !important;
 }
 
 .pf-main-player .pf-name{
     display:block !important;
     width:100% !important;
-    font-size:.90rem !important;
-    line-height:1.12 !important;
+    color:#16a34a !important;
+    font-size:.92rem !important;
+    line-height:1.14 !important;
     font-weight:900 !important;
-    overflow:hidden !important;
-    text-overflow:ellipsis !important;
-    white-space:nowrap !important;
+    white-space:normal !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+    overflow-wrap:anywhere !important;
 }
 
 .pf-mantra-role{
     display:block !important;
-    margin-top:3px !important;
-    color:#475569 !important;
-    font-size:.69rem !important;
-    line-height:1 !important;
+    width:100% !important;
+    margin-top:4px !important;
+    color:#334155 !important;
+    font-size:.70rem !important;
+    line-height:1.10 !important;
     font-weight:900 !important;
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
 }
 
 .pf-sub-player{
-    margin-top:7px !important;
-    padding-top:6px !important;
+    margin-top:8px !important;
+    padding-top:7px !important;
     border-top:1px solid #cbd5e1 !important;
 }
 
@@ -9444,33 +9451,38 @@ st.markdown("""
     display:block !important;
     width:100% !important;
     color:#2563eb !important;
-    font-size:.84rem !important;
-    line-height:1.10 !important;
+    font-size:.92rem !important;
+    line-height:1.14 !important;
     font-weight:900 !important;
-    overflow:hidden !important;
-    text-overflow:ellipsis !important;
-    white-space:nowrap !important;
+    white-space:normal !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+    overflow-wrap:anywhere !important;
 }
 
 .pf-sub-role{
     display:block !important;
-    margin-top:3px !important;
+    width:100% !important;
+    margin-top:4px !important;
     color:#2563eb !important;
-    font-size:.67rem !important;
-    line-height:1 !important;
+    font-size:.70rem !important;
+    line-height:1.10 !important;
     font-weight:900 !important;
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
 }
 
 .pf-line{
-    gap:12px !important;
-    padding:4px 0 !important;
+    gap:14px !important;
+    padding:6px 0 !important;
+    align-items:stretch !important;
 }
 
 @media(max-width:768px){
     .pf-pitch{
-        min-height:430px !important;
-        padding-left:3px !important;
-        padding-right:3px !important;
+        min-height:450px !important;
+        padding-left:2px !important;
+        padding-right:2px !important;
     }
 
     .pf-line{
@@ -9478,22 +9490,21 @@ st.markdown("""
     }
 
     .pf-player-goal{
-        width:94px !important;
-        min-height:58px !important;
-        padding:6px 4px !important;
+        width:104px !important;
+        min-width:104px !important;
+        min-height:64px !important;
+        padding:6px 5px !important;
     }
 
-    .pf-main-player .pf-name{
-        font-size:.71rem !important;
-    }
-
+    .pf-main-player .pf-name,
     .pf-sub-name{
-        font-size:.67rem !important;
+        font-size:.72rem !important;
+        line-height:1.10 !important;
     }
 
     .pf-mantra-role,
     .pf-sub-role{
-        font-size:.56rem !important;
+        font-size:.57rem !important;
     }
 }
 </style>
