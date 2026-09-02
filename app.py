@@ -7117,7 +7117,12 @@ def conferma_modifica_prezzo(
             )
 
             st.session_state.pop(
-                f"prezzo_rosa_edit_{giocatore_id}",
+                f"prezzo_rosa_mobile_{giocatore_id}",
+                None
+            )
+
+            st.session_state.pop(
+                f"prezzo_rosa_desktop_{giocatore_id}",
                 None
             )
 
@@ -7132,7 +7137,13 @@ def conferma_modifica_prezzo(
         ):
 
             st.session_state[
-                f"prezzo_rosa_edit_{giocatore_id}"
+                f"prezzo_rosa_mobile_{giocatore_id}"
+            ] = float(
+                prezzo_vecchio
+            )
+
+            st.session_state[
+                f"prezzo_rosa_desktop_{giocatore_id}"
             ] = float(
                 prezzo_vecchio
             )
@@ -9493,7 +9504,7 @@ elif sezione == "ROSA":
                 )
 
                 chiave_prezzo = (
-                    f"prezzo_rosa_edit_{giocatore_id}"
+                    f"prezzo_rosa_mobile_{giocatore_id}"
                 )
 
                 if chiave_prezzo not in st.session_state:
@@ -9658,7 +9669,7 @@ elif sezione == "ROSA":
                 )
 
                 chiave_prezzo = (
-                    f"prezzo_rosa_edit_{giocatore_id}"
+                    f"prezzo_rosa_desktop_{giocatore_id}"
                 )
 
                 if chiave_prezzo not in st.session_state:
