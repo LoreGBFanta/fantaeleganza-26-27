@@ -7060,6 +7060,87 @@ def conferma_annullamento(
 
 
 # ============================================================
+# POPUP MODIFICA PREZZO ACQUISTO
+# ============================================================
+
+@st.dialog(
+    "Conferma modifica prezzo"
+)
+def conferma_modifica_prezzo(
+    giocatore_id,
+    nome_giocatore,
+    prezzo_vecchio,
+    prezzo_nuovo
+):
+
+    prezzo_vecchio = float(
+        prezzo_vecchio
+        or 0
+    )
+
+    prezzo_nuovo = float(
+        prezzo_nuovo
+        or 0
+    )
+
+    st.write(
+        f'Modificare il prezzo di acquisto di '
+        f'**"{nome_giocatore}"**?'
+    )
+
+    st.info(
+        f"Prezzo attuale: **{formatta_crediti(prezzo_vecchio)} €**  \n"
+        f"Nuovo prezzo: **{formatta_crediti(prezzo_nuovo)} €**"
+    )
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+
+        if st.button(
+            "CONFERMA",
+            type="primary",
+            use_container_width=True,
+            key=f"ok_modifica_prezzo_{giocatore_id}"
+        ):
+
+            esegui_operazione(
+                int(
+                    giocatore_id
+                ),
+                "MODIFICA PREZZO",
+                "MIO",
+                float(
+                    prezzo_nuovo
+                ),
+                0
+            )
+
+            st.session_state.pop(
+                f"prezzo_rosa_edit_{giocatore_id}",
+                None
+            )
+
+            st.rerun()
+
+    with c2:
+
+        if st.button(
+            "ANNULLA",
+            use_container_width=True,
+            key=f"no_modifica_prezzo_{giocatore_id}"
+        ):
+
+            st.session_state[
+                f"prezzo_rosa_edit_{giocatore_id}"
+            ] = float(
+                prezzo_vecchio
+            )
+
+            st.rerun()
+
+
+# ============================================================
 # POPUP SVINCOLO
 # ============================================================
 
@@ -9390,32 +9471,40 @@ elif sezione == "ROSA":
             key="rosa_mobile_view"
         ):
 
-            righe_mobile = []
+            # Header compatto mobile
+            h1, h2, h3, h4 = st.columns(
+                [2.4, 1.0, 1.1, 0.7]
+            )
+
+            h1.markdown("**NOME GIOCATORE**")
+            h2.markdown("**RUOLO**")
+            h3.markdown("**PREZZO**")
+            h4.markdown("**OK**")
 
             for _, giocatore in df_rosa.iterrows():
 
-                nome = html.escape(
-                    str(
-                        giocatore[
-                            "Nome"
-                        ]
-                    )
+                giocatore_id = int(
+                    giocatore["Id"]
                 )
 
-                ruolo = html.escape(
-                    str(
-                        giocatore[
-                            "RM"
-                        ]
-                    )
+                prezzo_attuale = float(
+                    giocatore["Prezzo"]
+                    or 0
                 )
 
-                prezzo = (
-                    formatta_crediti(
-                        giocatore[
-                            "Prezzo"
-                        ]
-                    )
+                chiave_prezzo = (
+                    f"prezzo_rosa_edit_{giocatore_id}"
+                )
+
+                if chiave_prezzo not in st.session_state:
+
+                    st.session_state[
+                        chiave_prezzo
+                    ] = prezzo_attuale
+
+                r1, r2, r3, r4 = st.columns(
+                    [2.4, 1.0, 1.1, 0.7],
+                    vertical_alignment="center"
                 )
 
                 colore_nome = (
@@ -9430,38 +9519,59 @@ elif sezione == "ROSA":
                     )
                 )
 
-                righe_mobile.append(
-                    "<tr>"
-                    f"<td><span style='color:{colore_nome};font-weight:800;'>"
-                    f"{nome}</span></td>"
-                    f"<td>{ruolo}</td>"
-                    f"<td>{prezzo}</td>"
-                    "</tr>"
+                r1.markdown(
+                    f"<span style='color:{colore_nome};"
+                    f"font-weight:800;'>"
+                    f"{html.escape(str(giocatore['Nome']))}"
+                    f"</span>",
+                    unsafe_allow_html=True
                 )
 
-            tabella_mobile_html = (
-                "<div class='rosa-mobile-view'>"
-                "<table class='rosa-mobile-table'>"
-                "<thead>"
-                "<tr>"
-                "<th>NOME GIOCATORE</th>"
-                "<th>RUOLO</th>"
-                "<th>PREZZO ACQUISTO</th>"
-                "</tr>"
-                "</thead>"
-                "<tbody>"
-                + "".join(
-                    righe_mobile
+                r2.write(
+                    giocatore["RM"]
                 )
-                + "</tbody>"
-                "</table>"
-                "</div>"
-            )
 
-            st.markdown(
-                tabella_mobile_html,
-                unsafe_allow_html=True
-            )
+                with r3:
+
+                    nuovo_prezzo = st.number_input(
+                        "Prezzo",
+                        min_value=0.0,
+                        max_value=5000.0,
+                        step=0.10,
+                        format="%.2f",
+                        key=chiave_prezzo,
+                        label_visibility="collapsed"
+                    )
+
+                with r4:
+
+                    modificato = (
+                        round(
+                            float(
+                                nuovo_prezzo
+                            ),
+                            2
+                        )
+                        != round(
+                            prezzo_attuale,
+                            2
+                        )
+                    )
+
+                    if st.button(
+                        "✓",
+                        key=f"salva_prezzo_mobile_{giocatore_id}",
+                        help="Conferma modifica prezzo",
+                        disabled=not modificato,
+                        use_container_width=True
+                    ):
+
+                        conferma_modifica_prezzo(
+                            giocatore_id,
+                            giocatore["Nome"],
+                            prezzo_attuale,
+                            nuovo_prezzo
+                        )
 
 
         # ----------------------------------------------------
@@ -9479,7 +9589,7 @@ elif sezione == "ROSA":
                         2,
                         1.2,
                         1.2,
-                        1.5,
+                        1.9,
                         0.7,
                         0.7
                     ]
@@ -9492,7 +9602,7 @@ elif sezione == "ROSA":
                 "Ruolo",
                 "Qt.",
                 "FVM",
-                "Prezzo",
+                "Prezzo acquisto",
                 "🗑️",
                 "🔓"
             ]
@@ -9515,10 +9625,11 @@ elif sezione == "ROSA":
                             2,
                             1.2,
                             1.2,
-                            1.5,
+                            1.9,
                             0.7,
                             0.7
-                        ]
+                        ],
+                        vertical_alignment="center"
                     )
                 )
 
@@ -9537,11 +9648,73 @@ elif sezione == "ROSA":
                 cols[4].write(
                     giocatore["FVM"]
                 )
-                cols[5].write(
-                    formatta_crediti(
-                        giocatore["Prezzo"]
-                    )
+                giocatore_id = int(
+                    giocatore["Id"]
                 )
+
+                prezzo_attuale = float(
+                    giocatore["Prezzo"]
+                    or 0
+                )
+
+                chiave_prezzo = (
+                    f"prezzo_rosa_edit_{giocatore_id}"
+                )
+
+                if chiave_prezzo not in st.session_state:
+
+                    st.session_state[
+                        chiave_prezzo
+                    ] = prezzo_attuale
+
+                with cols[5]:
+
+                    prezzo_col1, prezzo_col2 = st.columns(
+                        [3.2, 0.8],
+                        vertical_alignment="center"
+                    )
+
+                    with prezzo_col1:
+
+                        nuovo_prezzo = st.number_input(
+                            "Prezzo acquisto",
+                            min_value=0.0,
+                            max_value=5000.0,
+                            step=0.10,
+                            format="%.2f",
+                            key=chiave_prezzo,
+                            label_visibility="collapsed"
+                        )
+
+                    with prezzo_col2:
+
+                        modificato = (
+                            round(
+                                float(
+                                    nuovo_prezzo
+                                ),
+                                2
+                            )
+                            != round(
+                                prezzo_attuale,
+                                2
+                            )
+                        )
+
+                        if st.button(
+                            "✓",
+                            key=f"salva_prezzo_{giocatore_id}",
+                            help="Conferma modifica prezzo",
+                            disabled=not modificato,
+                            use_container_width=True
+                        ):
+
+                            conferma_modifica_prezzo(
+                                giocatore_id,
+                                giocatore["Nome"],
+                                prezzo_attuale,
+                                nuovo_prezzo
+                            )
 
                 with cols[6]:
                     if st.button(
