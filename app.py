@@ -5477,9 +5477,233 @@ FANTACALCIO_SNAPSHOT_V15 = [
   }
 ]
 
+
+# ============================================================
+# RIGORISTI E CALCI PIAZZATI - FONTE FANTACALCIO.IT
+# Ordine = gerarchia pubblicata dalla fonte.
+# ============================================================
+
+FANTACALCIO_SPECIALISTI = {
+    "Atalanta": {
+        "rigoristi": ["Scamacca", "Krstovic", "Samardzic"],
+        "calci_piazzati": ["De Ketelaere", "Samardzic", "Gaetano"],
+    },
+    "Bologna": {
+        "rigoristi": ["Orsolini", "Bernardeschi", "Dovbyk"],
+        "calci_piazzati": ["Orsolini", "Bernardeschi", "Miranda"],
+    },
+    "Cagliari": {
+        "rigoristi": ["Nzola", "Kevin Carlos", "Mina"],
+        "calci_piazzati": ["Fazzini", "Maldini", "Romano"],
+    },
+    "Como": {
+        "rigoristi": ["Da Cunha", "Kean", "Douvikas"],
+        "calci_piazzati": ["Paz", "Baturina", "Milla"],
+    },
+    "Fiorentina": {
+        "rigoristi": ["Beto", "Pellegrino", "Goncalves"],
+        "calci_piazzati": ["Mastantuono", "Atta", "Goncalves"],
+    },
+    "Frosinone": {
+        "rigoristi": ["Calò", "Schimd", "Bobcek"],
+        "calci_piazzati": ["Calò", "Schimd", "Ghedjemis"],
+    },
+    "Genoa": {
+        "rigoristi": ["Colombo", "Ostigard", "Vitinha"],
+        "calci_piazzati": ["Baldanzi", "Vitinha", "Messias"],
+    },
+    "Inter": {
+        "rigoristi": ["Calhanoglu", "Zielinski", "Lautaro Martinez"],
+        "calci_piazzati": ["Calhanoglu", "Dimarco", "Zielinski"],
+    },
+    "Juventus": {
+        "rigoristi": ["Kolo Muani", "Woltemade", "Gonzalez"],
+        "calci_piazzati": ["Yildiz", "Locatelli", "Douglas Luiz"],
+    },
+    "Lazio": {
+        "rigoristi": ["Zaccagni", "Pinamonti", "Gudmundsson"],
+        "calci_piazzati": ["Rovella", "Zaccagni", "Gudmundsson"],
+    },
+    "Lecce": {
+        "rigoristi": ["Geubbels", "Stulic", "Berisha"],
+        "calci_piazzati": ["Pierotti", "Berisha", "Gallo"],
+    },
+    "Milan": {
+        "rigoristi": ["Ramos", "Pulisic", "Modric"],
+        "calci_piazzati": ["Modric", "Pulisic", "Saelemaekers"],
+    },
+    "Monza": {
+        "rigoristi": ["Cutrone", "Varela", "Ngonge"],
+        "calci_piazzati": ["Ngonge", "Folorunsho", "Pessina"],
+    },
+    "Napoli": {
+        "rigoristi": ["De Bruyne", "Hojlund", "Politano"],
+        "calci_piazzati": ["De Bruyne", "Politano", "Neres"],
+    },
+    "Parma": {
+        "rigoristi": ["Tourè", "Romero", "Valeri"],
+        "calci_piazzati": ["Bernabè", "Nicolussi Caviglia", "Valeri"],
+    },
+    "Roma": {
+        "rigoristi": ["Malen", "Dybala", "Castro"],
+        "calci_piazzati": ["Dybala", "Malen", "Pellegrini"],
+    },
+    "Sassuolo": {
+        "rigoristi": ["Berardi", "Esposito", "Laurientè"],
+        "calci_piazzati": ["Berardi", "Laurientè", "Adzic"],
+    },
+    "Torino": {
+        "rigoristi": ["Vlasic", "Simeone", "Mandragora"],
+        "calci_piazzati": ["Vlasic", "Mandragora", "Gineitis"],
+    },
+    "Udinese": {
+        "rigoristi": ["Davis", "Solet", "Zaniolo"],
+        "calci_piazzati": ["Zaniolo", "Ekkelenkamp", "Unai Gomez"],
+    },
+    "Venezia": {
+        "rigoristi": ["Busio", "Adams", "Adorante"],
+        "calci_piazzati": ["Busio", "Yeboah", "Kike Perez"],
+    },
+}
+
+
+def _specialisti_squadra(nome_squadra):
+    target = _normalizza_nome_goal(
+        nome_squadra
+    )
+
+    for squadra, dati in FANTACALCIO_SPECIALISTI.items():
+        if _normalizza_nome_goal(
+            squadra
+        ) == target:
+            return dati
+
+    return {
+        "rigoristi": [],
+        "calci_piazzati": [],
+    }
+
+
+def _stesso_giocatore_specialista(
+    nome_giocatore,
+    nome_fonte,
+    squadra
+):
+    """
+    Prova prima il match testuale; poi usa il collegamento al listone
+    già presente nell'app per gestire abbreviazioni tipo
+    Lautaro / Lautaro Martinez, Adams / Akor Adams, ecc.
+    """
+
+    a = _normalizza_nome_goal(
+        nome_giocatore
+    )
+
+    b = _normalizza_nome_goal(
+        nome_fonte
+    )
+
+    if (
+        a == b
+        or a in b
+        or b in a
+    ):
+        return True
+
+    try:
+        riga_fonte = _trova_giocatore_listone(
+            nome_fonte,
+            squadra
+        )
+
+        riga_giocatore = _trova_giocatore_listone(
+            nome_giocatore,
+            squadra
+        )
+
+        if (
+            riga_fonte is not None
+            and riga_giocatore is not None
+        ):
+            return int(
+                riga_fonte.get(
+                    "Id"
+                )
+            ) == int(
+                riga_giocatore.get(
+                    "Id"
+                )
+            )
+
+    except Exception:
+        pass
+
+    return False
+
+
+def sigle_specialista_giocatore(
+    nome_giocatore,
+    squadra
+):
+    """
+    Restituisce, ad esempio:
+        R1 · CP2
+        R3
+        CP1
+    """
+
+    dati = _specialisti_squadra(
+        squadra
+    )
+
+    sigle = []
+
+    for indice, nome_fonte in enumerate(
+        dati.get(
+            "rigoristi",
+            []
+        )[
+            :3
+        ],
+        start=1
+    ):
+        if _stesso_giocatore_specialista(
+            nome_giocatore,
+            nome_fonte,
+            squadra
+        ):
+            sigle.append(
+                f"R{indice}"
+            )
+            break
+
+    for indice, nome_fonte in enumerate(
+        dati.get(
+            "calci_piazzati",
+            []
+        )[
+            :3
+        ],
+        start=1
+    ):
+        if _stesso_giocatore_specialista(
+            nome_giocatore,
+            nome_fonte,
+            squadra
+        ):
+            sigle.append(
+                f"CP{indice}"
+            )
+            break
+
+    return " · ".join(
+        sigle
+    )
+
+
 def _fc_snapshot_v18():
     return {
-        "versione_dati": 18,
+        "versione_dati": 19,
         "fonte": "Fantacalcio.it",
         "url_fonte": URL_PROBABILI_FORMAZIONI,
         "metodo_import": "snapshot_verificato",
@@ -5683,7 +5907,7 @@ def aggiorna_probabili_web():
     )
 
     salva_config_generica(
-        "formazioni_tipo_fantacalcio_v18",
+        "formazioni_tipo_fantacalcio_v19",
         json.dumps(
             dati,
             ensure_ascii=False
@@ -5695,7 +5919,7 @@ def aggiorna_probabili_web():
 def carica_probabili_web():
 
     raw = leggi_config_generica(
-        "formazioni_tipo_fantacalcio_v18",
+        "formazioni_tipo_fantacalcio_v19",
         ""
     )
 
@@ -5714,7 +5938,7 @@ def carica_probabili_web():
                 )
                 and dati.get(
                     "versione_dati"
-                ) == 18
+                ) == 19
                 and len(
                     dati.get(
                         "squadre",
@@ -6378,6 +6602,57 @@ def mostra_probabile(
         + '<div class="pf-pitch">'
         + righe_html
         + '</div>',
+        unsafe_allow_html=True
+    )
+
+    specialisti = _specialisti_squadra(
+        squadra.get(
+            "squadra",
+            ""
+        )
+    )
+
+    rigoristi = ", ".join(
+        specialisti.get(
+            "rigoristi",
+            []
+        )[
+            :3
+        ]
+    ) or "—"
+
+    piazzati = ", ".join(
+        specialisti.get(
+            "calci_piazzati",
+            []
+        )[
+            :3
+        ]
+    ) or "—"
+
+    st.markdown(
+        f"""
+        <div style="
+            background:#ffffff;
+            border:1px solid #dbe3ec;
+            border-top:0;
+            border-radius:0 0 10px 10px;
+            padding:8px 12px 10px 12px;
+            margin-top:-2px;
+            font-size:0.78rem;
+            line-height:1.45;
+            color:#334155;
+        ">
+            <div>
+                <b>⚽ Rigoristi:</b>
+                {html.escape(rigoristi)}
+            </div>
+            <div>
+                <b>🎯 Calci piazzati:</b>
+                {html.escape(piazzati)}
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True
     )
 
@@ -12605,15 +12880,16 @@ elif sezione == "ASTA":
                     )
                 )
 
-                g1, g2, g3, g4, g5, g6 = (
+                g1, g2, g3, g4, g5, g6, g7 = (
                     st.columns(
                         [
-                            1.15,
-                            0.85,
-                            0.80,
-                            0.65,
-                            1.20,
-                            0.95
+                            1.10,
+                            0.78,
+                            0.72,
+                            0.62,
+                            0.55,
+                            1.18,
+                            0.92
                         ]
                     )
                 )
@@ -12655,12 +12931,26 @@ elif sezione == "ASTA":
                     giocatore["RM"]
                 )
 
+                sigle_specialista = (
+                    sigle_specialista_giocatore(
+                        giocatore["Nome"],
+                        giocatore["Squadra"]
+                    )
+                )
+
                 g4.metric(
+                    "R / CP",
+                    sigle_specialista
+                    if sigle_specialista
+                    else "—"
+                )
+
+                g5.metric(
                     "FVM",
                     giocatore["FVM"]
                 )
 
-                with g5:
+                with g6:
 
                     dettaglio_priorita = (
                         f"Ruolo {priorita_acquisto['Ruolo']} · "
@@ -12748,7 +13038,7 @@ elif sezione == "ASTA":
                                 df_completo
                             )
 
-                with g6:
+                with g7:
 
                     st.markdown(
                         f"""
@@ -13073,14 +13363,15 @@ elif sezione == "ROSA":
         ):
 
             # Header compatto mobile
-            h1, h2, h3, h4 = st.columns(
-                [2.4, 1.0, 1.1, 0.7]
+            h1, h2, h3, h4, h5 = st.columns(
+                [2.2, 0.9, 0.8, 1.0, 0.6]
             )
 
             h1.markdown("**NOME GIOCATORE**")
             h2.markdown("**RUOLO**")
-            h3.markdown("**PREZZO**")
-            h4.markdown("**OK**")
+            h3.markdown("**R/CP**")
+            h4.markdown("**PREZZO**")
+            h5.markdown("**OK**")
 
             for _, giocatore in df_rosa.iterrows():
 
@@ -13103,8 +13394,8 @@ elif sezione == "ROSA":
                         chiave_prezzo
                     ] = prezzo_attuale
 
-                r1, r2, r3, r4 = st.columns(
-                    [2.4, 1.0, 1.1, 0.7],
+                r1, r2, r3, r4, r5 = st.columns(
+                    [2.2, 0.9, 0.8, 1.0, 0.6],
                     vertical_alignment="center"
                 )
 
@@ -13132,7 +13423,15 @@ elif sezione == "ROSA":
                     giocatore["RM"]
                 )
 
-                with r3:
+                r3.write(
+                    sigle_specialista_giocatore(
+                        giocatore["Nome"],
+                        giocatore["Squadra"]
+                    )
+                    or "—"
+                )
+
+                with r4:
 
                     nuovo_prezzo = st.number_input(
                         "Prezzo",
@@ -13144,7 +13443,7 @@ elif sezione == "ROSA":
                         label_visibility="collapsed"
                     )
 
-                with r4:
+                with r5:
 
                     modificato = (
                         round(
@@ -13201,7 +13500,7 @@ elif sezione == "ROSA":
                 "Nome",
                 "Squadra",
                 "Ruolo",
-                "Qt.",
+                "R / CP",
                 "FVM",
                 "Prezzo acquisto",
                 "🗑️",
@@ -13244,7 +13543,11 @@ elif sezione == "ROSA":
                     giocatore["RM"]
                 )
                 cols[3].write(
-                    giocatore["Qt.A"]
+                    sigle_specialista_giocatore(
+                        giocatore["Nome"],
+                        giocatore["Squadra"]
+                    )
+                    or "—"
                 )
                 cols[4].write(
                     giocatore["FVM"]
