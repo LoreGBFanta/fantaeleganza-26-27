@@ -5477,13 +5477,19 @@ FANTACALCIO_SNAPSHOT_V15 = [
   }
 ]
 
-def _fc_snapshot_v15():
+def _fc_snapshot_v18():
     return {
-        "versione_dati": 15,
+        "versione_dati": 18,
         "fonte": "Fantacalcio.it",
         "url_fonte": URL_PROBABILI_FORMAZIONI,
         "metodo_import": "snapshot_verificato",
-        "scaricato_il": "02/09/2026 13:39",
+        "scaricato_il": datetime.now(
+            ZoneInfo(
+                "Europe/Rome"
+            )
+        ).strftime(
+            "%d/%m/%Y %H:%M"
+        ),
         "squadre": FANTACALCIO_SNAPSHOT_V15
     }
 
@@ -5641,7 +5647,7 @@ def aggiorna_probabili_web():
 
             dati_live = {
                 "versione_dati":
-                    15,
+                    18,
 
                 "fonte":
                     "Fantacalcio.it",
@@ -5673,11 +5679,11 @@ def aggiorna_probabili_web():
     dati = (
         dati_live
         if dati_live
-        else _fc_snapshot_v15()
+        else _fc_snapshot_v18()
     )
 
     salva_config_generica(
-        "formazioni_tipo_fantacalcio_v15",
+        "formazioni_tipo_fantacalcio_v18",
         json.dumps(
             dati,
             ensure_ascii=False
@@ -5689,7 +5695,7 @@ def aggiorna_probabili_web():
 def carica_probabili_web():
 
     raw = leggi_config_generica(
-        "formazioni_tipo_fantacalcio_v15",
+        "formazioni_tipo_fantacalcio_v18",
         ""
     )
 
@@ -5708,7 +5714,7 @@ def carica_probabili_web():
                 )
                 and dati.get(
                     "versione_dati"
-                ) == 15
+                ) == 18
                 and len(
                     dati.get(
                         "squadre",
@@ -5724,7 +5730,7 @@ def carica_probabili_web():
 
     # Prima apertura: mostra già i dati verificati della stessa pagina,
     # senza obbligare l'utente a premere Aggiorna.
-    return _fc_snapshot_v15()
+    return _fc_snapshot_v18()
 
 def _normalizza_nome_goal(nome):
     testo = unicodedata.normalize(
@@ -6011,7 +6017,7 @@ def _ruolo_singolo_per_linea(
         []
     ):
 
-        for ruolo in reversed(ruoli):
+        for ruolo in ruoli:
 
             if ruolo.upper() == preferito.upper():
                 return ruolo
@@ -6220,13 +6226,17 @@ def mostra_probabile(
 
         giocatori_html = ""
 
-        nomi_validi = [
-            nome
-            for nome in linea
-            if _goal_nome_valido(
-                nome
+        nomi_validi = list(
+            reversed(
+                [
+                    nome
+                    for nome in linea
+                    if _goal_nome_valido(
+                        nome
+                    )
+                ]
             )
-        ]
+        )
 
         for nome_raw in nomi_validi:
 
