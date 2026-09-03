@@ -69,7 +69,63 @@ DB_PATH = BASE_DIR / "fantacalcio.db"
 URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558?utm_source=chatgpt.com"
 URL_INDISPONIBILI = "https://www.fantacalcio.it/indisponibili-serie-a"
 
+
 MAX_SNAPSHOT = 30
+
+CACHE_DIR = BASE_DIR / "cache_fantaeleganza"
+CACHE_FORMAZIONI_PATH = CACHE_DIR / "formazioni_tipo.json"
+CACHE_INFORTUNI_PATH = CACHE_DIR / "infortunati.json"
+
+
+def salva_cache_json_locale(percorso, dati):
+    """
+    Salvataggio atomico best-effort della cache locale.
+    Se il disco non è scrivibile, l'app continua comunque a funzionare.
+    """
+    try:
+        CACHE_DIR.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        temporaneo = percorso.with_suffix(
+            percorso.suffix + ".tmp"
+        )
+
+        temporaneo.write_text(
+            json.dumps(
+                dati,
+                ensure_ascii=False,
+                indent=2
+            ),
+            encoding="utf-8"
+        )
+
+        temporaneo.replace(
+            percorso
+        )
+
+        return True
+
+    except Exception:
+        return False
+
+
+def leggi_cache_json_locale(percorso, default=None):
+    try:
+        if not percorso.exists():
+            return default
+
+        return json.loads(
+            percorso.read_text(
+                encoding="utf-8"
+            )
+        )
+
+    except Exception:
+        return default
+
+
 
 
 def leggi_segreto(nome):
@@ -6272,10 +6328,18 @@ def aggiorna_probabili_web():
         )
     )
 
+    # Cache locale persistente: resta disponibile anche senza Internet
+    # e anche dopo la chiusura del browser/app.
+    salva_cache_json_locale(
+        CACHE_FORMAZIONI_PATH,
+        dati
+    )
+
     return dati
 
 def carica_probabili_web():
 
+    # 1) Database/configurazione del profilo attivo.
     raw = leggi_config_generica(
         "formazioni_tipo_fantacalcio_v21",
         ""
@@ -6294,9 +6358,6 @@ def carica_probabili_web():
                     dati,
                     dict
                 )
-                and dati.get(
-                    "versione_dati"
-                ) == 21
                 and len(
                     dati.get(
                         "squadre",
@@ -6305,14 +6366,47 @@ def carica_probabili_web():
                 ) == 20
             ):
 
+                # Mantiene sincronizzata anche la cache locale.
+                salva_cache_json_locale(
+                    CACHE_FORMAZIONI_PATH,
+                    dati
+                )
+
                 return dati
 
         except Exception:
             pass
 
-    # Prima apertura: mostra già i dati verificati della stessa pagina,
-    # senza obbligare l'utente a premere Aggiorna.
-    return _fc_snapshot_v18()
+    # 2) Cache persistente locale dell'ultimo aggiornamento valido.
+    dati_cache = leggi_cache_json_locale(
+        CACHE_FORMAZIONI_PATH,
+        None
+    )
+
+    if (
+        isinstance(
+            dati_cache,
+            dict
+        )
+        and len(
+            dati_cache.get(
+                "squadre",
+                []
+            )
+        ) == 20
+    ):
+
+        return dati_cache
+
+    # 3) Ultimo fallback incorporato nell'app.
+    dati_snapshot = _fc_snapshot_v18()
+
+    salva_cache_json_locale(
+        CACHE_FORMAZIONI_PATH,
+        dati_snapshot
+    )
+
+    return dati_snapshot
 
 def _normalizza_nome_goal(nome):
     testo = unicodedata.normalize(
@@ -7026,48 +7120,71 @@ INFORTUNATI_SNAPSHOT_VERIFICATO = [
 @st.cache_data(ttl=600, show_spinner=False)
 def carica_infortunati_fantacalcio():
     """
-    Fonte: Fantacalcio.it / indisponibili-serie-a
+    Modalità offline resiliente.
 
-    Strategia robusta:
-    - prova la lettura LIVE dalla pagina Fantacalcio.it;
-    - parte SEMPRE dallo snapshot verificato completo;
-    - sovrascrive/aggiorna i nomi già noti con il dato live;
-    - aggiunge eventuali nuovi infortunati trovati live.
+    Ordine:
+    1. snapshot incorporato;
+    2. ultima cache persistente salvata sul PC;
+    3. dati live Fantacalcio.it, se raggiungibili.
 
-    In questo modo una risposta HTML parziale di Fantacalcio.it non può
-    più far "sparire" alcuni infortunati dall'app.
+    Il risultato viene risalvato su disco e resta disponibile
+    anche se Internet cade durante l'asta o al riavvio dell'app.
     """
 
-    # Base completa e verificata.
     unione = {}
 
-    for item in INFORTUNATI_SNAPSHOT_VERIFICATO:
+    def aggiungi(items):
+        for item in (
+            items
+            or []
+        ):
 
-        chiave = (
-            _normalizza_nome_goal(
-                item.get(
-                    "squadra",
-                    ""
-                )
-            ),
-            _normalizza_nome_goal(
-                item.get(
-                    "nome",
-                    ""
+            chiave = (
+                _normalizza_nome_goal(
+                    item.get(
+                        "squadra",
+                        ""
+                    )
+                ),
+                _normalizza_nome_goal(
+                    item.get(
+                        "nome",
+                        ""
+                    )
                 )
             )
+
+            if (
+                chiave[0]
+                and chiave[1]
+            ):
+
+                unione[
+                    chiave
+                ] = dict(
+                    item
+                )
+
+    # Base incorporata.
+    aggiungi(
+        INFORTUNATI_SNAPSHOT_VERIFICATO
+    )
+
+    # Ultima cache locale valida.
+    cache_locale = leggi_cache_json_locale(
+        CACHE_INFORTUNI_PATH,
+        []
+    )
+
+    if isinstance(
+        cache_locale,
+        list
+    ):
+        aggiungi(
+            cache_locale
         )
 
-        if (
-            chiave[0]
-            and chiave[1]
-        ):
-            unione[
-                chiave
-            ] = dict(
-                item
-            )
-
+    # Aggiornamento live best-effort.
     risultati_live = []
 
     try:
@@ -7112,38 +7229,21 @@ def carica_infortunati_fantacalcio():
 
         risultati_live = []
 
-    # Il dato live NON sostituisce l'elenco completo:
-    # lo integra. Così 7/15/18 record letti non eliminano gli altri.
-    for item in risultati_live:
+    aggiungi(
+        risultati_live
+    )
 
-        chiave = (
-            _normalizza_nome_goal(
-                item.get(
-                    "squadra",
-                    ""
-                )
-            ),
-            _normalizza_nome_goal(
-                item.get(
-                    "nome",
-                    ""
-                )
-            )
-        )
-
-        if (
-            chiave[0]
-            and chiave[1]
-        ):
-            unione[
-                chiave
-            ] = dict(
-                item
-            )
-
-    return list(
+    risultato = list(
         unione.values()
     )
+
+    # Salva l'ultimo stato utilizzabile per la modalità offline.
+    salva_cache_json_locale(
+        CACHE_INFORTUNI_PATH,
+        risultato
+    )
+
+    return risultato
 
 
 def diagnostica_infortunati_fantacalcio():
