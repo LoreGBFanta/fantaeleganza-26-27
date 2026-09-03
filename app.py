@@ -67,7 +67,7 @@ MAX_UNDO = 10
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "fantacalcio.db"
 URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558?utm_source=chatgpt.com"
-URL_INDISPONIBILI = "https://www.fantacalcio.it/indisponibili-serie-a"
+URL_INDISPONIBILI = "https://www.fantacalcio.it/serie-a/infortunati"
 
 MAX_SNAPSHOT = 30
 
@@ -6347,77 +6347,144 @@ def _normalizza_nome_goal(nome):
 
 
 
-class _ParserIndisponibiliFantacalcio(HTMLParser):
+class _ParserInfortunatiFantacalcio(HTMLParser):
     SQUADRE = {
         "atalanta","bologna","cagliari","como","fiorentina","frosinone",
         "genoa","inter","juventus","lazio","lecce","milan","monza",
         "napoli","parma","roma","sassuolo","torino","udinese","venezia"
     }
+
     def __init__(self):
         super().__init__()
-        self.testi=[]
-    def handle_data(self,data):
-        t=re.sub(r"\s+"," ",str(data or "")).strip()
-        if t:
-            self.testi.append(t)
+        self.squadra = ""
+        self.in_li = False
+        self.li_parts = []
+        self.records = []
+        self.pending_name = None
+        self.pending_team = None
+        self.text_buffer = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs_d = dict(attrs)
+
+        # Fantacalcio marks team blocks with team crest images.
+        if tag == "img":
+            candidates = [
+                attrs_d.get("alt",""),
+                attrs_d.get("title","")
+            ]
+            for value in candidates:
+                n = _normalizza_nome_goal(value)
+                if n in self.SQUADRE:
+                    self._flush_pending()
+                    self.squadra = value.strip().title()
+                    break
+
+        if tag == "li":
+            self.in_li = True
+            self.li_parts = []
+
+    def handle_endtag(self, tag):
+        if tag == "li":
+            text = re.sub(r"\s+"," "," ".join(self.li_parts)).strip()
+            self.in_li = False
+            self.li_parts = []
+
+            # A player LI on this page is normally just the player's name.
+            if (
+                self.squadra
+                and text
+                and _normalizza_nome_goal(text) != "nessuno"
+                and len(text) <= 50
+            ):
+                self._flush_pending()
+                self.pending_name = text
+                self.pending_team = self.squadra
+                self.text_buffer = []
+
+    def handle_data(self, data):
+        t = re.sub(r"\s+"," ",str(data or "")).strip()
+        if not t:
+            return
+        if self.in_li:
+            self.li_parts.append(t)
+        elif self.pending_name:
+            # Description follows the player's list item.
+            self.text_buffer.append(t)
+
+    def _flush_pending(self):
+        if self.pending_name:
+            detail = re.sub(r"\s+"," "," ".join(self.text_buffer)).strip()
+
+            # Remove obvious site/navigation fragments if any slipped in.
+            for stop in [
+                "Prossimo turno",
+                "Classifica",
+                "Le nostre app",
+                "Pubblicità su Fantacalcio"
+            ]:
+                if stop in detail:
+                    detail = detail.split(stop,1)[0].strip()
+
+            self.records.append({
+                "squadra": self.pending_team or "",
+                "nome": self.pending_name,
+                "dettaglio": detail
+            })
+
+        self.pending_name = None
+        self.pending_team = None
+        self.text_buffer = []
+
+    def close(self):
+        super().close()
+        self._flush_pending()
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def carica_infortunati_fantacalcio():
+    """
+    Fonte dedicata Fantacalcio.it /serie-a/infortunati.
+    Cache 10 minuti. In caso di errore non blocca l'asta.
+    """
     try:
         req=urllib.request.Request(
             URL_INDISPONIBILI,
-            headers={"User-Agent":"Mozilla/5.0 FantaEleganza/26-27"}
+            headers={
+                "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                             "AppleWebKit/537.36 Chrome/152 Safari/537.36",
+                "Accept-Language":"it-IT,it;q=0.9"
+            }
         )
-        with urllib.request.urlopen(req,timeout=8) as response:
+        with urllib.request.urlopen(req,timeout=10) as response:
             raw=response.read().decode("utf-8",errors="ignore")
 
-        parser=_ParserIndisponibiliFantacalcio()
+        parser=_ParserInfortunatiFantacalcio()
         parser.feed(raw)
-        tokens=parser.testi
-        risultati=[]
-        squadra=""
-        sezione=""
-        i=0
+        parser.close()
 
-        while i < len(tokens):
-            t=tokens[i].strip()
-            tn=_normalizza_nome_goal(t)
+        # Deduplicate and retain only sensible player records.
+        out=[]
+        seen=set()
+        for item in parser.records:
+            key=(
+                _normalizza_nome_goal(item.get("squadra","")),
+                _normalizza_nome_goal(item.get("nome",""))
+            )
+            if (
+                key[0]
+                and key[1]
+                and key not in seen
+                and key[1] != "nessuno"
+            ):
+                seen.add(key)
+                out.append(item)
 
-            if tn in _ParserIndisponibiliFantacalcio.SQUADRE:
-                squadra=t.title()
-                sezione=""
-                i+=1
-                continue
-            if tn=="infortunati":
-                sezione="infortunati"
-                i+=1
-                continue
-            if tn in {"squalificati","diffidati"}:
-                sezione=tn
-                i+=1
-                continue
+        return out
 
-            if sezione=="infortunati" and squadra and tn!="nessuno":
-                if len(t)<=45 and not t.endswith(".") and i+1<len(tokens):
-                    dettaglio=tokens[i+1].strip()
-                    dn=_normalizza_nome_goal(dettaglio)
-                    if (
-                        len(dettaglio)>20
-                        and dn not in {"squalificati","diffidati","infortunati"}
-                    ):
-                        risultati.append({
-                            "squadra":squadra,
-                            "nome":t,
-                            "dettaglio":dettaglio
-                        })
-                        i+=2
-                        continue
-            i+=1
-
-        return risultati
     except Exception:
         return []
+
 
 
 def info_disponibilita_giocatore(nome_giocatore,squadra):
@@ -6547,6 +6614,11 @@ ALIAS_NOMI_FORMAZIONI = {
     ("venezia", "akor adams"): "Adams A.",
     ("venezia", "correia"): "Correia T.",
     ("venezia", "rrahmani"): "Rrahmani Al.",
+
+    # Alias specifici della fonte Infortunati Fantacalcio.it
+    ("atalanta", "sulemana k"): "Sulemana K.",
+    ("atalanta", "kristensen t"): "Kristensen T.",
+    ("bologna", "el azzouzi o"): "El Azzouzi O.",
 }
 
 
@@ -14010,6 +14082,18 @@ elif sezione == "ASTA":
             box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
         }
 
+        /* DISPONIBILITÀ: croce rossa compatta e ben visibile */
+        div[class*="st-key-btn_infortunio_"] .stButton > button {
+            border:none !important;
+            background:transparent !important;
+            box-shadow:none !important;
+            padding:0 !important;
+            min-height:42px !important;
+            height:42px !important;
+            font-size:1.55rem !important;
+            line-height:1 !important;
+        }
+
         /* STRISCIA OPERATIVA ASTA: stessa altezza reale per tutti i blocchi */
         div[class*="st-key-btn_acquista_"] .stButton,
         div[class*="st-key-btn_avversario_"] .stButton {
@@ -14267,7 +14351,7 @@ elif sezione == "ASTA":
                         )
                     else:
                         if st.button(
-                            "✕",
+                            "❌",
                             key=f"btn_infortunio_{int(giocatore['Id'])}",
                             help="Clicca per vedere infortunio e tempi di recupero"
                         ):
