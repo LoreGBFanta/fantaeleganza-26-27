@@ -6926,16 +6926,50 @@ INFORTUNATI_SNAPSHOT_VERIFICATO = [
 @st.cache_data(ttl=600, show_spinner=False)
 def carica_infortunati_fantacalcio():
     """
-    Fonte unica: https://www.fantacalcio.it/indisponibili-serie-a
+    Fonte: Fantacalcio.it / indisponibili-serie-a
 
-    Strategia:
-    1) prova il dato LIVE;
-    2) controlla che il parser abbia letto un numero plausibile di infortunati;
-    3) se Streamlit riceve HTML incompleto/anti-bot o il parser legge troppo poco,
-       usa lo snapshot verificato della STESSA pagina.
+    Strategia robusta:
+    - prova la lettura LIVE dalla pagina Fantacalcio.it;
+    - parte SEMPRE dallo snapshot verificato completo;
+    - sovrascrive/aggiorna i nomi già noti con il dato live;
+    - aggiunge eventuali nuovi infortunati trovati live.
 
-    Non vengono mai usate fonti alternative.
+    In questo modo una risposta HTML parziale di Fantacalcio.it non può
+    più far "sparire" alcuni infortunati dall'app.
     """
+
+    # Base completa e verificata.
+    unione = {}
+
+    for item in INFORTUNATI_SNAPSHOT_VERIFICATO:
+
+        chiave = (
+            _normalizza_nome_goal(
+                item.get(
+                    "squadra",
+                    ""
+                )
+            ),
+            _normalizza_nome_goal(
+                item.get(
+                    "nome",
+                    ""
+                )
+            )
+        )
+
+        if (
+            chiave[0]
+            and chiave[1]
+        ):
+            unione[
+                chiave
+            ] = dict(
+                item
+            )
+
+    risultati_live = []
+
     try:
 
         richiesta = urllib.request.Request(
@@ -6945,9 +6979,12 @@ def carica_infortunati_fantacalcio():
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 Chrome/152 Safari/537.36"
                 ),
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "it-IT,it;q=0.9",
-                "Cache-Control": "no-cache"
+                "Accept":
+                    "text/html,application/xhtml+xml",
+                "Accept-Language":
+                    "it-IT,it;q=0.9",
+                "Cache-Control":
+                    "no-cache"
             }
         )
 
@@ -6962,27 +6999,51 @@ def carica_infortunati_fantacalcio():
             )
 
         parser = _ParserTestoFantacalcio()
-        parser.feed(raw)
+        parser.feed(
+            raw
+        )
         parser.close()
 
         risultati_live = _estrai_infortunati_da_tokens(
             parser.tokens
         )
 
-        # Controllo di integrità: una lettura di pochi nomi è quasi
-        # certamente una risposta HTML incompleta, non la pagina reale.
-        # Attualmente la pagina contiene oltre 20 infortunati.
-        if len(risultati_live) >= 15:
-            return risultati_live
-
     except Exception:
-        pass
 
-    # Fallback garantito: snapshot verificato derivato dalla stessa pagina.
-    return [
-        dict(item)
-        for item in INFORTUNATI_SNAPSHOT_VERIFICATO
-    ]
+        risultati_live = []
+
+    # Il dato live NON sostituisce l'elenco completo:
+    # lo integra. Così 7/15/18 record letti non eliminano gli altri.
+    for item in risultati_live:
+
+        chiave = (
+            _normalizza_nome_goal(
+                item.get(
+                    "squadra",
+                    ""
+                )
+            ),
+            _normalizza_nome_goal(
+                item.get(
+                    "nome",
+                    ""
+                )
+            )
+        )
+
+        if (
+            chiave[0]
+            and chiave[1]
+        ):
+            unione[
+                chiave
+            ] = dict(
+                item
+            )
+
+    return list(
+        unione.values()
+    )
 
 
 def diagnostica_infortunati_fantacalcio():
@@ -7009,15 +7070,16 @@ def info_disponibilita_giocatore(
     squadra
 ):
     """
-    Riconosce l'infortunato usando:
-    - stesso club;
-    - ID listone quando disponibile;
-    - alias espliciti;
-    - confronto testuale come fallback.
+    Determina la disponibilità usando l'elenco completo degli infortunati.
+    Prima tenta il match sul listone, poi alias e confronto normalizzato.
     """
 
     squadra_norm = _normalizza_nome_goal(
         squadra
+    )
+
+    target_norm = _normalizza_nome_goal(
+        nome_giocatore
     )
 
     riga_target = _trova_giocatore_listone(
@@ -7028,6 +7090,7 @@ def info_disponibilita_giocatore(
     target_id = None
 
     if riga_target is not None:
+
         try:
             target_id = int(
                 riga_target.get(
@@ -7039,99 +7102,165 @@ def info_disponibilita_giocatore(
 
     for item in carica_infortunati_fantacalcio():
 
+        squadra_item = item.get(
+            "squadra",
+            ""
+        )
+
         if _normalizza_nome_goal(
-            item.get(
-                "squadra",
-                ""
-            )
+            squadra_item
         ) != squadra_norm:
             continue
 
-        nome_fonte = item.get(
+        nome_item = item.get(
             "nome",
             ""
         )
 
-        riga_infortunato = _trova_giocatore_listone(
-            nome_fonte,
-            item.get(
-                "squadra",
-                ""
-            )
+        # 1. Match tramite ID del listone.
+        riga_item = _trova_giocatore_listone(
+            nome_item,
+            squadra_item
         )
 
         if (
             target_id is not None
-            and riga_infortunato is not None
+            and riga_item is not None
         ):
+
             try:
+
                 if target_id == int(
-                    riga_infortunato.get(
+                    riga_item.get(
                         "Id"
                     )
                 ):
+
                     return {
-                        "disponibile": False,
-                        "dettaglio": item.get(
-                            "dettaglio",
-                            ""
-                        ),
-                        "nome_fonte": nome_fonte
+                        "disponibile":
+                            False,
+
+                        "dettaglio":
+                            item.get(
+                                "dettaglio",
+                                ""
+                            ),
+
+                        "nome_fonte":
+                            nome_item
                     }
+
             except Exception:
                 pass
 
-        a = _normalizza_nome_goal(
-            nome_giocatore
-        )
-
-        b = _normalizza_nome_goal(
-            nome_fonte
-        )
-
+        # 2. Alias esplicito.
         alias = _alias_nome_listone(
-            nome_fonte,
+            nome_item,
+            squadra_item
+        )
+
+        if (
+            alias
+            and _normalizza_nome_goal(
+                alias
+            ) == target_norm
+        ):
+
+            return {
+                "disponibile":
+                    False,
+
+                "dettaglio":
+                    item.get(
+                        "dettaglio",
+                        ""
+                    ),
+
+                "nome_fonte":
+                    nome_item
+            }
+
+        # 3. Nome identico/compatibile.
+        item_norm = _normalizza_nome_goal(
+            nome_item
+        )
+
+        if (
+            target_norm
+            and item_norm
+            and (
+                target_norm == item_norm
+                or target_norm in item_norm
+                or item_norm in target_norm
+            )
+        ):
+
+            return {
+                "disponibile":
+                    False,
+
+                "dettaglio":
+                    item.get(
+                        "dettaglio",
+                        ""
+                    ),
+
+                "nome_fonte":
+                    nome_item
+            }
+
+    return {
+        "disponibile":
+            True,
+
+        "dettaglio":
+            "",
+
+        "nome_fonte":
+            ""
+    }
+
+
+
+
+def diagnostica_infortunati_non_abbinati():
+    """
+    Elenco degli infortunati della fonte che non trovano corrispondenza
+    nel listone. Utile per controlli futuri dopo aggiornamenti del listone.
+    """
+
+    mancanti = []
+
+    for item in carica_infortunati_fantacalcio():
+
+        riga = _trova_giocatore_listone(
+            item.get(
+                "nome",
+                ""
+            ),
             item.get(
                 "squadra",
                 ""
             )
         )
 
-        alias_norm = _normalizza_nome_goal(
-            alias
-        ) if alias else ""
+        if riga is None:
 
-        nome_target_norm = _normalizza_nome_goal(
-            nome_giocatore
-        )
+            mancanti.append({
+                "Squadra":
+                    item.get(
+                        "squadra",
+                        ""
+                    ),
 
-        if (
-            a
-            and b
-            and (
-                a == b
-                or a in b
-                or b in a
-                or (
-                    alias_norm
-                    and alias_norm == nome_target_norm
-                )
-            )
-        ):
-            return {
-                "disponibile": False,
-                "dettaglio": item.get(
-                    "dettaglio",
-                    ""
-                ),
-                "nome_fonte": nome_fonte
-            }
+                "Nome fonte":
+                    item.get(
+                        "nome",
+                        ""
+                    )
+            })
 
-    return {
-        "disponibile": True,
-        "dettaglio": "",
-        "nome_fonte": ""
-    }
+    return mancanti
 
 
 @st.dialog("Dettaglio infortunio")
