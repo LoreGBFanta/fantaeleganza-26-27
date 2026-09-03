@@ -110,6 +110,116 @@ USA_DATABASE_CLOUD = bool(
 
 
 # ============================================================
+# PROFILI / LOGIN
+# ============================================================
+
+PROFILI_APP = [
+    "IBBINI IDIOTA",
+    "GOSTOBAR"
+]
+
+if "profilo_attivo" not in st.session_state:
+
+    st.markdown(
+        """
+        <div style="
+            max-width:560px;
+            margin:55px auto 18px auto;
+            padding:26px 30px;
+            background:#071a2f;
+            border-radius:18px;
+            text-align:center;
+            box-shadow:0 10px 30px rgba(0,0,0,.18);
+        ">
+            <div style="
+                color:white;
+                font-size:30px;
+                font-weight:900;
+                letter-spacing:.3px;
+            ">
+                FANTAELEGANZA <span style="color:#f5b51b;">26/27</span>
+            </div>
+            <div style="
+                color:#cbd5e1;
+                margin-top:7px;
+                font-size:15px;
+            ">
+                Seleziona la squadra con cui vuoi accedere
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    profilo_login = st.selectbox(
+        "Profilo",
+        PROFILI_APP,
+        key="profilo_login_select"
+    )
+
+    col_login_1, col_login_2, col_login_3 = st.columns(
+        [1.35, 1.3, 1.35]
+    )
+
+    with col_login_2:
+
+        if st.button(
+            "ACCEDI",
+            type="primary",
+            use_container_width=True,
+            key="btn_login_profilo"
+        ):
+
+            st.session_state[
+                "profilo_attivo"
+            ] = profilo_login
+
+            # Evita che eventuali dati in memoria di una sessione
+            # precedente vengano riutilizzati dopo un cambio profilo.
+            for chiave_sessione in [
+                "_df_giocatori_sessione",
+                "_ultime_operazioni_sessione",
+                "_costi_svincoli_sessione",
+                "budget_asta_corrente",
+                "budget_asta_input",
+                "backup_cloud_bytes",
+                "pdf_rosa_moduli"
+            ]:
+
+                st.session_state.pop(
+                    chiave_sessione,
+                    None
+                )
+
+            st.rerun()
+
+    st.stop()
+
+
+PROFILO_ATTIVO = st.session_state[
+    "profilo_attivo"
+]
+
+SUFFIX_PROFILO = (
+    ""
+    if PROFILO_ATTIVO == "IBBINI IDIOTA"
+    else "_gostobar"
+)
+
+
+def nome_tabella_profilo(
+    nome_base
+):
+
+    return (
+        str(
+            nome_base
+        )
+        + SUFFIX_PROFILO
+    )
+
+
+# ============================================================
 # SESSION STATE
 # ============================================================
 
@@ -7713,7 +7823,9 @@ def crea_snapshot_database(
 
 
 @st.cache_data(show_spinner=False)
-def elenco_snapshot():
+def elenco_snapshot(
+    profilo_cache
+):
 
     conn = get_connection()
 
@@ -7960,7 +8072,247 @@ def crea_backup_logico_bytes():
 # DATABASE
 # ============================================================
 
-def get_connection():
+TABELLE_SEPARATE_PER_PROFILO = [
+    "giocatori",
+    "costi_svincoli",
+    "operazioni",
+    "snapshot_archivio",
+    "configurazione_app"
+]
+
+
+def _riscrivi_sql_per_profilo(
+    sql
+):
+
+    testo = str(
+        sql
+    )
+
+    if not SUFFIX_PROFILO:
+        return testo
+
+    # Sostituisce solo identificatori completi.
+    # In questo modo tutto il codice esistente continua a usare
+    # i nomi standard delle tabelle, ma GOSTOBAR lavora su copie
+    # completamente separate.
+    for nome_base in sorted(
+        TABELLE_SEPARATE_PER_PROFILO,
+        key=len,
+        reverse=True
+    ):
+
+        testo = re.sub(
+            rf"\b{re.escape(nome_base)}\b",
+            nome_tabella_profilo(
+                nome_base
+            ),
+            testo
+        )
+
+    return testo
+
+
+class _CursorProfilo:
+
+    def __init__(
+        self,
+        cursor
+    ):
+
+        self._cursor = cursor
+
+
+    @property
+    def description(
+        self
+    ):
+
+        return self._cursor.description
+
+
+    @property
+    def lastrowid(
+        self
+    ):
+
+        return getattr(
+            self._cursor,
+            "lastrowid",
+            None
+        )
+
+
+    def execute(
+        self,
+        sql,
+        parametri=()
+    ):
+
+        self._cursor.execute(
+            _riscrivi_sql_per_profilo(
+                sql
+            ),
+            parametri
+        )
+
+        return self
+
+
+    def executemany(
+        self,
+        sql,
+        seq_parametri
+    ):
+
+        self._cursor.executemany(
+            _riscrivi_sql_per_profilo(
+                sql
+            ),
+            seq_parametri
+        )
+
+        return self
+
+
+    def fetchone(
+        self
+    ):
+
+        return self._cursor.fetchone()
+
+
+    def fetchall(
+        self
+    ):
+
+        return self._cursor.fetchall()
+
+
+    def __iter__(
+        self
+    ):
+
+        return iter(
+            self._cursor
+        )
+
+
+    def __getattr__(
+        self,
+        nome
+    ):
+
+        return getattr(
+            self._cursor,
+            nome
+        )
+
+
+class _ConnessioneProfilo:
+
+    def __init__(
+        self,
+        connessione
+    ):
+
+        self._connessione = connessione
+
+
+    def cursor(
+        self
+    ):
+
+        return _CursorProfilo(
+            self._connessione.cursor()
+        )
+
+
+    def execute(
+        self,
+        sql,
+        parametri=()
+    ):
+
+        cursore = self.cursor()
+
+        return cursore.execute(
+            sql,
+            parametri
+        )
+
+
+    def executemany(
+        self,
+        sql,
+        seq_parametri
+    ):
+
+        cursore = self.cursor()
+
+        return cursore.executemany(
+            sql,
+            seq_parametri
+        )
+
+
+    def commit(
+        self
+    ):
+
+        return self._connessione.commit()
+
+
+    def rollback(
+        self
+    ):
+
+        return self._connessione.rollback()
+
+
+    def close(
+        self
+    ):
+
+        return self._connessione.close()
+
+
+    def __enter__(
+        self
+    ):
+
+        return self
+
+
+    def __exit__(
+        self,
+        exc_type,
+        exc_value,
+        traceback
+    ):
+
+        if exc_type is None:
+
+            try:
+                self.commit()
+            except Exception:
+                pass
+
+        return False
+
+
+    def __getattr__(
+        self,
+        nome
+    ):
+
+        return getattr(
+            self._connessione,
+            nome
+        )
+
+
+def _get_raw_connection():
 
     if USA_DATABASE_CLOUD:
 
@@ -7975,9 +8327,7 @@ def get_connection():
                 "Installa le dipendenze da requirements.txt."
             ) from errore
 
-        # Riutilizza la stessa connessione durante tutta la sessione.
-        # Evita handshake/connessioni remote ripetute a ogni operazione.
-        chiave = "_turso_connessione"
+        chiave = "_turso_connessione_raw"
 
         conn = st.session_state.get(
             chiave
@@ -8005,6 +8355,12 @@ def get_connection():
     )
 
 
+def get_connection():
+
+    return _ConnessioneProfilo(
+        _get_raw_connection()
+    )
+
 def chiudi_connessione(
     conn
 ):
@@ -8021,7 +8377,9 @@ def chiudi_connessione(
 
 
 @st.cache_resource(show_spinner=False)
-def inizializza_database():
+def inizializza_database(
+    profilo_cache
+):
 
     conn = get_connection()
     cur = conn.cursor()
@@ -8170,6 +8528,95 @@ def inizializza_database():
 
     conn.commit()
     chiudi_connessione(conn)
+
+    # --------------------------------------------------------
+    # PRIMA APERTURA DI GOSTOBAR
+    # --------------------------------------------------------
+    # Clona il listone di IBBINI IDIOTA ma NON il suo stato d'asta.
+    # Quindi GOSTOBAR parte con tutti i giocatori DISPONIBILI,
+    # rosa vuota, prezzi vuoti e cronologia vuota.
+    if PROFILO_ATTIVO == "GOSTOBAR":
+
+        raw_conn = _get_raw_connection()
+        raw_cur = raw_conn.cursor()
+
+        try:
+
+            raw_cur.execute("""
+                SELECT COUNT(*)
+                FROM giocatori_gostobar
+            """)
+
+            quanti_gostobar = int(
+                raw_cur.fetchone()[0]
+                or 0
+            )
+
+            if quanti_gostobar == 0:
+
+                raw_cur.execute("""
+                    SELECT COUNT(*)
+                    FROM giocatori
+                """)
+
+                quanti_base = int(
+                    raw_cur.fetchone()[0]
+                    or 0
+                )
+
+                if quanti_base > 0:
+
+                    raw_cur.execute("""
+                        INSERT INTO giocatori_gostobar (
+                            id,
+                            ruolo_classico,
+                            ruolo_mantra,
+                            nome,
+                            squadra,
+                            quotazione_attuale,
+                            quotazione_iniziale,
+                            differenza,
+                            quotazione_attuale_mantra,
+                            quotazione_iniziale_mantra,
+                            differenza_mantra,
+                            fvm,
+                            fvm_mantra,
+                            stato,
+                            prezzo_acquisto,
+                            ultimo_aggiornamento
+                        )
+
+                        SELECT
+                            id,
+                            ruolo_classico,
+                            ruolo_mantra,
+                            nome,
+                            squadra,
+                            quotazione_attuale,
+                            quotazione_iniziale,
+                            differenza,
+                            quotazione_attuale_mantra,
+                            quotazione_iniziale_mantra,
+                            differenza_mantra,
+                            fvm,
+                            fvm_mantra,
+                            'DISPONIBILE',
+                            NULL,
+                            CURRENT_TIMESTAMP
+
+                        FROM giocatori
+                    """)
+
+                    raw_conn.commit()
+
+        finally:
+
+            if not USA_DATABASE_CLOUD:
+
+                try:
+                    raw_conn.close()
+                except Exception:
+                    pass
 
 
 # ============================================================
@@ -11678,7 +12125,7 @@ def gestisci_snapshot():
             st.rerun()
 
     snapshots = (
-        elenco_snapshot()
+        elenco_snapshot(PROFILO_ATTIVO)
     )
 
     if not snapshots:
@@ -11829,7 +12276,9 @@ def gestisci_backup_cloud():
 # INIZIALIZZAZIONE
 # ============================================================
 
-inizializza_database()
+inizializza_database(
+    PROFILO_ATTIVO
+)
 
 if "budget_asta_corrente" not in st.session_state:
 
@@ -11933,10 +12382,11 @@ iqr = (
 # HEADER COMPATTO
 # ============================================================
 
-head_left, head_refresh, head_snapshot, head_backup, head_rules, head_theme = (
+head_left, head_user, head_refresh, head_snapshot, head_backup, head_rules, head_theme = (
     st.columns(
         [
-            5.0,
+            4.3,
+            1.35,
             0.9,
             1.0,
             0.9,
@@ -11973,6 +12423,62 @@ with head_left:
         header_html,
         unsafe_allow_html=True
     )
+
+
+with head_user:
+
+    st.markdown(
+        f"""
+        <div style="
+            text-align:center;
+            font-size:0.78rem;
+            font-weight:800;
+            color:#475569;
+            margin-bottom:3px;
+        ">
+            👤 {html.escape(PROFILO_ATTIVO)}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    if st.button(
+        "ESCI",
+        use_container_width=True,
+        key="btn_logout_profilo"
+    ):
+
+        # Pulisce solo lo stato locale della sessione corrente.
+        for chiave_sessione in list(
+            st.session_state.keys()
+        ):
+
+            if chiave_sessione in {
+                "profilo_attivo",
+                "profilo_login_select"
+            }:
+                continue
+
+            if (
+                chiave_sessione.startswith("_df_")
+                or chiave_sessione.startswith("_ultime_")
+                or chiave_sessione.startswith("_costi_")
+                or chiave_sessione.startswith("budget_")
+                or chiave_sessione.startswith("backup_")
+                or chiave_sessione.startswith("pdf_")
+            ):
+
+                st.session_state.pop(
+                    chiave_sessione,
+                    None
+                )
+
+        st.session_state.pop(
+            "profilo_attivo",
+            None
+        )
+
+        st.rerun()
 
 
 with head_refresh:
@@ -12012,22 +12518,28 @@ with head_backup:
 
     elif DB_PATH.exists():
 
-        with open(
-            DB_PATH,
-            "rb"
-        ) as file_db:
+        backup_profilo = (
+            genera_backup_database_bytes()
+        )
 
-            st.download_button(
-                "☁ Backup",
-                data=file_db.read(),
-                file_name=(
-                    "fantaeleganza_backup.db"
-                ),
-                mime=(
-                    "application/octet-stream"
-                ),
-                use_container_width=True
-            )
+        st.download_button(
+            "☁ Backup",
+            data=backup_profilo,
+            file_name=(
+                "fantaeleganza_backup_"
+                + PROFILO_ATTIVO
+                .lower()
+                .replace(
+                    " ",
+                    "_"
+                )
+                + ".json"
+            ),
+            mime=(
+                "application/json"
+            ),
+            use_container_width=True
+        )
 
 
 with head_rules:
@@ -12681,7 +13193,7 @@ if sezione == "DASHBOARD":
     )
 
     snapshot_disponibili = (
-        elenco_snapshot()
+        elenco_snapshot(PROFILO_ATTIVO)
     )
 
     st.caption(
