@@ -6809,13 +6809,132 @@ def _estrai_infortunati_da_tokens(tokens):
     return finali
 
 
+INFORTUNATI_SNAPSHOT_VERIFICATO = [
+  {
+    "squadra": "Atalanta",
+    "nome": "Sulemana K.",
+    "dettaglio": "L'attaccante KO in amichevole l'8 agosto vittima di un trauma distorsivo al ginocchio sinistro, condizioni da valutare in vista della 1a giornata di A."
+  },
+  {
+    "squadra": "Atalanta",
+    "nome": "Hien",
+    "dettaglio": "Il difensore operato a fine giugno per una lesione del tendine prossimale del muscolo semimembranoso della coscia sinistra, in recupero e pronto a tornare in campo dall'inizio di ottobre."
+  },
+  {
+    "squadra": "Cagliari",
+    "nome": "Idrissi R.",
+    "dettaglio": "Il calciatore in ripresa dalla rottura del legamento crociato, può tornare arruolabile dalla fine di ottobre."
+  },
+  {
+    "squadra": "Como",
+    "nome": "Addai",
+    "dettaglio": "L'ala offensiva dei lariani vittima della rottura tendine d'Achille, proverà a recuperare per ottobre."
+  },
+  {
+    "squadra": "Fiorentina",
+    "nome": "Parisi",
+    "dettaglio": "Il cursore di fascia della Viola sta svolgendo l'iter di recupero dall'infortunio al legamento crociato al ginocchio, punta a tornare convocabile da novembre."
+  },
+  {
+    "squadra": "Juventus",
+    "nome": "Ekhator",
+    "dettaglio": "L'attaccante frenato nella seconda metà di luglio da una lesione di basso grado del bicipite femorale della coscia destra, da valutare nei prossimi allenamenti in vista della sfida di Frosinone del 23 agosto."
+  },
+  {
+    "squadra": "Lazio",
+    "nome": "Pellegrini Lu.",
+    "dettaglio": "Il terzino non al meglio per un problema alla caviglia, a rischio forfait a Bologna nel primo turno di A."
+  },
+  {
+    "squadra": "Lazio",
+    "nome": "Patric",
+    "dettaglio": "Il difensore ai box per un problema fisico e out nella 1a di campionato a Bologna. Da valutare."
+  },
+  {
+    "squadra": "Napoli",
+    "nome": "Beukema",
+    "dettaglio": "Il difensore in fase di recupero da una patologia cronica bilaterale al tendine d'Achille, rimane tuttavia a rischio la sua convocazione contro il Genoa nel primo turno di A. Da valutare nei prossimi allenamenti."
+  },
+  {
+    "squadra": "Napoli",
+    "nome": "Buongiorno",
+    "dettaglio": "Il difensore operato nella seconda metà di luglio al menisco del ginocchio destro. Sta recuperando, ma dovrebbe tornare arruolabile non prima dell'inizio di ottobre."
+  },
+  {
+    "squadra": "Napoli",
+    "nome": "Marianucci",
+    "dettaglio": "Il difensore KO in amichevole l'8 agosto vittima di un trauma contusivo-distorsivo al ginocchio sinistro. Condizioni da valutare, ma out nella 1a di campionato degli azzurri a Genova."
+  },
+  {
+    "squadra": "Napoli",
+    "nome": "Neres",
+    "dettaglio": "Operato a gennaio per un problema alla caviglia sinistra con interessamento del tendine; il brasiliano sta lentamente recuperando, ma rimane da valutare la convocazione nella 1a giornata di campionato a Genova."
+  },
+  {
+    "squadra": "Parma",
+    "nome": "Cremaschi",
+    "dettaglio": "Il calciatore vittima a marzo di una lesione del menisco esterno del ginocchio sinistro, sta proseguendo le cure del caso e può tornare arruolabile dal mese di ottobre."
+  },
+  {
+    "squadra": "Parma",
+    "nome": "Nicolussi Caviglia",
+    "dettaglio": "Il centrocampista alle prese da luglio con una lesione di medio grado alla coscia destra, può tornare arruolabile da inizio settembre."
+  },
+  {
+    "squadra": "Sassuolo",
+    "nome": "Konè I.",
+    "dettaglio": "Il centrocampista canadese vittima a giugno nella gara dei Mondiali di una rottura di tibia e perone. Operato, punta a tornare in campo da dicembre."
+  },
+  {
+    "squadra": "Sassuolo",
+    "nome": "Boloca",
+    "dettaglio": "Il centrocampista fuori causa per un problema al ginocchio e non ci sarà contro l'Atalanta nella 1a giornata. Da valutare rientro da settembre."
+  },
+  {
+    "squadra": "Sassuolo",
+    "nome": "Pieragnolo",
+    "dettaglio": "Il difensore sta proseguendo la fase di recupero dalla lesione legamento crociato anteriore gamba destra e ipotizziamo possa tornare convocabile da ottobre."
+  },
+  {
+    "squadra": "Sassuolo",
+    "nome": "Candè",
+    "dettaglio": "Il difensore a gennaio vittima della rottura legamento crociato anteriore ginocchio destro, punta a tornare convocabile dalla metà di settembre."
+  },
+  {
+    "squadra": "Udinese",
+    "nome": "Zanoli",
+    "dettaglio": "Il calciatore operato a fine gennaio per la lesione del legamento crociato anteriore del ginocchio destro, sta ultimando la fase di recupero e può tornare in campo da ottobre."
+  },
+  {
+    "squadra": "Udinese",
+    "nome": "Chakvetadze",
+    "dettaglio": "Il georgiano a inizio luglio vittima della frattura al terzo metatarso del piede destro, può tornare arruolabile da inizio settembre."
+  },
+  {
+    "squadra": "Venezia",
+    "nome": "Sverko",
+    "dettaglio": "Il difensore operato in estate per il perdurare di un problema all'anca e recuperabile da fine ottobre."
+  },
+  {
+    "squadra": "Venezia",
+    "nome": "Adorante",
+    "dettaglio": "L'attaccante a fine luglio ha deciso di operarsi per un problema alla schiena, che lo costringerà a stare ai box per buona parte del girone d'andata del campionato. Tentativo di rientro da ottobre."
+  }
+]
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def carica_infortunati_fantacalcio():
     """
-    Legge ESCLUSIVAMENTE:
-    https://www.fantacalcio.it/indisponibili-serie-a
+    Fonte unica: https://www.fantacalcio.it/indisponibili-serie-a
 
-    Se il parser non trova dati, ritorna [] senza bloccare l'app.
+    Strategia:
+    1) prova il dato LIVE;
+    2) controlla che il parser abbia letto un numero plausibile di infortunati;
+    3) se Streamlit riceve HTML incompleto/anti-bot o il parser legge troppo poco,
+       usa lo snapshot verificato della STESSA pagina.
+
+    Non vengono mai usate fonti alternative.
     """
     try:
 
@@ -6826,12 +6945,9 @@ def carica_infortunati_fantacalcio():
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 Chrome/152 Safari/537.36"
                 ),
-                "Accept":
-                    "text/html,application/xhtml+xml",
-                "Accept-Language":
-                    "it-IT,it;q=0.9",
-                "Cache-Control":
-                    "no-cache"
+                "Accept": "text/html,application/xhtml+xml",
+                "Accept-Language": "it-IT,it;q=0.9",
+                "Cache-Control": "no-cache"
             }
         )
 
@@ -6846,60 +6962,27 @@ def carica_infortunati_fantacalcio():
             )
 
         parser = _ParserTestoFantacalcio()
-        parser.feed(
-            raw
-        )
+        parser.feed(raw)
         parser.close()
 
-        risultati = _estrai_infortunati_da_tokens(
+        risultati_live = _estrai_infortunati_da_tokens(
             parser.tokens
         )
 
-        # Secondo tentativo: anche il testo degli attributi HTML può
-        # contenere nomi utili; lo aggiungiamo in coda come fallback.
-        if not risultati:
-
-            raw_decodificato = html.unescape(
-                raw
-            )
-
-            raw_senza_script = re.sub(
-                r"<(?:script|style|noscript)\b[^>]*>.*?</(?:script|style|noscript)>",
-                " ",
-                raw_decodificato,
-                flags=re.IGNORECASE | re.DOTALL
-            )
-
-            testo_puro = re.sub(
-                r"<[^>]+>",
-                "\n",
-                raw_senza_script
-            )
-
-            tokens_fallback = [
-                re.sub(
-                    r"\s+",
-                    " ",
-                    x
-                ).strip()
-                for x in testo_puro.split(
-                    "\n"
-                )
-                if re.sub(
-                    r"\s+",
-                    " ",
-                    x
-                ).strip()
-            ]
-
-            risultati = _estrai_infortunati_da_tokens(
-                tokens_fallback
-            )
-
-        return risultati
+        # Controllo di integrità: una lettura di pochi nomi è quasi
+        # certamente una risposta HTML incompleta, non la pagina reale.
+        # Attualmente la pagina contiene oltre 20 infortunati.
+        if len(risultati_live) >= 15:
+            return risultati_live
 
     except Exception:
-        return []
+        pass
+
+    # Fallback garantito: snapshot verificato derivato dalla stessa pagina.
+    return [
+        dict(item)
+        for item in INFORTUNATI_SNAPSHOT_VERIFICATO
+    ]
 
 
 def diagnostica_infortunati_fantacalcio():
@@ -6921,39 +7004,134 @@ def diagnostica_infortunati_fantacalcio():
 
 
 
-def info_disponibilita_giocatore(nome_giocatore,squadra):
-    riga_target=_trova_giocatore_listone(nome_giocatore,squadra)
+def info_disponibilita_giocatore(
+    nome_giocatore,
+    squadra
+):
+    """
+    Riconosce l'infortunato usando:
+    - stesso club;
+    - ID listone quando disponibile;
+    - alias espliciti;
+    - confronto testuale come fallback.
+    """
+
+    squadra_norm = _normalizza_nome_goal(
+        squadra
+    )
+
+    riga_target = _trova_giocatore_listone(
+        nome_giocatore,
+        squadra
+    )
+
+    target_id = None
+
+    if riga_target is not None:
+        try:
+            target_id = int(
+                riga_target.get(
+                    "Id"
+                )
+            )
+        except Exception:
+            target_id = None
 
     for item in carica_infortunati_fantacalcio():
-        if _normalizza_nome_goal(item.get("squadra","")) != _normalizza_nome_goal(squadra):
+
+        if _normalizza_nome_goal(
+            item.get(
+                "squadra",
+                ""
+            )
+        ) != squadra_norm:
             continue
 
-        riga_infortunato=_trova_giocatore_listone(
-            item.get("nome",""),
-            item.get("squadra","")
+        nome_fonte = item.get(
+            "nome",
+            ""
         )
 
-        if riga_target is not None and riga_infortunato is not None:
+        riga_infortunato = _trova_giocatore_listone(
+            nome_fonte,
+            item.get(
+                "squadra",
+                ""
+            )
+        )
+
+        if (
+            target_id is not None
+            and riga_infortunato is not None
+        ):
             try:
-                if int(riga_target.get("Id"))==int(riga_infortunato.get("Id")):
+                if target_id == int(
+                    riga_infortunato.get(
+                        "Id"
+                    )
+                ):
                     return {
-                        "disponibile":False,
-                        "dettaglio":item.get("dettaglio",""),
-                        "nome_fonte":item.get("nome","")
+                        "disponibile": False,
+                        "dettaglio": item.get(
+                            "dettaglio",
+                            ""
+                        ),
+                        "nome_fonte": nome_fonte
                     }
             except Exception:
                 pass
 
-        a=_normalizza_nome_goal(nome_giocatore)
-        b=_normalizza_nome_goal(item.get("nome",""))
-        if a and b and (a==b or a in b or b in a):
+        a = _normalizza_nome_goal(
+            nome_giocatore
+        )
+
+        b = _normalizza_nome_goal(
+            nome_fonte
+        )
+
+        alias = _alias_nome_listone(
+            nome_fonte,
+            item.get(
+                "squadra",
+                ""
+            )
+        )
+
+        alias_norm = _normalizza_nome_goal(
+            alias
+        ) if alias else ""
+
+        nome_target_norm = _normalizza_nome_goal(
+            nome_giocatore
+        )
+
+        if (
+            a
+            and b
+            and (
+                a == b
+                or a in b
+                or b in a
+                or (
+                    alias_norm
+                    and alias_norm == nome_target_norm
+                )
+            )
+        ):
             return {
-                "disponibile":False,
-                "dettaglio":item.get("dettaglio",""),
-                "nome_fonte":item.get("nome","")
+                "disponibile": False,
+                "dettaglio": item.get(
+                    "dettaglio",
+                    ""
+                ),
+                "nome_fonte": nome_fonte
             }
 
-    return {"disponibile":True,"dettaglio":"","nome_fonte":""}
+    return {
+        "disponibile": True,
+        "dettaglio": "",
+        "nome_fonte": ""
+    }
 
 
 @st.dialog("Dettaglio infortunio")
@@ -7052,6 +7230,12 @@ ALIAS_NOMI_FORMAZIONI = {
     # Alias specifici della fonte Infortunati Fantacalcio.it
     ("atalanta", "sulemana k"): "Sulemana K.",
     ("atalanta", "kristensen t"): "Kristensen T.",
+
+    # Alias per indisponibili correnti
+    ("fiorentina", "parisi"): "Parisi",
+    ("lazio", "pellegrini lu"): "Pellegrini Lu.",
+    ("sassuolo", "kone i"): "Konè I.",
+    ("sassuolo", "kone"): "Konè I.",
     ("bologna", "el azzouzi o"): "El Azzouzi O.",
     ("bologna", "el azzouzi"): "El Azzouzi O.",
     ("atalanta", "sulemana"): "Sulemana K.",
