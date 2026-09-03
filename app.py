@@ -5642,36 +5642,47 @@ def _stesso_giocatore_specialista(
 
 
 
-def info_titolarita_giocatore(
-    nome_giocatore,
-    squadra
-):
+def costruisci_mappa_titolarita():
+    """
+    Costruisce UNA SOLA VOLTA per render della pagina una mappa:
+        (squadra_normalizzata, giocatore_normalizzato) ->
+            {"tipo": "...", "contro": "..."}
+
+    Evita di:
+    - rileggere la cache delle formazioni per ogni riga della rosa;
+    - ciclare 20 squadre per ogni giocatore;
+    - rifare matching costosi ripetutamente.
+    """
+
     dati_formazioni = carica_probabili_web()
 
-    if not dati_formazioni:
-        return {"tipo": "", "contro": ""}
+    mappa = {}
 
-    target_squadra = _normalizza_nome_goal(
-        squadra
-    )
+    if not dati_formazioni:
+        return mappa
 
     for squadra_data in dati_formazioni.get(
         "squadre",
         []
     ):
 
-        if _normalizza_nome_goal(
+        squadra_nome = str(
             squadra_data.get(
                 "squadra",
                 ""
             )
-        ) != target_squadra:
-            continue
+        )
+
+        squadra_key = _normalizza_nome_goal(
+            squadra_nome
+        )
 
         titolari = [
-            g.get(
-                "nome",
-                ""
+            str(
+                g.get(
+                    "nome",
+                    ""
+                )
             )
             for g in squadra_data.get(
                 "formazione",
@@ -5679,19 +5690,29 @@ def info_titolarita_giocatore(
             )
         ]
 
-        titolare_match = None
+        # Inserisce prima tutti i titolari come TITOLARE.
+        for nome in titolari:
 
-        for nome_titolare in titolari:
+            nome_key = _normalizza_nome_goal(
+                nome
+            )
 
-            if _stesso_giocatore_specialista(
-                nome_giocatore,
-                nome_titolare,
-                squadra
-            ):
+            if nome_key:
 
-                titolare_match = nome_titolare
-                break
+                mappa[
+                    (
+                        squadra_key,
+                        nome_key
+                    )
+                ] = {
+                    "tipo":
+                        "TITOLARE",
 
+                    "contro":
+                        ""
+                }
+
+        # Poi sovrascrive i giocatori coinvolti nei ballottaggi.
         for coppia in (
             squadra_data.get(
                 "ballottaggi",
@@ -5700,62 +5721,115 @@ def info_titolarita_giocatore(
             or []
         ):
 
-            a = coppia.get(
-                "a",
-                ""
-            )
-
-            b = coppia.get(
-                "b",
-                ""
-            )
-
-            match_a = _stesso_giocatore_specialista(
-                nome_giocatore,
-                a,
-                squadra
-            )
-
-            match_b = _stesso_giocatore_specialista(
-                nome_giocatore,
-                b,
-                squadra
-            )
-
-            if not (
-                match_a
-                or match_b
-            ):
-                continue
-
-            altro = (
-                b
-                if match_a
-                else a
-            )
-
-            return {
-                "tipo":
-                    "BALLOTTAGGIO",
-
-                "contro":
-                    altro
-            }
-
-        if titolare_match:
-
-            return {
-                "tipo":
-                    "TITOLARE",
-
-                "contro":
+            a = str(
+                coppia.get(
+                    "a",
                     ""
-            }
+                )
+            )
 
-        return {
-            "tipo": "",
-            "contro": ""
-        }
+            b = str(
+                coppia.get(
+                    "b",
+                    ""
+                )
+            )
+
+            a_key = _normalizza_nome_goal(
+                a
+            )
+
+            b_key = _normalizza_nome_goal(
+                b
+            )
+
+            if a_key:
+
+                mappa[
+                    (
+                        squadra_key,
+                        a_key
+                    )
+                ] = {
+                    "tipo":
+                        "BALLOTTAGGIO",
+
+                    "contro":
+                        b
+                }
+
+            if b_key:
+
+                mappa[
+                    (
+                        squadra_key,
+                        b_key
+                    )
+                ] = {
+                    "tipo":
+                        "BALLOTTAGGIO",
+
+                    "contro":
+                        a
+                }
+
+    return mappa
+
+
+def info_titolarita_giocatore(
+    nome_giocatore,
+    squadra,
+    mappa_titolarita=None
+):
+    """
+    Lookup O(1) sulla mappa precomputata.
+
+    Include un fallback leggero per nomi equivalenti tipo
+    Lautaro / Lautaro Martinez.
+    """
+
+    if mappa_titolarita is None:
+
+        mappa_titolarita = (
+            costruisci_mappa_titolarita()
+        )
+
+    squadra_key = _normalizza_nome_goal(
+        squadra
+    )
+
+    nome_key = _normalizza_nome_goal(
+        nome_giocatore
+    )
+
+    chiave = (
+        squadra_key,
+        nome_key
+    )
+
+    if chiave in mappa_titolarita:
+
+        return mappa_titolarita[
+            chiave
+        ]
+
+    # Fallback limitato alla stessa squadra:
+    # evita il costoso lookup sul dataframe completo.
+    for (
+        sq_key,
+        giocatore_key
+    ), info in mappa_titolarita.items():
+
+        if sq_key != squadra_key:
+            continue
+
+        if (
+            nome_key == giocatore_key
+            or nome_key in giocatore_key
+            or giocatore_key in nome_key
+        ):
+
+            return info
 
     return {
         "tipo": "",
@@ -5763,13 +5837,16 @@ def info_titolarita_giocatore(
     }
 
 
+
 def html_titolarita_rosa(
     nome_giocatore,
-    squadra
+    squadra,
+    mappa_titolarita=None
 ):
     info = info_titolarita_giocatore(
         nome_giocatore,
-        squadra
+        squadra,
+        mappa_titolarita
     )
 
     tipo = info.get(
@@ -13586,6 +13663,12 @@ elif sezione == "ROSA":
         df_rosa_globale.copy()
     )
 
+    # Precalcolo una sola volta i dati di titolarità
+    # per tutta la pagina ROSA.
+    mappa_titolarita_rosa = (
+        costruisci_mappa_titolarita()
+    )
+
     if not df_rosa.empty:
         if st.button(
             "🗑️ ELIMINA TUTTA LA ROSA",
@@ -13709,7 +13792,8 @@ elif sezione == "ROSA":
                 r3.markdown(
                     html_titolarita_rosa(
                         giocatore["Nome"],
-                        giocatore["Squadra"]
+                        giocatore["Squadra"],
+                        mappa_titolarita_rosa
                     ),
                     unsafe_allow_html=True
                 )
@@ -13840,7 +13924,8 @@ elif sezione == "ROSA":
                 cols[3].markdown(
                     html_titolarita_rosa(
                         giocatore["Nome"],
-                        giocatore["Squadra"]
+                        giocatore["Squadra"],
+                        mappa_titolarita_rosa
                     ),
                     unsafe_allow_html=True
                 )
