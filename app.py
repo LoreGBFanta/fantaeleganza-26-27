@@ -6639,7 +6639,7 @@ def mostra_probabile(
             border-radius:0 0 10px 10px;
             padding:8px 12px 10px 12px;
             margin-top:-2px;
-            font-size:0.78rem;
+            font-size:1.00rem;
             line-height:1.45;
             color:#334155;
         ">
