@@ -5641,6 +5641,176 @@ def _stesso_giocatore_specialista(
     return False
 
 
+
+def info_titolarita_giocatore(
+    nome_giocatore,
+    squadra
+):
+    dati_formazioni = carica_probabili_web()
+
+    if not dati_formazioni:
+        return {"tipo": "", "contro": ""}
+
+    target_squadra = _normalizza_nome_goal(
+        squadra
+    )
+
+    for squadra_data in dati_formazioni.get(
+        "squadre",
+        []
+    ):
+
+        if _normalizza_nome_goal(
+            squadra_data.get(
+                "squadra",
+                ""
+            )
+        ) != target_squadra:
+            continue
+
+        titolari = [
+            g.get(
+                "nome",
+                ""
+            )
+            for g in squadra_data.get(
+                "formazione",
+                []
+            )
+        ]
+
+        titolare_match = None
+
+        for nome_titolare in titolari:
+
+            if _stesso_giocatore_specialista(
+                nome_giocatore,
+                nome_titolare,
+                squadra
+            ):
+
+                titolare_match = nome_titolare
+                break
+
+        for coppia in (
+            squadra_data.get(
+                "ballottaggi",
+                []
+            )
+            or []
+        ):
+
+            a = coppia.get(
+                "a",
+                ""
+            )
+
+            b = coppia.get(
+                "b",
+                ""
+            )
+
+            match_a = _stesso_giocatore_specialista(
+                nome_giocatore,
+                a,
+                squadra
+            )
+
+            match_b = _stesso_giocatore_specialista(
+                nome_giocatore,
+                b,
+                squadra
+            )
+
+            if not (
+                match_a
+                or match_b
+            ):
+                continue
+
+            altro = (
+                b
+                if match_a
+                else a
+            )
+
+            return {
+                "tipo":
+                    "BALLOTTAGGIO",
+
+                "contro":
+                    altro
+            }
+
+        if titolare_match:
+
+            return {
+                "tipo":
+                    "TITOLARE",
+
+                "contro":
+                    ""
+            }
+
+        return {
+            "tipo": "",
+            "contro": ""
+        }
+
+    return {
+        "tipo": "",
+        "contro": ""
+    }
+
+
+def html_titolarita_rosa(
+    nome_giocatore,
+    squadra
+):
+    info = info_titolarita_giocatore(
+        nome_giocatore,
+        squadra
+    )
+
+    tipo = info.get(
+        "tipo",
+        ""
+    )
+
+    if tipo == "TITOLARE":
+
+        return (
+            '<span style="font-weight:900;'
+            'font-size:1.05rem;">⭐</span>'
+        )
+
+    if tipo == "BALLOTTAGGIO":
+
+        contro = html.escape(
+            str(
+                info.get(
+                    "contro",
+                    ""
+                )
+            )
+        )
+
+        return (
+            '<span style="color:#2563eb;'
+            'font-weight:900;">B</span>'
+            + (
+                '<span style="color:#334155;'
+                'font-weight:700;"> '
+                + contro
+                + '</span>'
+                if contro
+                else ""
+            )
+        )
+
+    return ""
+
+
 def sigle_specialista_giocatore(
     nome_giocatore,
     squadra
@@ -13475,15 +13645,16 @@ elif sezione == "ROSA":
         ):
 
             # Header compatto mobile
-            h1, h2, h3, h4, h5 = st.columns(
-                [2.2, 0.9, 0.8, 1.0, 0.6]
+            h1, h2, h3, h4, h5, h6 = st.columns(
+                [2.0, 0.8, 1.4, 0.7, 0.9, 0.5]
             )
 
             h1.markdown("**NOME GIOCATORE**")
             h2.markdown("**RUOLO**")
-            h3.markdown("**R/CP**")
-            h4.markdown("**PREZZO**")
-            h5.markdown("**OK**")
+            h3.markdown("**TITOLARITÀ**")
+            h4.markdown("**R/CP**")
+            h5.markdown("**PREZZO**")
+            h6.markdown("**OK**")
 
             for _, giocatore in df_rosa.iterrows():
 
@@ -13506,8 +13677,8 @@ elif sezione == "ROSA":
                         chiave_prezzo
                     ] = prezzo_attuale
 
-                r1, r2, r3, r4, r5 = st.columns(
-                    [2.2, 0.9, 0.8, 1.0, 0.6],
+                r1, r2, r3, r4, r5, r6 = st.columns(
+                    [2.0, 0.8, 1.4, 0.7, 0.9, 0.5],
                     vertical_alignment="center"
                 )
 
@@ -13535,7 +13706,15 @@ elif sezione == "ROSA":
                     giocatore["RM"]
                 )
 
-                r3.write(
+                r3.markdown(
+                    html_titolarita_rosa(
+                        giocatore["Nome"],
+                        giocatore["Squadra"]
+                    ),
+                    unsafe_allow_html=True
+                )
+
+                r4.write(
                     sigle_specialista_giocatore(
                         giocatore["Nome"],
                         giocatore["Squadra"]
@@ -13543,7 +13722,7 @@ elif sezione == "ROSA":
                     or "—"
                 )
 
-                with r4:
+                with r5:
 
                     nuovo_prezzo = st.number_input(
                         "Prezzo",
@@ -13555,7 +13734,7 @@ elif sezione == "ROSA":
                         label_visibility="collapsed"
                     )
 
-                with r5:
+                with r6:
 
                     modificato = (
                         round(
@@ -13599,6 +13778,7 @@ elif sezione == "ROSA":
                         4,
                         2,
                         2,
+                        1.8,
                         1.2,
                         1.2,
                         1.9,
@@ -13612,6 +13792,7 @@ elif sezione == "ROSA":
                 "Nome",
                 "Squadra",
                 "Ruolo",
+                "Titolarità",
                 "R / CP",
                 "FVM",
                 "Prezzo acquisto",
@@ -13635,6 +13816,7 @@ elif sezione == "ROSA":
                             4,
                             2,
                             2,
+                            1.8,
                             1.2,
                             1.2,
                             1.9,
@@ -13654,14 +13836,24 @@ elif sezione == "ROSA":
                 cols[2].write(
                     giocatore["RM"]
                 )
-                cols[3].write(
+
+                cols[3].markdown(
+                    html_titolarita_rosa(
+                        giocatore["Nome"],
+                        giocatore["Squadra"]
+                    ),
+                    unsafe_allow_html=True
+                )
+
+                cols[4].write(
                     sigle_specialista_giocatore(
                         giocatore["Nome"],
                         giocatore["Squadra"]
                     )
                     or "—"
                 )
-                cols[4].write(
+
+                cols[5].write(
                     giocatore["FVM"]
                 )
                 giocatore_id = int(
@@ -13683,7 +13875,7 @@ elif sezione == "ROSA":
                         chiave_prezzo
                     ] = prezzo_attuale
 
-                with cols[5]:
+                with cols[6]:
 
                     prezzo_col1, prezzo_col2 = st.columns(
                         [3.2, 0.8],
@@ -13732,7 +13924,7 @@ elif sezione == "ROSA":
                                 nuovo_prezzo
                             )
 
-                with cols[6]:
+                with cols[7]:
                     if st.button(
                         "🗑️",
                         key=(
@@ -13748,7 +13940,7 @@ elif sezione == "ROSA":
                             giocatore["Nome"]
                         )
 
-                with cols[7]:
+                with cols[8]:
                     if st.button(
                         "🔓",
                         key=(
