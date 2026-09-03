@@ -5703,7 +5703,7 @@ def sigle_specialista_giocatore(
 
 def _fc_snapshot_v18():
     return {
-        "versione_dati": 19,
+        "versione_dati": 21,
         "fonte": "Fantacalcio.it",
         "url_fonte": URL_PROBABILI_FORMAZIONI,
         "metodo_import": "snapshot_verificato",
@@ -5907,7 +5907,7 @@ def aggiorna_probabili_web():
     )
 
     salva_config_generica(
-        "formazioni_tipo_fantacalcio_v19",
+        "formazioni_tipo_fantacalcio_v21",
         json.dumps(
             dati,
             ensure_ascii=False
@@ -5919,7 +5919,7 @@ def aggiorna_probabili_web():
 def carica_probabili_web():
 
     raw = leggi_config_generica(
-        "formazioni_tipo_fantacalcio_v19",
+        "formazioni_tipo_fantacalcio_v21",
         ""
     )
 
@@ -5938,7 +5938,7 @@ def carica_probabili_web():
                 )
                 and dati.get(
                     "versione_dati"
-                ) == 19
+                ) == 21
                 and len(
                     dati.get(
                         "squadre",
@@ -6418,6 +6418,111 @@ def _ballottaggio_del_titolare(
     return None
 
 
+
+def stato_giocatore_formazione(
+    nome_giocatore,
+    squadra
+):
+    """
+    Restituisce lo stato corrente del giocatore nel listone:
+      MIO         -> acquistato dalla nostra rosa
+      AVVERSARIO  -> acquistato da un avversario
+      DISPONIBILE -> ancora libero
+
+    Il matching usa la stessa funzione già impiegata per ruoli Mantra
+    e specialisti, quindi resta coerente col resto dell'app.
+    """
+
+    try:
+
+        riga = _trova_giocatore_listone(
+            nome_giocatore,
+            squadra
+        )
+
+        if riga is None:
+            return "DISPONIBILE"
+
+        stato = str(
+            riga.get(
+                "Stato",
+                "DISPONIBILE"
+            )
+            or "DISPONIBILE"
+        ).strip().upper()
+
+        if stato in {
+            "MIO",
+            "AVVERSARIO"
+        }:
+            return stato
+
+    except Exception:
+        pass
+
+    return "DISPONIBILE"
+
+
+def html_nome_formazione(
+    nome_giocatore,
+    squadra,
+    classe_css,
+    colore
+):
+    """
+    Applica la resa grafica richiesta:
+    - ⭐ prima del nome se il giocatore è nella nostra rosa
+    - nome barrato se è stato acquistato da un avversario
+    """
+
+    stato = stato_giocatore_formazione(
+        nome_giocatore,
+        squadra
+    )
+
+    nome_html = html.escape(
+        str(
+            nome_giocatore
+        )
+    )
+
+    if stato == "MIO":
+
+        contenuto = (
+            "⭐ "
+            + nome_html
+        )
+
+        style_extra = ""
+
+    elif stato == "AVVERSARIO":
+
+        contenuto = nome_html
+
+        style_extra = (
+            "text-decoration:line-through;"
+            "text-decoration-thickness:2px;"
+            "opacity:0.72;"
+        )
+
+    else:
+
+        contenuto = nome_html
+        style_extra = ""
+
+    return (
+        '<span class="'
+        + classe_css
+        + '" style="color:'
+        + colore
+        + ' !important;'
+        + style_extra
+        + '">'
+        + contenuto
+        + '</span>'
+    )
+
+
 def mostra_probabile(
     squadra
 ):
@@ -6481,10 +6586,8 @@ def mostra_probabile(
                 else "#16a34a"
             )
 
-            nome = html.escape(
-                str(
-                    nome_raw
-                )
+            nome = str(
+                nome_raw
             )
 
             ruoli = _ruoli_mantra_goal(
@@ -6507,10 +6610,8 @@ def mostra_probabile(
 
             if concorrente:
 
-                nome_alt = html.escape(
-                    str(
-                        concorrente
-                    )
+                nome_alt = str(
+                    concorrente
                 )
 
                 ruoli_alt = (
@@ -6533,10 +6634,16 @@ def mostra_probabile(
 
                 secondo_html = (
                     '<div class="pf-sub-player">'
-                    '<span class="pf-sub-name">'
-                    + nome_alt
-                    + '</span>'
-                    '<span class="pf-sub-role">'
+                    + html_nome_formazione(
+                        nome_alt,
+                        squadra.get(
+                            "squadra",
+                            ""
+                        ),
+                        "pf-sub-name",
+                        "#2563eb"
+                    )
+                    + '<span class="pf-sub-role">'
                     + ruolo_alt
                     + '</span>'
                     '</div>'
@@ -6545,12 +6652,16 @@ def mostra_probabile(
             giocatori_html += (
                 '<div class="pf-player pf-player-goal">'
                 '<div class="pf-main-player">'
-                '<span class="pf-name" style="color:'
-                + colore_principale
-                + ' !important;">'
-                + nome
-                + '</span>'
-                '<span class="pf-mantra-role">'
+                + html_nome_formazione(
+                    nome,
+                    squadra.get(
+                        "squadra",
+                        ""
+                    ),
+                    "pf-name",
+                    colore_principale
+                )
+                + '<span class="pf-mantra-role">'
                 + ruolo
                 + '</span>'
                 '</div>'
