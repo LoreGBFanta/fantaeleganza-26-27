@@ -6502,7 +6502,7 @@ def html_nome_formazione(
         style_extra = (
             "text-decoration-line:line-through;"
             "text-decoration-color:#000000;"
-            "text-decoration-thickness:2px;"
+            "text-decoration-thickness:3px;"
             "opacity:0.72;"
         )
 
