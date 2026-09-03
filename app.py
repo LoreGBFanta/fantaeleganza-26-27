@@ -6813,112 +6813,212 @@ INFORTUNATI_SNAPSHOT_VERIFICATO = [
   {
     "squadra": "Atalanta",
     "nome": "Sulemana K.",
-    "dettaglio": "L'attaccante KO in amichevole l'8 agosto vittima di un trauma distorsivo al ginocchio sinistro, condizioni da valutare in vista della 1a giornata di A."
+    "dettaglio": "Lesione del collaterale mediale di secondo grado del ginocchio sinistro; recuperabile da inizio ottobre."
   },
   {
     "squadra": "Atalanta",
     "nome": "Hien",
-    "dettaglio": "Il difensore operato a fine giugno per una lesione del tendine prossimale del muscolo semimembranoso della coscia sinistra, in recupero e pronto a tornare in campo dall'inizio di ottobre."
+    "dettaglio": "Operato per una lesione del tendine prossimale del semimembranoso della coscia sinistra; rientro previsto da inizio ottobre."
+  },
+  {
+    "squadra": "Atalanta",
+    "nome": "Kristensen T.",
+    "dettaglio": "Problema alla caviglia; indisponibile nelle ultime gare e da valutare quotidianamente."
+  },
+  {
+    "squadra": "Bologna",
+    "nome": "El Azzouzi O.",
+    "dettaglio": "Lesione del bicipite femorale della coscia sinistra; recuperabile dalla seconda metà di settembre."
+  },
+  {
+    "squadra": "Bologna",
+    "nome": "Orsolini",
+    "dettaglio": "Risentimento ai flessori della coscia sinistra; condizioni da valutare con esami, assente nel prossimo turno."
+  },
+  {
+    "squadra": "Cagliari",
+    "nome": "Mina",
+    "dettaglio": "Affaticamento muscolare al polpaccio; out nell'ultimo turno e da valutare quotidianamente."
+  },
+  {
+    "squadra": "Cagliari",
+    "nome": "Trepy",
+    "dettaglio": "Condizioni monitorate dallo staff medico; tempi di recupero da valutare, assente nel prossimo turno."
   },
   {
     "squadra": "Cagliari",
     "nome": "Idrissi R.",
-    "dettaglio": "Il calciatore in ripresa dalla rottura del legamento crociato, può tornare arruolabile dalla fine di ottobre."
+    "dettaglio": "In recupero dalla rottura del legamento crociato; possibile rientro dalla fine di ottobre."
   },
   {
     "squadra": "Como",
     "nome": "Addai",
-    "dettaglio": "L'ala offensiva dei lariani vittima della rottura tendine d'Achille, proverà a recuperare per ottobre."
+    "dettaglio": "Rottura del tendine d'Achille; rientro atteso dalla seconda metà di settembre."
   },
   {
     "squadra": "Fiorentina",
     "nome": "Parisi",
-    "dettaglio": "Il cursore di fascia della Viola sta svolgendo l'iter di recupero dall'infortunio al legamento crociato al ginocchio, punta a tornare convocabile da novembre."
+    "dettaglio": "Recupero dall'infortunio al legamento crociato del ginocchio; possibile rientro da novembre."
+  },
+  {
+    "squadra": "Genoa",
+    "nome": "Venturino",
+    "dettaglio": "Operato al tendine rotuleo; in recupero, ipotesi di rientro da fine settembre."
+  },
+  {
+    "squadra": "Juventus",
+    "nome": "Yildiz",
+    "dettaglio": "Frattura della base del V metatarso del piede sinistro, operato il 31 agosto; stop di circa tre mesi, rientro ipotizzato da fine novembre."
   },
   {
     "squadra": "Juventus",
     "nome": "Ekhator",
-    "dettaglio": "L'attaccante frenato nella seconda metà di luglio da una lesione di basso grado del bicipite femorale della coscia destra, da valutare nei prossimi allenamenti in vista della sfida di Frosinone del 23 agosto."
+    "dettaglio": "Lesione di medio grado del muscolo semitendinoso; nuovi esami a metà settembre, possibile rientro da fine ottobre."
   },
   {
-    "squadra": "Lazio",
-    "nome": "Pellegrini Lu.",
-    "dettaglio": "Il terzino non al meglio per un problema alla caviglia, a rischio forfait a Bologna nel primo turno di A."
+    "squadra": "Juventus",
+    "nome": "Thuram K.",
+    "dettaglio": "Sindrome femoro-rotulea; dopo consulto medico ha deciso di operarsi. Tempi lunghi, rientro ipotizzato da gennaio."
+  },
+  {
+    "squadra": "Juventus",
+    "nome": "McKennie",
+    "dettaglio": "Affaticamento muscolare alla gamba; convocazione a rischio e condizioni da valutare."
   },
   {
     "squadra": "Lazio",
     "nome": "Patric",
-    "dettaglio": "Il difensore ai box per un problema fisico e out nella 1a di campionato a Bologna. Da valutare."
+    "dettaglio": "Problema fisico; indisponibile nell'ultimo turno e tempi di recupero da valutare."
+  },
+  {
+    "squadra": "Lazio",
+    "nome": "Marusic",
+    "dettaglio": "Lesione muscolare alla coscia; ipotesi di rientro da inizio ottobre."
+  },
+  {
+    "squadra": "Lazio",
+    "nome": "Cataldi",
+    "dettaglio": "In recupero dall'ernia bilaterale; possibile rientro dalla metà di settembre."
+  },
+  {
+    "squadra": "Lazio",
+    "nome": "Dele-Bashiru",
+    "dettaglio": "Problema muscolare alla gamba; da valutare, possibile recupero dalla metà di settembre."
+  },
+  {
+    "squadra": "Lecce",
+    "nome": "Geubbels",
+    "dettaglio": "Distorsione alla caviglia; tempi di recupero da valutare."
+  },
+  {
+    "squadra": "Monza",
+    "nome": "Ciurria",
+    "dettaglio": "Noie fisiche; indisponibile nel prossimo turno, da valutare."
+  },
+  {
+    "squadra": "Monza",
+    "nome": "Pessina",
+    "dettaglio": "Lussazione della rotula del ginocchio destro; possibile rientro da inizio novembre."
+  },
+  {
+    "squadra": "Monza",
+    "nome": "Varela G.",
+    "dettaglio": "Fastidio muscolare all'adduttore; tempi di recupero da valutare."
   },
   {
     "squadra": "Napoli",
-    "nome": "Beukema",
-    "dettaglio": "Il difensore in fase di recupero da una patologia cronica bilaterale al tendine d'Achille, rimane tuttavia a rischio la sua convocazione contro il Genoa nel primo turno di A. Da valutare nei prossimi allenamenti."
+    "nome": "McTominay",
+    "dettaglio": "Intervento di ablazione per lieve aritmia benigna; rientro previsto da inizio ottobre."
   },
   {
     "squadra": "Napoli",
     "nome": "Buongiorno",
-    "dettaglio": "Il difensore operato nella seconda metà di luglio al menisco del ginocchio destro. Sta recuperando, ma dovrebbe tornare arruolabile non prima dell'inizio di ottobre."
+    "dettaglio": "Operato al menisco del ginocchio destro; possibile rientro da metà novembre."
   },
   {
     "squadra": "Napoli",
     "nome": "Marianucci",
-    "dettaglio": "Il difensore KO in amichevole l'8 agosto vittima di un trauma contusivo-distorsivo al ginocchio sinistro. Condizioni da valutare, ma out nella 1a di campionato degli azzurri a Genova."
-  },
-  {
-    "squadra": "Napoli",
-    "nome": "Neres",
-    "dettaglio": "Operato a gennaio per un problema alla caviglia sinistra con interessamento del tendine; il brasiliano sta lentamente recuperando, ma rimane da valutare la convocazione nella 1a giornata di campionato a Genova."
-  },
-  {
-    "squadra": "Parma",
-    "nome": "Cremaschi",
-    "dettaglio": "Il calciatore vittima a marzo di una lesione del menisco esterno del ginocchio sinistro, sta proseguendo le cure del caso e può tornare arruolabile dal mese di ottobre."
+    "dettaglio": "Lesione di alto grado del collaterale mediale del ginocchio sinistro; stop di almeno due mesi."
   },
   {
     "squadra": "Parma",
     "nome": "Nicolussi Caviglia",
-    "dettaglio": "Il centrocampista alle prese da luglio con una lesione di medio grado alla coscia destra, può tornare arruolabile da inizio settembre."
+    "dettaglio": "Lesione di medio grado alla coscia destra e successivo intervento; lungo stop, rientro ipotizzato da novembre."
+  },
+  {
+    "squadra": "Roma",
+    "nome": "N'Dicka",
+    "dettaglio": "Fastidio all'adduttore; da valutare."
   },
   {
     "squadra": "Sassuolo",
-    "nome": "Konè I.",
-    "dettaglio": "Il centrocampista canadese vittima a giugno nella gara dei Mondiali di una rottura di tibia e perone. Operato, punta a tornare in campo da dicembre."
-  },
-  {
-    "squadra": "Sassuolo",
-    "nome": "Boloca",
-    "dettaglio": "Il centrocampista fuori causa per un problema al ginocchio e non ci sarà contro l'Atalanta nella 1a giornata. Da valutare rientro da settembre."
-  },
-  {
-    "squadra": "Sassuolo",
-    "nome": "Pieragnolo",
-    "dettaglio": "Il difensore sta proseguendo la fase di recupero dalla lesione legamento crociato anteriore gamba destra e ipotizziamo possa tornare convocabile da ottobre."
+    "nome": "Walukiewicz",
+    "dettaglio": "Forte trauma contusivo alla gamba destra; rientro da valutare da metà settembre."
   },
   {
     "squadra": "Sassuolo",
     "nome": "Candè",
-    "dettaglio": "Il difensore a gennaio vittima della rottura legamento crociato anteriore ginocchio destro, punta a tornare convocabile dalla metà di settembre."
+    "dettaglio": "Rottura del legamento crociato anteriore del ginocchio destro; possibile rientro dalla metà di settembre."
+  },
+  {
+    "squadra": "Sassuolo",
+    "nome": "Pieragnolo",
+    "dettaglio": "Recupero da lesione del legamento crociato anteriore; possibile rientro da ottobre."
+  },
+  {
+    "squadra": "Sassuolo",
+    "nome": "Boloca",
+    "dettaglio": "Problema al ginocchio; rientro da valutare da fine settembre."
+  },
+  {
+    "squadra": "Sassuolo",
+    "nome": "Konè I.",
+    "dettaglio": "Rottura di tibia e perone; operato, rientro previsto da dicembre."
+  },
+  {
+    "squadra": "Torino",
+    "nome": "Casadei",
+    "dettaglio": "Affaticamento muscolare alla gamba; convocazione a rischio e condizioni da valutare."
+  },
+  {
+    "squadra": "Udinese",
+    "nome": "Palma",
+    "dettaglio": "Problema muscolare all'adduttore della coscia destra; stop fino alla metà di settembre."
   },
   {
     "squadra": "Udinese",
     "nome": "Zanoli",
-    "dettaglio": "Il calciatore operato a fine gennaio per la lesione del legamento crociato anteriore del ginocchio destro, sta ultimando la fase di recupero e può tornare in campo da ottobre."
+    "dettaglio": "Recupero da lesione del legamento crociato anteriore del ginocchio destro; possibile rientro da ottobre."
   },
   {
     "squadra": "Udinese",
     "nome": "Chakvetadze",
-    "dettaglio": "Il georgiano a inizio luglio vittima della frattura al terzo metatarso del piede destro, può tornare arruolabile da inizio settembre."
+    "dettaglio": "Frattura del terzo metatarso del piede destro; recuperabile dalla prima metà di settembre."
+  },
+  {
+    "squadra": "Udinese",
+    "nome": "Zaniolo",
+    "dettaglio": "Lesione muscolare al bicipite femorale della coscia destra; stop di circa 25 giorni, recuperabile dalla seconda metà di settembre."
+  },
+  {
+    "squadra": "Venezia",
+    "nome": "Moreno M.",
+    "dettaglio": "Noie fisiche; da valutare il rientro."
   },
   {
     "squadra": "Venezia",
     "nome": "Sverko",
-    "dettaglio": "Il difensore operato in estate per il perdurare di un problema all'anca e recuperabile da fine ottobre."
+    "dettaglio": "Operato per un problema all'anca; recuperabile da fine ottobre."
+  },
+  {
+    "squadra": "Venezia",
+    "nome": "Franjic",
+    "dettaglio": "Problema fisico; indisponibile nel prossimo turno."
   },
   {
     "squadra": "Venezia",
     "nome": "Adorante",
-    "dettaglio": "L'attaccante a fine luglio ha deciso di operarsi per un problema alla schiena, che lo costringerà a stare ai box per buona parte del girone d'andata del campionato. Tentativo di rientro da ottobre."
+    "dettaglio": "Operato per un problema alla schiena; possibile rientro da ottobre."
   }
 ]
 
@@ -7359,6 +7459,11 @@ ALIAS_NOMI_FORMAZIONI = {
     # Alias specifici della fonte Infortunati Fantacalcio.it
     ("atalanta", "sulemana k"): "Sulemana K.",
     ("atalanta", "kristensen t"): "Kristensen T.",
+    ("cagliari", "mina"): "Mina",
+    ("cagliari", "trepy"): "Trepy",
+    ("juventus", "yildiz"): "Yildiz",
+    ("juventus", "thuram k"): "Thuram K.",
+    ("juventus", "thuram"): "Thuram K.",
 
     # Alias per indisponibili correnti
     ("fiorentina", "parisi"): "Parisi",
