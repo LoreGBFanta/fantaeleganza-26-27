@@ -6235,6 +6235,106 @@ def _normalizza_nome_goal(nome):
     ).strip()
 
 
+
+# ============================================================
+# ALIAS NOMI FANTACALCIO.IT -> LISTONE
+# Serve a gestire abbreviazioni/differenze editoriali tra
+# la pagina Formazioni Tipo e il listone ufficiale caricato.
+# ============================================================
+
+ALIAS_NOMI_FORMAZIONI = {
+    ("atalanta", "kristensen"): "Kristensen T.",
+    ("atalanta", "ederson"): "Ederson D.S.",
+
+    ("bologna", "miranda"): "Miranda J.",
+    ("bologna", "moro"): "Moro N.",
+
+    ("cagliari", "rodriguez"): "Rodriguez Ju.",
+
+    ("como", "chalobah"): "Chalobah T.",
+    ("como", "paz"): "Paz N.",
+    ("como", "smolcic"): "Smolcic I.",
+    ("como", "rodriguez"): "Rodriguez Je.",
+
+    ("fiorentina", "jimenez"): "Jimenez A.",
+    ("fiorentina", "pellegrino"): "Pellegrino M.",
+
+    ("frosinone", "schimd"): "Schmid",
+
+    ("genoa", "vitinha"): "Vitinha O.",
+
+    ("inter", "martinez"): "Martinez Jo.",
+    ("inter", "lautaro"): "Martinez L.",
+    ("inter", "lautaro martinez"): "Martinez L.",
+    ("inter", "jones"): "Jones C.",
+    ("inter", "pio esposito"): "Esposito F.P.",
+
+    ("juventus", "kelly"): "Kelly L.",
+
+    ("lazio", "sutalo"): "Sutalo J.",
+    ("lazio", "tavares"): "Tavares N.",
+    ("lazio", "taylor"): "Taylor K.",
+    ("lazio", "floriani"): "Floriani Mussolini",
+
+    ("lecce", "danilo veiga"): "Veiga D.",
+    ("lecce", "gaspar"): "Gaspar K.",
+    ("lecce", "coulibaly"): "Coulibaly L.",
+    ("lecce", "berisha"): "Berisha M.",
+
+    ("milan", "ramos"): "Ramos G.",
+
+    ("monza", "carboni"): "Carboni A.",
+    ("monza", "tourè"): "Tourè I.",
+    ("monza", "varela"): "Varela G.",
+
+    ("napoli", "alisson santos"): "Santos A.",
+    ("napoli", "anguissa"): "Zambo Anguissa",
+
+    ("parma", "keita"): "Keita M.",
+    ("parma", "ordonez"): "Ordonez C.",
+    ("parma", "romero"): "Romero D.",
+    ("parma", "tourè"): "Tourè E.",
+
+    ("roma", "molina"): "Molina N.",
+    ("roma", "koné"): "Konè M.",
+    ("roma", "kone"): "Konè M.",
+    ("roma", "castro"): "Castro S.",
+
+    ("sassuolo", "leysen"): "Leysen F.",
+
+    ("udinese", "kamara"): "Kamara H.",
+    ("udinese", "davis"): "Davis K.",
+    ("udinese", "miller"): "Miller L.",
+
+    ("venezia", "stankovic"): "Stankovic F.",
+    ("venezia", "kike perez"): "Perez K.",
+    ("venezia", "yeboah"): "Yeboah J.",
+    ("venezia", "akor adams"): "Adams A.",
+    ("venezia", "correia"): "Correia T.",
+    ("venezia", "rrahmani"): "Rrahmani Al.",
+}
+
+
+def _alias_nome_listone(
+    nome_fonte,
+    squadra_fonte
+):
+    squadra_key = _normalizza_nome_goal(
+        squadra_fonte
+    )
+
+    nome_key = _normalizza_nome_goal(
+        nome_fonte
+    )
+
+    return ALIAS_NOMI_FORMAZIONI.get(
+        (
+            squadra_key,
+            nome_key
+        )
+    )
+
+
 def _trova_giocatore_listone(
     nome_goal,
     squadra_goal=""
@@ -6257,6 +6357,38 @@ def _trova_giocatore_listone(
 
     if not target:
         return None
+
+    # 1) Alias espliciti: soluzione prioritaria e sicura per i
+    # nomi editoriali che non condividono token col listone
+    # (es. Lautaro -> Martinez L.).
+    alias_esatto = _alias_nome_listone(
+        nome_goal,
+        squadra_goal
+    )
+
+    if alias_esatto:
+
+        alias_norm = _normalizza_nome_goal(
+            alias_esatto
+        )
+
+        for _, riga in df_completo.iterrows():
+
+            if (
+                _normalizza_nome_goal(
+                    riga.get(
+                        "Squadra",
+                        ""
+                    )
+                ) == squadra_target
+                and _normalizza_nome_goal(
+                    riga.get(
+                        "Nome",
+                        ""
+                    )
+                ) == alias_norm
+            ):
+                return riga
 
     candidati = []
 
@@ -6350,6 +6482,81 @@ def _trova_giocatore_listone(
             )
 
     if not candidati:
+
+        # 3) Fallback fuzzy molto prudente, solo nella stessa squadra.
+        # Si attiva esclusivamente se esiste un candidato nettamente
+        # simile (>= 0.84) e non ambiguo.
+        import difflib
+
+        fuzzy = []
+
+        for _, riga in df_completo.iterrows():
+
+            squadra_norm = _normalizza_nome_goal(
+                riga.get(
+                    "Squadra",
+                    ""
+                )
+            )
+
+            if (
+                squadra_target
+                and squadra_norm != squadra_target
+            ):
+                continue
+
+            nome_norm = _normalizza_nome_goal(
+                riga.get(
+                    "Nome",
+                    ""
+                )
+            )
+
+            if not nome_norm:
+                continue
+
+            similarita = difflib.SequenceMatcher(
+                None,
+                target,
+                nome_norm
+            ).ratio()
+
+            if similarita >= 0.84:
+
+                fuzzy.append(
+                    (
+                        similarita,
+                        riga
+                    )
+                )
+
+        fuzzy.sort(
+            key=lambda x: x[0],
+            reverse=True
+        )
+
+        if fuzzy:
+
+            migliore = fuzzy[0]
+
+            secondo = (
+                fuzzy[1][0]
+                if len(
+                    fuzzy
+                ) > 1
+                else 0
+            )
+
+            # Richiede un margine minimo dal secondo candidato.
+            if (
+                migliore[0] >= 0.84
+                and (
+                    migliore[0]
+                    - secondo
+                ) >= 0.05
+            ):
+                return migliore[1]
+
         return None
 
     candidati.sort(
@@ -6367,6 +6574,109 @@ def _trova_giocatore_listone(
         return None
 
     return candidati[0][1]
+
+
+def diagnostica_nomi_formazioni_senza_riscontro():
+    """
+    Restituisce un elenco dei nomi presenti nelle Formazioni Tipo
+    che non trovano alcuna corrispondenza nel listone corrente.
+
+    Non viene mostrato automaticamente nell'interfaccia.
+    È utile per futuri controlli dopo aggiornamenti del listone.
+    """
+
+    dati = carica_probabili_web()
+
+    if (
+        not dati
+        or "df_completo" not in globals()
+        or df_completo is None
+        or df_completo.empty
+    ):
+        return []
+
+    mancanti = []
+    gia_visti = set()
+
+    for squadra in dati.get(
+        "squadre",
+        []
+    ):
+
+        nome_squadra = squadra.get(
+            "squadra",
+            ""
+        )
+
+        nomi = []
+
+        for giocatore in squadra.get(
+            "formazione",
+            []
+        ):
+            nomi.append(
+                giocatore.get(
+                    "nome",
+                    ""
+                )
+            )
+
+        for coppia in (
+            squadra.get(
+                "ballottaggi",
+                []
+            )
+            or []
+        ):
+            nomi.extend(
+                [
+                    coppia.get(
+                        "a",
+                        ""
+                    ),
+                    coppia.get(
+                        "b",
+                        ""
+                    )
+                ]
+            )
+
+        for nome in nomi:
+
+            chiave = (
+                _normalizza_nome_goal(
+                    nome_squadra
+                ),
+                _normalizza_nome_goal(
+                    nome
+                )
+            )
+
+            if (
+                not chiave[1]
+                or chiave in gia_visti
+            ):
+                continue
+
+            gia_visti.add(
+                chiave
+            )
+
+            if _trova_giocatore_listone(
+                nome,
+                nome_squadra
+            ) is None:
+
+                mancanti.append({
+                    "Squadra":
+                        nome_squadra,
+
+                    "Nome formazione":
+                        nome
+                })
+
+    return mancanti
+
 
 def _ruoli_mantra_goal(
     nome_goal,
