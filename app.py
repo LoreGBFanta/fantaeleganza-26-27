@@ -6500,7 +6500,8 @@ def html_nome_formazione(
         contenuto = nome_html
 
         style_extra = (
-            "text-decoration:line-through;"
+            "text-decoration-line:line-through;"
+            "text-decoration-color:#000000;"
             "text-decoration-thickness:2px;"
             "opacity:0.72;"
         )
