@@ -67,6 +67,7 @@ MAX_UNDO = 10
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "fantacalcio.db"
 URL_PROBABILI_FORMAZIONI = "https://www.fantacalcio.it/news/calcio-italia/06_08_2026/asta-fantacalcio-le-probabili-formazioni-della-serie-a-enilive-2026-27-495558?utm_source=chatgpt.com"
+URL_INDISPONIBILI = "https://www.fantacalcio.it/indisponibili-serie-a"
 
 MAX_SNAPSHOT = 30
 
@@ -6343,6 +6344,130 @@ def _normalizza_nome_goal(nome):
         " ",
         testo
     ).strip()
+
+
+
+class _ParserIndisponibiliFantacalcio(HTMLParser):
+    SQUADRE = {
+        "atalanta","bologna","cagliari","como","fiorentina","frosinone",
+        "genoa","inter","juventus","lazio","lecce","milan","monza",
+        "napoli","parma","roma","sassuolo","torino","udinese","venezia"
+    }
+    def __init__(self):
+        super().__init__()
+        self.testi=[]
+    def handle_data(self,data):
+        t=re.sub(r"\s+"," ",str(data or "")).strip()
+        if t:
+            self.testi.append(t)
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def carica_infortunati_fantacalcio():
+    try:
+        req=urllib.request.Request(
+            URL_INDISPONIBILI,
+            headers={"User-Agent":"Mozilla/5.0 FantaEleganza/26-27"}
+        )
+        with urllib.request.urlopen(req,timeout=8) as response:
+            raw=response.read().decode("utf-8",errors="ignore")
+
+        parser=_ParserIndisponibiliFantacalcio()
+        parser.feed(raw)
+        tokens=parser.testi
+        risultati=[]
+        squadra=""
+        sezione=""
+        i=0
+
+        while i < len(tokens):
+            t=tokens[i].strip()
+            tn=_normalizza_nome_goal(t)
+
+            if tn in _ParserIndisponibiliFantacalcio.SQUADRE:
+                squadra=t.title()
+                sezione=""
+                i+=1
+                continue
+            if tn=="infortunati":
+                sezione="infortunati"
+                i+=1
+                continue
+            if tn in {"squalificati","diffidati"}:
+                sezione=tn
+                i+=1
+                continue
+
+            if sezione=="infortunati" and squadra and tn!="nessuno":
+                if len(t)<=45 and not t.endswith(".") and i+1<len(tokens):
+                    dettaglio=tokens[i+1].strip()
+                    dn=_normalizza_nome_goal(dettaglio)
+                    if (
+                        len(dettaglio)>20
+                        and dn not in {"squalificati","diffidati","infortunati"}
+                    ):
+                        risultati.append({
+                            "squadra":squadra,
+                            "nome":t,
+                            "dettaglio":dettaglio
+                        })
+                        i+=2
+                        continue
+            i+=1
+
+        return risultati
+    except Exception:
+        return []
+
+
+def info_disponibilita_giocatore(nome_giocatore,squadra):
+    riga_target=_trova_giocatore_listone(nome_giocatore,squadra)
+
+    for item in carica_infortunati_fantacalcio():
+        if _normalizza_nome_goal(item.get("squadra","")) != _normalizza_nome_goal(squadra):
+            continue
+
+        riga_infortunato=_trova_giocatore_listone(
+            item.get("nome",""),
+            item.get("squadra","")
+        )
+
+        if riga_target is not None and riga_infortunato is not None:
+            try:
+                if int(riga_target.get("Id"))==int(riga_infortunato.get("Id")):
+                    return {
+                        "disponibile":False,
+                        "dettaglio":item.get("dettaglio",""),
+                        "nome_fonte":item.get("nome","")
+                    }
+            except Exception:
+                pass
+
+        a=_normalizza_nome_goal(nome_giocatore)
+        b=_normalizza_nome_goal(item.get("nome",""))
+        if a and b and (a==b or a in b or b in a):
+            return {
+                "disponibile":False,
+                "dettaglio":item.get("dettaglio",""),
+                "nome_fonte":item.get("nome","")
+            }
+
+    return {"disponibile":True,"dettaglio":"","nome_fonte":""}
+
+
+@st.dialog("Dettaglio infortunio")
+def mostra_dettaglio_infortunio(nome,squadra,dettaglio):
+    st.markdown(f"### {html.escape(str(nome))}")
+    st.caption(html.escape(str(squadra)))
+    st.markdown(
+        '<div style="border-left:5px solid #dc2626;background:#fff5f5;'
+        'padding:14px 16px;border-radius:8px;font-size:1rem;line-height:1.45;">'
+        + html.escape(str(dettaglio))
+        + '</div>',
+        unsafe_allow_html=True
+    )
+    st.caption("Fonte: Fantacalcio.it · Indisponibili Serie A")
+
 
 
 
@@ -14061,16 +14186,17 @@ elif sezione == "ASTA":
                     )
                 )
 
-                g1, g2, g3, g4, g5, g6, g7 = (
+                g1, g2, g3, g4, g5, g6, g7, g8 = (
                     st.columns(
                         [
-                            1.10,
-                            0.78,
+                            1.06,
                             0.72,
-                            0.62,
-                            0.55,
-                            1.18,
-                            0.92
+                            0.68,
+                            0.58,
+                            0.72,
+                            0.52,
+                            1.12,
+                            0.88
                         ]
                     )
                 )
@@ -14126,12 +14252,37 @@ elif sezione == "ASTA":
                     else "—"
                 )
 
-                g5.metric(
+                info_disp = info_disponibilita_giocatore(
+                    giocatore["Nome"],
+                    giocatore["Squadra"]
+                )
+
+                with g5:
+                    st.caption("Disponibilità")
+                    if info_disp["disponibile"]:
+                        st.markdown(
+                            '<div style="font-size:1.65rem;line-height:1.55;'
+                            'font-weight:900;color:#16a34a;">✓</div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        if st.button(
+                            "✕",
+                            key=f"btn_infortunio_{int(giocatore['Id'])}",
+                            help="Clicca per vedere infortunio e tempi di recupero"
+                        ):
+                            mostra_dettaglio_infortunio(
+                                giocatore["Nome"],
+                                giocatore["Squadra"],
+                                info_disp["dettaglio"]
+                            )
+
+                g6.metric(
                     "FVM",
                     giocatore["FVM"]
                 )
 
-                with g6:
+                with g7:
 
                     dettaglio_priorita = (
                         f"Ruolo {priorita_acquisto['Ruolo']} · "
@@ -14219,7 +14370,7 @@ elif sezione == "ASTA":
                                 df_completo
                             )
 
-                with g7:
+                with g8:
 
                     st.markdown(
                         f"""
