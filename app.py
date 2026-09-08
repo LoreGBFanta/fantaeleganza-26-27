@@ -13655,6 +13655,47 @@ iqr = (
 st.markdown(
     """
     <style>
+    /* ======================================================
+       SIDEBAR FISSA: NON COLLASSABILE
+       ====================================================== */
+
+    /* Nasconde il pulsante di chiusura/collasso dentro la sidebar */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="collapsedControl"],
+    button[data-testid="stSidebarCollapseButton"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+
+    /* Alcune versioni Streamlit usano un button header senza testid specifico */
+    section[data-testid="stSidebar"]
+    button[kind="header"],
+    section[data-testid="stSidebar"]
+    button[kind="headerNoPadding"],
+    section[data-testid="stSidebar"]
+    button[data-testid="stBaseButton-header"],
+    section[data-testid="stSidebar"]
+    button[data-testid="stBaseButton-headerNoPadding"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+
+    /* Forza la sidebar a rimanere visibile e nella sua posizione */
+    section[data-testid="stSidebar"] {
+        transform: none !important;
+        margin-left: 0 !important;
+        visibility: visible !important;
+        display: block !important;
+        left: 0 !important;
+    }
+
+    /* Evita che compaia il controllo flottante per riaprirla */
+    div[data-testid="collapsedControl"] {
+        display: none !important;
+    }
+
     /* Sidebar principale */
     section[data-testid="stSidebar"] {
         width: 320px !important;
