@@ -10847,6 +10847,122 @@ def annulla_ultima_operazione():
     return True
 
 
+
+def ripristina_tutti_giocatori_avversari():
+    """
+    Rende nuovamente DISPONIBILI tutti i giocatori attualmente
+    assegnati agli avversari del profilo attivo.
+
+    Non modifica:
+    - la propria rosa;
+    - i prezzi dei propri acquisti;
+    - i costi di svincolo.
+
+    Elimina dalla cronologia UNDO solo le operazioni collegate
+    allo stato AVVERSARIO, così non rimangono riferimenti incoerenti.
+    """
+
+    df_corrente = carica_tutti_giocatori()
+
+    avversari = (
+        df_corrente[
+            df_corrente["Stato"] == "AVVERSARIO"
+        ]
+        .copy()
+    )
+
+    if avversari.empty:
+        return 0
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute("""
+            UPDATE giocatori
+
+            SET
+                stato = 'DISPONIBILE',
+                prezzo_acquisto = NULL
+
+            WHERE stato = 'AVVERSARIO'
+        """)
+
+        # Rimuove soltanto le operazioni che coinvolgono lo stato
+        # AVVERSARIO. Le operazioni della propria rosa restano intatte.
+        cur.execute("""
+            DELETE FROM operazioni
+
+            WHERE stato_dopo = 'AVVERSARIO'
+               OR stato_prima = 'AVVERSARIO'
+        """)
+
+        conn.commit()
+
+    except Exception:
+
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+        raise
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+    # Aggiorna subito la copia in memoria.
+    if "_df_giocatori_sessione" in st.session_state:
+
+        df_sessione = (
+            st.session_state[
+                "_df_giocatori_sessione"
+            ]
+            .copy()
+        )
+
+        mask = (
+            df_sessione["Stato"]
+            == "AVVERSARIO"
+        )
+
+        df_sessione.loc[
+            mask,
+            "Stato"
+        ] = "DISPONIBILE"
+
+        df_sessione.loc[
+            mask,
+            "Prezzo"
+        ] = None
+
+        st.session_state[
+            "_df_giocatori_sessione"
+        ] = df_sessione
+
+    # Forza il ricaricamento della cronologia.
+    st.session_state.pop(
+        "_ultime_operazioni_sessione",
+        None
+    )
+
+    if "backup_cloud_bytes" in st.session_state:
+        st.session_state.backup_cloud_bytes = None
+
+    if "pdf_rosa_moduli" in st.session_state:
+        st.session_state.pdf_rosa_moduli = None
+
+    return int(
+        len(
+            avversari
+        )
+    )
+
+
 def elimina_tutta_la_rosa():
     df_corrente = carica_tutti_giocatori()
     rosa = df_corrente[df_corrente["Stato"] == "MIO"].copy()
@@ -13673,7 +13789,7 @@ with head_backup:
     elif DB_PATH.exists():
 
         backup_profilo = (
-            genera_backup_database_bytes()
+            crea_backup_logico_bytes()
         )
 
         st.download_button(
@@ -14302,6 +14418,56 @@ with st.expander(
             use_container_width=True,
             hide_index=True
         )
+
+
+
+@st.dialog("Ripristina tutti i venduti agli avversari")
+def conferma_ripristina_tutti_avversari():
+
+    df_corrente = carica_tutti_giocatori()
+
+    numero = int(
+        (
+            df_corrente["Stato"]
+            == "AVVERSARIO"
+        ).sum()
+    )
+
+    st.warning(
+        f"Stai per rendere nuovamente DISPONIBILI "
+        f"tutti i {numero} giocatori assegnati agli avversari."
+    )
+
+    st.caption(
+        "La tua rosa, i prezzi dei tuoi acquisti e i costi di svincolo "
+        "non verranno modificati."
+    )
+
+    conferma = st.checkbox(
+        "Confermo di voler ripristinare tutti i giocatori degli avversari",
+        key="conferma_reset_totale_avversari"
+    )
+
+    if st.button(
+        "↩️ RIPRISTINA TUTTI",
+        type="primary",
+        use_container_width=True,
+        disabled=not conferma,
+        key="esegui_reset_totale_avversari"
+    ):
+
+        ripristinati = (
+            ripristina_tutti_giocatori_avversari()
+        )
+
+        st.session_state[
+            "messaggio_reset_avversari"
+        ] = (
+            f"Ripristino completato: {ripristinati} giocatori "
+            f"sono tornati disponibili."
+        )
+
+        st.rerun()
 
 
 @st.dialog("Elimina tutta la rosa")
@@ -15593,6 +15759,14 @@ elif sezione == "VENDUTI AD AVVERSARI":
 
     st.subheader("🔴 Venduti ad avversari")
 
+    if "messaggio_reset_avversari" in st.session_state:
+
+        st.success(
+            st.session_state.pop(
+                "messaggio_reset_avversari"
+            )
+        )
+
     avversari = (
         df_completo[
             df_completo["Stato"] == "AVVERSARIO"
@@ -15607,6 +15781,30 @@ elif sezione == "VENDUTI AD AVVERSARI":
         st.info("Nessun giocatore venduto agli avversari.")
 
     else:
+
+        reset_col1, reset_col2 = st.columns(
+            [
+                1.8,
+                4.2
+            ]
+        )
+
+        with reset_col1:
+
+            if st.button(
+                "↩️ RIPRISTINA TUTTI",
+                use_container_width=True,
+                key="btn_reset_tutti_avversari"
+            ):
+
+                conferma_ripristina_tutti_avversari()
+
+        with reset_col2:
+
+            st.caption(
+                "Rende nuovamente disponibili tutti i giocatori "
+                "assegnati agli avversari."
+            )
 
         st.caption(
             f"Giocatori venduti agli avversari: {len(avversari)}"
