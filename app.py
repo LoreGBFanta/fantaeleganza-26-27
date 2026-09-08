@@ -13800,6 +13800,596 @@ st.markdown(
             min-width: 290px !important;
         }
     }
+
+    /* ======================================================
+       V39 - SIDEBAR BLU / BIANCO / GIALLO
+       ====================================================== */
+
+    :root {
+        --fe-navy: #061f3a;
+        --fe-navy-2: #082b50;
+        --fe-card: #0b3158;
+        --fe-card-2: #0a2b4d;
+        --fe-border: #165387;
+        --fe-gold: #ffc21c;
+        --fe-white: #ffffff;
+        --fe-soft: #c9d9ea;
+    }
+
+    section[data-testid="stSidebar"] {
+        width: 390px !important;
+        min-width: 390px !important;
+        background:
+            linear-gradient(
+                180deg,
+                #061f3a 0%,
+                #062744 50%,
+                #041b32 100%
+            ) !important;
+        border-right: 1px solid #0f426f !important;
+    }
+
+    section[data-testid="stSidebar"] > div {
+        background: transparent !important;
+        padding:
+            14px 16px 18px 16px !important;
+    }
+
+    /* Nasconde eventuali superfici bianche residue della sidebar */
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        background: transparent;
+    }
+
+    /* ------------------------------------------------------
+       TESTATA
+       ------------------------------------------------------ */
+
+    section[data-testid="stSidebar"] .fanta-header {
+        width: 100% !important;
+        min-height: 126px !important;
+        margin: 0 0 12px 0 !important;
+        padding: 15px 17px !important;
+
+        background:
+            linear-gradient(
+                105deg,
+                #06213d 0%,
+                #082b4f 100%
+            ) !important;
+
+        border:
+            2px solid var(--fe-gold) !important;
+
+        border-radius: 18px !important;
+
+        box-shadow:
+            0 8px 22px rgba(0,0,0,.16) !important;
+
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand {
+        display: flex !important;
+        align-items: center !important;
+        gap: 16px !important;
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-logo {
+        width: 76px !important;
+        height: 76px !important;
+        min-width: 76px !important;
+
+        border:
+            3px solid var(--fe-gold) !important;
+
+        border-radius: 17px !important;
+
+        background:
+            #ffffff !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand > div:last-child {
+        min-width: 0 !important;
+        flex: 1 1 auto !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand-title {
+        color: var(--fe-white) !important;
+        font-size: 27px !important;
+        line-height: 1.02 !important;
+        font-weight: 950 !important;
+        letter-spacing: .1px !important;
+
+        white-space: normal !important;
+        overflow: visible !important;
+        word-break: normal !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand-title span {
+        color: var(--fe-gold) !important;
+        display: inline !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand-subtitle {
+        color: var(--fe-white) !important;
+        font-size: 14px !important;
+        margin-top: 7px !important;
+        font-weight: 500 !important;
+    }
+
+    /* ------------------------------------------------------
+       PROFILO
+       ------------------------------------------------------ */
+
+    .sidebar-profile {
+        width: 100% !important;
+        min-height: 60px !important;
+        box-sizing: border-box !important;
+
+        display: flex !important;
+        align-items: center !important;
+
+        padding: 0 16px !important;
+        margin: 0 0 12px 0 !important;
+
+        border-radius: 14px !important;
+
+        background:
+            linear-gradient(
+                90deg,
+                #0a345f 0%,
+                #0b3a69 100%
+            ) !important;
+
+        border:
+            1px solid rgba(62,132,190,.30) !important;
+
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.03) !important;
+    }
+
+    .sidebar-profile-icon {
+        color: var(--fe-gold) !important;
+        font-size: 21px !important;
+        margin-right: 11px !important;
+    }
+
+    .sidebar-profile-name {
+        flex: 1 !important;
+        text-align: left !important;
+
+        color: var(--fe-white) !important;
+
+        font-size: 16px !important;
+        font-weight: 900 !important;
+
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    .sidebar-profile-arrow {
+        color: var(--fe-white) !important;
+        font-size: 25px !important;
+        line-height: 1 !important;
+        margin-left: 8px !important;
+    }
+
+    /* ------------------------------------------------------
+       CARD METRICHE
+       ------------------------------------------------------ */
+
+    section[data-testid="stSidebar"] div[data-testid="stMetric"] {
+        min-height: 102px !important;
+
+        margin-bottom: 8px !important;
+
+        padding:
+            14px 17px !important;
+
+        background:
+            linear-gradient(
+                100deg,
+                var(--fe-card) 0%,
+                var(--fe-card-2) 100%
+            ) !important;
+
+        border:
+            1px solid var(--fe-border) !important;
+
+        border-radius:
+            15px !important;
+
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.025) !important;
+    }
+
+    section[data-testid="stSidebar"] div[data-testid="stMetricLabel"],
+    section[data-testid="stSidebar"] div[data-testid="stMetric"] label {
+        color: var(--fe-white) !important;
+
+        font-size: 15px !important;
+        line-height: 1.15 !important;
+
+        font-weight: 850 !important;
+    }
+
+    section[data-testid="stSidebar"] div[data-testid="stMetricLabel"] *,
+    section[data-testid="stSidebar"] div[data-testid="stMetric"] label * {
+        color: inherit !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[data-testid="stMetricValue"] {
+        color: var(--fe-gold) !important;
+
+        font-size: 29px !important;
+        line-height: 1.05 !important;
+
+        font-weight: 950 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[data-testid="stMetricDelta"] {
+        color: var(--fe-soft) !important;
+        font-size: 11px !important;
+    }
+
+    /* ------------------------------------------------------
+       BUDGET
+       ------------------------------------------------------ */
+
+    div[class*="st-key-sidebar_budget_card"] {
+        min-height: 102px !important;
+
+        margin-bottom: 8px !important;
+
+        padding:
+            10px 14px 12px 14px !important;
+
+        background:
+            linear-gradient(
+                100deg,
+                var(--fe-card) 0%,
+                var(--fe-card-2) 100%
+            ) !important;
+
+        border:
+            1px solid var(--fe-border) !important;
+
+        border-radius:
+            15px !important;
+
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.025) !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] label {
+        color: var(--fe-white) !important;
+
+        font-size: 15px !important;
+        font-weight: 850 !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] label * {
+        color: inherit !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] > div {
+        background: transparent !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] input {
+        height: 48px !important;
+
+        background:
+            #0a2a4b !important;
+
+        color:
+            var(--fe-gold) !important;
+
+        border:
+            1px solid #174f7e !important;
+
+        border-radius:
+            10px !important;
+
+        font-size:
+            24px !important;
+
+        font-weight:
+            950 !important;
+
+        box-shadow:
+            none !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button {
+        width:
+            46px !important;
+
+        height:
+            46px !important;
+
+        min-height:
+            46px !important;
+
+        padding:
+            0 !important;
+
+        background:
+            #124776 !important;
+
+        color:
+            var(--fe-white) !important;
+
+        border:
+            0 !important;
+
+        border-radius:
+            50% !important;
+
+        box-shadow:
+            none !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button * {
+        color:
+            var(--fe-white) !important;
+    }
+
+    /* ------------------------------------------------------
+       IQR
+       ------------------------------------------------------ */
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"] {
+        min-height: 148px !important;
+
+        margin:
+            0 0 9px 0 !important;
+
+        padding:
+            12px 14px !important;
+
+        background:
+            linear-gradient(
+                100deg,
+                var(--fe-card) 0%,
+                var(--fe-card-2) 100%
+            ) !important;
+
+        border:
+            1px solid var(--fe-border) !important;
+
+        border-radius:
+            15px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    .iqr-gauge-title {
+        color:
+            var(--fe-white) !important;
+
+        font-size:
+            15px !important;
+
+        font-weight:
+            900 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    .iqr-gauge-value {
+        color:
+            var(--fe-gold) !important;
+
+        font-size:
+            27px !important;
+
+        font-weight:
+            950 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    .iqr-gauge-hint {
+        color:
+            #8fb1cf !important;
+    }
+
+    /* ------------------------------------------------------
+       MENU COLLASSABILE
+       ------------------------------------------------------ */
+
+    section[data-testid="stSidebar"]
+    details {
+        background:
+            transparent !important;
+
+        border:
+            0 !important;
+
+        margin-top:
+            5px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    details > summary {
+        min-height:
+            52px !important;
+
+        box-sizing:
+            border-box !important;
+
+        display:
+            flex !important;
+
+        align-items:
+            center !important;
+
+        padding:
+            0 16px !important;
+
+        background:
+            #082744 !important;
+
+        color:
+            var(--fe-gold) !important;
+
+        border:
+            2px solid var(--fe-gold) !important;
+
+        border-radius:
+            14px !important;
+
+        font-size:
+            17px !important;
+
+        font-weight:
+            950 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    details > summary * {
+        color:
+            var(--fe-gold) !important;
+    }
+
+    section[data-testid="stSidebar"]
+    details[open] {
+        padding-bottom:
+            10px !important;
+
+        background:
+            rgba(8,43,80,.72) !important;
+
+        border:
+            1px solid #164b78 !important;
+
+        border-radius:
+            14px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    details[open] > summary {
+        margin-bottom:
+            10px !important;
+
+        border-radius:
+            13px !important;
+    }
+
+    /* Pulsanti presenti SOLO nel menu laterale */
+    section[data-testid="stSidebar"]
+    details .stButton > button,
+    section[data-testid="stSidebar"]
+    details .stDownloadButton > button {
+        min-height:
+            42px !important;
+
+        height:
+            auto !important;
+
+        background:
+            transparent !important;
+
+        color:
+            var(--fe-white) !important;
+
+        border:
+            1px solid transparent !important;
+
+        border-radius:
+            8px !important;
+
+        font-size:
+            14px !important;
+
+        font-weight:
+            650 !important;
+
+        text-align:
+            left !important;
+
+        justify-content:
+            flex-start !important;
+
+        padding:
+            7px 10px !important;
+
+        box-shadow:
+            none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    details .stButton > button:hover,
+    section[data-testid="stSidebar"]
+    details .stDownloadButton > button:hover {
+        background:
+            #10446f !important;
+
+        border-color:
+            #1d5b91 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    details .stButton > button *,
+    section[data-testid="stSidebar"]
+    details .stDownloadButton > button * {
+        color:
+            inherit !important;
+    }
+
+    section[data-testid="stSidebar"]
+    details [data-testid="stToggle"] label,
+    section[data-testid="stSidebar"]
+    details [data-testid="stToggle"] span,
+    section[data-testid="stSidebar"]
+    details p {
+        color:
+            var(--fe-white) !important;
+    }
+
+    /* ------------------------------------------------------
+       GENERALE TESTI SIDEBAR
+       ------------------------------------------------------ */
+
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] label {
+        color:
+            var(--fe-white);
+    }
+
+    @media (max-width: 950px) {
+        section[data-testid="stSidebar"] {
+            width: 345px !important;
+            min-width: 345px !important;
+        }
+
+        section[data-testid="stSidebar"] .fanta-brand-title {
+            font-size:
+                23px !important;
+        }
+
+        section[data-testid="stSidebar"] .fanta-logo {
+            width:
+                68px !important;
+
+            height:
+                68px !important;
+
+            min-width:
+                68px !important;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -13829,16 +14419,24 @@ with st.sidebar:
     )
 
     st.markdown(
-        f'<div class="sidebar-profile">👤 {html.escape(PROFILO_ATTIVO)}</div>',
+        (
+            '<div class="sidebar-profile">'
+            '<span class="sidebar-profile-icon">👤</span>'
+            '<span class="sidebar-profile-name">'
+            + html.escape(PROFILO_ATTIVO)
+            + '</span>'
+            '<span class="sidebar-profile-arrow">⌄</span>'
+            '</div>'
+        ),
         unsafe_allow_html=True
     )
 
     # --------------------------------------------------------
     # MENU STRUMENTI: chiuso per default
     # --------------------------------------------------------
-    with st.popover(
+    with st.expander(
         "☰  MENU",
-        use_container_width=True
+        expanded=False
     ):
 
         if st.button(
@@ -14033,6 +14631,18 @@ with st.sidebar:
                 iqr,
                 df_rosa_globale
             )
+
+    st.markdown(
+        '<div style="'
+        'color:#5f8db5;'
+        'font-size:11px;'
+        'padding:8px 3px 0 3px;'
+        'letter-spacing:.2px;'
+        '">'
+        'V39 &nbsp;|&nbsp; Offline Resiliente'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
 
 # ============================================================
