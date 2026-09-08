@@ -26,7 +26,7 @@ st.set_page_config(
     page_title="FANTAELEGANZA 26/27",
     page_icon="⚽",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 
@@ -13649,29 +13649,122 @@ iqr = (
 
 
 # ============================================================
-# HEADER COMPATTO
+# SIDEBAR PRINCIPALE
 # ============================================================
 
-head_left, head_user, head_refresh, head_snapshot, head_backup, head_rules, head_theme = (
-    st.columns(
-        [
-            4.3,
-            1.35,
-            0.9,
-            1.0,
-            0.9,
-            0.8,
-            1.0
-        ],
-        vertical_alignment="center"
-    )
+st.markdown(
+    """
+    <style>
+    /* Sidebar principale */
+    section[data-testid="stSidebar"] {
+        width: 320px !important;
+        min-width: 320px !important;
+        background: #f4f7fb !important;
+        border-right: 1px solid #dbe3ec !important;
+    }
+
+    section[data-testid="stSidebar"] > div {
+        padding-top: 12px !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-header {
+        margin: 0 0 12px 0 !important;
+        width: 100% !important;
+        min-height: 92px !important;
+        border-radius: 14px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Profilo */
+    .sidebar-profile {
+        text-align:center;
+        font-size:.82rem;
+        font-weight:900;
+        color:#475569;
+        padding:2px 0 4px 0;
+    }
+
+    /* Metriche sidebar uniformi */
+    section[data-testid="stSidebar"] div[data-testid="stMetric"] {
+        background:#ffffff !important;
+        border:1px solid #dbe3ec !important;
+        border-radius:12px !important;
+        padding:10px 12px !important;
+        min-height:82px !important;
+        box-shadow:0 1px 3px rgba(15,23,42,.04) !important;
+    }
+
+    section[data-testid="stSidebar"] div[data-testid="stMetric"] label {
+        font-size:.78rem !important;
+        font-weight:800 !important;
+        color:#475569 !important;
+    }
+
+    section[data-testid="stSidebar"] div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+        font-size:1.35rem !important;
+        font-weight:850 !important;
+        color:#0f172a !important;
+    }
+
+    /* Budget: stessa presenza grafica delle metriche */
+    div[class*="st-key-sidebar_budget_card"] {
+        background:#ffffff !important;
+        border:1px solid #dbe3ec !important;
+        border-radius:12px !important;
+        padding:7px 10px 8px 10px !important;
+        min-height:82px !important;
+        box-sizing:border-box !important;
+        box-shadow:0 1px 3px rgba(15,23,42,.04) !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] {
+        margin:0 !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] label {
+        font-size:.78rem !important;
+        font-weight:800 !important;
+        color:#475569 !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] input {
+        font-size:1.25rem !important;
+        font-weight:850 !important;
+        min-height:38px !important;
+        border:0 !important;
+        background:#f8fafc !important;
+        box-shadow:none !important;
+    }
+
+    /* Menu strumenti: visibile solo il bottone di apertura */
+    section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
+        width:100% !important;
+        min-height:38px !important;
+        font-weight:850 !important;
+        border-radius:9px !important;
+    }
+
+    /* IQR uniformato alla sidebar */
+    section[data-testid="stSidebar"] div[class*="st-key-iqr_card_clickable"] {
+        min-height:132px !important;
+        background:#ffffff !important;
+        border:1px solid #dbe3ec !important;
+        border-radius:12px !important;
+        margin-top:0 !important;
+    }
+
+    @media (max-width: 850px) {
+        section[data-testid="stSidebar"] {
+            width: 290px !important;
+            min-width: 290px !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
-with head_left:
-
-    # IMPORTANTE:
-    # stringa HTML senza indentazione iniziale,
-    # così Streamlit non la mostra come codice.
+with st.sidebar:
 
     header_html = (
         '<div class="fanta-header">'
@@ -13694,339 +13787,189 @@ with head_left:
         unsafe_allow_html=True
     )
 
-
-with head_user:
-
     st.markdown(
-        f"""
-        <div style="
-            text-align:center;
-            font-size:0.78rem;
-            font-weight:800;
-            color:#475569;
-            margin-bottom:3px;
-        ">
-            👤 {html.escape(PROFILO_ATTIVO)}
-        </div>
-        """,
+        f'<div class="sidebar-profile">👤 {html.escape(PROFILO_ATTIVO)}</div>',
         unsafe_allow_html=True
     )
 
-    if st.button(
-        "ESCI",
-        use_container_width=True,
-        key="btn_logout_profilo"
+    # --------------------------------------------------------
+    # MENU STRUMENTI: chiuso per default
+    # --------------------------------------------------------
+    with st.popover(
+        "☰  MENU",
+        use_container_width=True
     ):
-
-        # Pulisce solo lo stato locale della sessione corrente.
-        for chiave_sessione in list(
-            st.session_state.keys()
-        ):
-
-            if chiave_sessione in {
-                "profilo_attivo",
-                "profilo_login_select"
-            }:
-                continue
-
-            if (
-                chiave_sessione.startswith("_df_")
-                or chiave_sessione.startswith("_ultime_")
-                or chiave_sessione.startswith("_costi_")
-                or chiave_sessione.startswith("budget_")
-                or chiave_sessione.startswith("backup_")
-                or chiave_sessione.startswith("pdf_")
-            ):
-
-                st.session_state.pop(
-                    chiave_sessione,
-                    None
-                )
-
-        st.session_state.pop(
-            "profilo_attivo",
-            None
-        )
-
-        st.rerun()
-
-
-with head_refresh:
-
-    if st.button(
-        "🔄 Aggiorna",
-        use_container_width=True,
-        key="btn_aggiorna_app"
-    ):
-
-        invalida_cache_dati()
-        st.rerun()
-
-
-with head_snapshot:
-
-    if st.button(
-        "📸 Snapshot",
-        use_container_width=True,
-        key="btn_snapshot"
-    ):
-
-        gestisci_snapshot()
-
-
-with head_backup:
-
-    if USA_DATABASE_CLOUD:
 
         if st.button(
-            "☁ Backup",
+            "🚪 Esci",
             use_container_width=True,
-            key="btn_backup_cloud"
+            key="btn_logout_profilo"
         ):
 
-            gestisci_backup_cloud()
+            for chiave_sessione in list(
+                st.session_state.keys()
+            ):
 
-    elif DB_PATH.exists():
+                if chiave_sessione in {
+                    "profilo_attivo",
+                    "profilo_login_select"
+                }:
+                    continue
 
-        backup_profilo = (
-            crea_backup_logico_bytes()
+                if (
+                    chiave_sessione.startswith("_df_")
+                    or chiave_sessione.startswith("_ultime_")
+                    or chiave_sessione.startswith("_costi_")
+                    or chiave_sessione.startswith("budget_")
+                    or chiave_sessione.startswith("backup_")
+                    or chiave_sessione.startswith("pdf_")
+                ):
+
+                    st.session_state.pop(
+                        chiave_sessione,
+                        None
+                    )
+
+            st.session_state.pop(
+                "profilo_attivo",
+                None
+            )
+
+            st.rerun()
+
+        if st.button(
+            "🔄 Aggiorna",
+            use_container_width=True,
+            key="btn_aggiorna_app"
+        ):
+
+            invalida_cache_dati()
+            st.rerun()
+
+        if st.button(
+            "📸 Snapshot",
+            use_container_width=True,
+            key="btn_snapshot"
+        ):
+
+            gestisci_snapshot()
+
+        if USA_DATABASE_CLOUD:
+
+            if st.button(
+                "☁ Backup",
+                use_container_width=True,
+                key="btn_backup_cloud"
+            ):
+
+                gestisci_backup_cloud()
+
+        elif DB_PATH.exists():
+
+            backup_profilo = (
+                crea_backup_logico_bytes()
+            )
+
+            st.download_button(
+                "☁ Backup",
+                data=backup_profilo,
+                file_name=(
+                    "fantaeleganza_backup_"
+                    + PROFILO_ATTIVO
+                    .lower()
+                    .replace(
+                        " ",
+                        "_"
+                    )
+                    + ".json"
+                ),
+                mime="application/json",
+                use_container_width=True
+            )
+
+        if st.button(
+            "❔ Regole",
+            use_container_width=True,
+            key="btn_regole"
+        ):
+
+            mostra_regole()
+
+        nuovo_dark = st.toggle(
+            "🌙 Scuro",
+            value=(
+                st.session_state.dark_mode
+            ),
+            key="toggle_dark"
         )
 
-        st.download_button(
-            "☁ Backup",
-            data=backup_profilo,
-            file_name=(
-                "fantaeleganza_backup_"
-                + PROFILO_ATTIVO
-                .lower()
-                .replace(
-                    " ",
-                    "_"
-                )
-                + ".json"
-            ),
-            mime=(
-                "application/json"
-            ),
-            use_container_width=True
-        )
-
-
-with head_rules:
-
-    if st.button(
-        "❔ Regole",
-        use_container_width=True,
-        key="btn_regole"
-    ):
-
-        mostra_regole()
-
-
-with head_theme:
-
-    nuovo_dark = st.toggle(
-        "🌙 Scuro",
-        value=(
-            st.session_state.dark_mode
-        ),
-        key="toggle_dark"
-    )
-
-    if (
-        nuovo_dark
-        != st.session_state.dark_mode
-    ):
-
-        st.session_state.dark_mode = (
+        if (
             nuovo_dark
+            != st.session_state.dark_mode
+        ):
+
+            st.session_state.dark_mode = (
+                nuovo_dark
+            )
+
+            st.rerun()
+
+    st.markdown("")
+
+    # --------------------------------------------------------
+    # INDICATORI PRINCIPALI
+    # Soglia base eliminata
+    # --------------------------------------------------------
+    with st.container(
+        key="sidebar_budget_card"
+    ):
+
+        st.number_input(
+            "💰 Budget",
+            min_value=0.0,
+            step=10.0,
+            format="%.2f",
+            key="budget_asta_input",
+            on_change=aggiorna_budget_da_widget,
+            help=(
+                "Budget totale che hai deciso di destinare all'asta."
+            )
         )
 
-        st.rerun()
-
-
-
-st.markdown(
-    """
-    <style>
-
-    div[class*="st-key-iqr_card_clickable"] {
-        position: relative !important;
-        min-height: 154px !important;
-        border: 1px solid #dbe2ea;
-        border-radius: 12px;
-        background: #ffffff;
-        padding: 6px 7px 7px 7px;
-        overflow: hidden;
-    }
-
-    div[class*="st-key-iqr_card_clickable"]:hover {
-        border-color: #2563eb;
-        box-shadow: 0 3px 12px rgba(15, 23, 42, 0.10);
-    }
-
-    div[class*="st-key-iqr_card_clickable"] .stButton {
-        position: absolute !important;
-        inset: 0 !important;
-        z-index: 20 !important;
-        width: 100% !important;
-        height: 100% !important;
-        margin: 0 !important;
-    }
-
-    div[class*="st-key-iqr_card_clickable"] .stButton > button {
-        width: 100% !important;
-        height: 100% !important;
-        min-height: 100% !important;
-        opacity: 0 !important;
-        cursor: pointer !important;
-        padding: 0 !important;
-        border: none !important;
-    }
-
-    .iqr-gauge-card {
-        text-align: center;
-        width: 100%;
-        pointer-events: none;
-    }
-
-    .iqr-gauge-title {
-        font-size: 12px;
-        font-weight: 800;
-        color: #0f172a;
-        margin-bottom: -7px;
-    }
-
-    .iqr-gauge-svg {
-        width: 100%;
-        max-width: 150px;
-        height: 76px;
-        display: block;
-        margin: 0 auto -2px auto;
-    }
-
-    .iqr-gauge-value {
-        font-size: 20px;
-        line-height: 1;
-        font-weight: 800;
-        color: #0f172a;
-        margin-top: -2px;
-    }
-
-    .iqr-gauge-description {
-        display: inline-block;
-        color: #ffffff;
-        font-size: 9px;
-        font-weight: 800;
-        line-height: 1.1;
-        padding: 4px 7px;
-        border-radius: 6px;
-        margin-top: 5px;
-    }
-
-    .iqr-gauge-hint {
-        font-size: 7px;
-        color: #64748b;
-        margin-top: 4px;
-    }
-
-    @media (max-width: 850px) {
-
-        div[class*="st-key-iqr_card_clickable"] {
-            min-height: 142px !important;
-            padding: 5px !important;
-        }
-
-        .iqr-gauge-svg {
-            max-width: 135px;
-            height: 68px;
-        }
-
-        .iqr-gauge-value {
-            font-size: 18px;
-        }
-
-        .iqr-gauge-description {
-            font-size: 8px;
-        }
-    }
-
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-
-# ============================================================
-# RIEPILOGO COMPATTO
-# ============================================================
-
-m1, m2, m3, m4, m5, m6, m7, m8 = (
-    st.columns(8)
-)
-
-m1.metric(
-    "💳 Soglia base",
-    f"{formatta_crediti(SOGLIA_BASE)} €"
-)
-
-with m2:
-
-    st.number_input(
-        "💰 Budget",
-        min_value=0.0,
-        step=10.0,
-        format="%.2f",
-        key="budget_asta_input",
-        on_change=aggiorna_budget_da_widget,
-        help=(
-            "Budget totale che hai deciso di destinare all'asta. "
-            "Il valore viene salvato nel database Cloud e resta "
-            "disponibile anche da altri dispositivi."
+    st.metric(
+        "💵 Budget rimanente",
+        f"{formatta_crediti(budget_rimanente)} €",
+        delta=(
+            "Disponibile"
+            if budget_rimanente >= 0
+            else "Budget superato"
+        ),
+        delta_color=(
+            "off"
+            if budget_rimanente >= 0
+            else "inverse"
         )
     )
 
-m3.metric(
-    "💵 Budget rimanente",
-    f"{formatta_crediti(budget_rimanente)} €",
-    delta=(
-        "Disponibile"
-        if budget_rimanente >= 0
-        else "Budget superato"
-    ),
-    delta_color=(
-        "off"
-        if budget_rimanente >= 0
-        else "inverse"
-    ),
-    help=(
-        "Budget impostato meno Spesa effettiva. "
-        "La Spesa effettiva include la maggiorazione prevista "
-        "oltre la soglia base."
+    st.metric(
+        "🪙 Spesa effettiva",
+        f"{formatta_crediti(spesa_effettiva)} €"
     )
-)
 
-m4.metric(
-    "🪙 Spesa effettiva",
-    f"{formatta_crediti(spesa_effettiva)} €"
-)
+    st.metric(
+        "⚡ Oltre soglia",
+        f"{formatta_crediti(oltre_soglia)} €"
+    )
 
-m5.metric(
-    "⚡ Oltre soglia",
-    f"{formatta_crediti(oltre_soglia)} €"
-)
+    st.metric(
+        "👥 Giocatori",
+        f"{numero_rosa}/{MAX_GIOCATORI}"
+    )
 
-m6.metric(
-    "👥 Giocatori",
-    f"{numero_rosa}/{MAX_GIOCATORI}"
-)
-
-m7.metric(
-    "🧤 Portieri",
-    f"{numero_portieri}/{MIN_PORTIERI}"
-)
-
-with m8:
+    st.metric(
+        "🧤 Portieri",
+        f"{numero_portieri}/{MIN_PORTIERI}"
+    )
 
     with st.container(
         key="iqr_card_clickable"
@@ -14050,6 +13993,10 @@ with m8:
                 df_rosa_globale
             )
 
+
+# ============================================================
+# RIEPILOGO PRINCIPALE ORA NELLA SIDEBAR
+# ============================================================
 
 st.markdown('''<style>
 .pf-team{background:#071a2f;color:white;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:900;display:flex;justify-content:space-between}.pf-team span{color:#f5b51b}
