@@ -10095,6 +10095,690 @@ def inizializza_database(
                     pass
 
 
+
+# ============================================================
+# MULTILEGA 0.1 - DATABASE FOUNDATION
+# ============================================================
+#
+# Questa release NON sostituisce ancora le tabelle legacy:
+# l'app continua a funzionare esattamente come V82.
+#
+# Le nuove tabelle sono additive e preparano:
+# UTENTE -> LEGA -> RUOLO -> SQUADRA -> ROSA
+#
+# La V82 congelata resta la baseline di sicurezza.
+# ============================================================
+
+MULTILEGA_SCHEMA_VERSION = "0.1"
+
+LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
+
+
+def _ml_fetch_id(
+    cur,
+    query,
+    parametri
+):
+    cur.execute(
+        query,
+        parametri
+    )
+    riga = cur.fetchone()
+
+    if not riga:
+        return None
+
+    return int(
+        riga[0]
+    )
+
+
+def inizializza_database_multilega():
+    """
+    Crea lo schema MULTILEGA senza alterare il funzionamento legacy.
+
+    Le tabelle create qui NON rientrano in
+    TABELLE_SEPARATE_PER_PROFILO: sono globali e condivise.
+    """
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS multilega_meta (
+                chiave TEXT PRIMARY KEY,
+                valore TEXT
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT,
+                password_hash TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS leagues (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL,
+                stagione TEXT,
+                modalita TEXT NOT NULL DEFAULT 'MANTRA',
+                stato TEXT NOT NULL DEFAULT 'DRAFT',
+                created_by_user_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS teams (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                nome TEXT NOT NULL,
+                owner_user_id INTEGER,
+                posizione INTEGER,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(league_id, nome)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS league_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                team_id INTEGER,
+                is_admin INTEGER NOT NULL DEFAULT 0,
+                is_auctioneer INTEGER NOT NULL DEFAULT 0,
+                is_team_member INTEGER NOT NULL DEFAULT 1,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(league_id, user_id, team_id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS league_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL UNIQUE,
+                partecipanti INTEGER NOT NULL DEFAULT 10,
+                max_giocatori INTEGER NOT NULL DEFAULT 30,
+                min_portieri INTEGER NOT NULL DEFAULT 2,
+                budget_iniziale REAL NOT NULL DEFAULT 500,
+                incremento_minimo REAL NOT NULL DEFAULT 1,
+                soglia_budget REAL NOT NULL DEFAULT 500,
+                moltiplicatore_oltre_soglia REAL NOT NULL DEFAULT 3,
+                tipo_asta TEXT NOT NULL DEFAULT 'CHIAMATA',
+                fonte_listone TEXT NOT NULL DEFAULT 'Fantacalcio.it',
+                regolamento_bloccato INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS team_budgets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                budget_impostato REAL NOT NULL DEFAULT 500,
+                valore_acquisti REAL NOT NULL DEFAULT 0,
+                spesa_effettiva REAL NOT NULL DEFAULT 0,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(league_id, team_id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS rosters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                prezzo_acquisto REAL,
+                fonte TEXT NOT NULL DEFAULT 'LEGACY',
+                assigned_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(league_id, team_id, player_id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS league_players (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                stato TEXT NOT NULL DEFAULT 'DISPONIBILE',
+                assigned_team_id INTEGER,
+                prezzo_assegnazione REAL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(league_id, player_id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                user_id INTEGER,
+                team_id INTEGER,
+                azione TEXT NOT NULL,
+                entita TEXT,
+                entita_id TEXT,
+                dettagli_json TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cur.execute("""
+            INSERT INTO multilega_meta (
+                chiave,
+                valore
+            )
+            VALUES (
+                'schema_version',
+                ?
+            )
+            ON CONFLICT(chiave)
+            DO UPDATE SET
+                valore = excluded.valore
+        """, (
+            MULTILEGA_SCHEMA_VERSION,
+        ))
+
+        conn.commit()
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+
+def migra_profili_legacy_in_multilega():
+    """
+    Registra IBBINI IDIOTA e GOSTOBAR nel nuovo schema.
+
+    Non cambia il comportamento dell'app:
+    crea solamente la mappatura multilega necessaria
+    alle release successive.
+    """
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        # ----------------------------------------------------
+        # UTENTI LEGACY
+        # ----------------------------------------------------
+        for username in PROFILI_APP:
+
+            cur.execute("""
+                INSERT INTO users (
+                    username,
+                    is_active
+                )
+                VALUES (?, 1)
+                ON CONFLICT(username)
+                DO UPDATE SET
+                    is_active = 1,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (
+                username,
+            ))
+
+        # ----------------------------------------------------
+        # LEGA LEGACY
+        # ----------------------------------------------------
+        admin_id = _ml_fetch_id(
+            cur,
+            "SELECT id FROM users WHERE username = ?",
+            (
+                "IBBINI IDIOTA",
+            )
+        )
+
+        cur.execute("""
+            SELECT id
+            FROM leagues
+            WHERE nome = ?
+            ORDER BY id
+            LIMIT 1
+        """, (
+            LEGA_LEGACY_NOME,
+        ))
+
+        riga_lega = cur.fetchone()
+
+        if riga_lega:
+
+            league_id = int(
+                riga_lega[0]
+            )
+
+        else:
+
+            cur.execute("""
+                INSERT INTO leagues (
+                    nome,
+                    stagione,
+                    modalita,
+                    stato,
+                    created_by_user_id
+                )
+                VALUES (
+                    ?,
+                    '2026/27',
+                    'MANTRA',
+                    'LEGACY_MIGRATION',
+                    ?
+                )
+            """, (
+                LEGA_LEGACY_NOME,
+                admin_id
+            ))
+
+            league_id = int(
+                cur.lastrowid
+            )
+
+        # ----------------------------------------------------
+        # REGOLAMENTO BASE
+        # ----------------------------------------------------
+        cur.execute("""
+            INSERT INTO league_rules (
+                league_id,
+                partecipanti,
+                max_giocatori,
+                min_portieri,
+                budget_iniziale,
+                incremento_minimo,
+                soglia_budget,
+                moltiplicatore_oltre_soglia,
+                tipo_asta,
+                fonte_listone
+            )
+            VALUES (
+                ?,
+                2,
+                30,
+                2,
+                500,
+                1,
+                500,
+                3,
+                'CHIAMATA',
+                'Fantacalcio.it'
+            )
+            ON CONFLICT(league_id)
+            DO NOTHING
+        """, (
+            league_id,
+        ))
+
+        # ----------------------------------------------------
+        # SQUADRE + MEMBERSHIP
+        # ----------------------------------------------------
+        for posizione, username in enumerate(
+            PROFILI_APP,
+            start=1
+        ):
+
+            user_id = _ml_fetch_id(
+                cur,
+                "SELECT id FROM users WHERE username = ?",
+                (
+                    username,
+                )
+            )
+
+            cur.execute("""
+                INSERT INTO teams (
+                    league_id,
+                    nome,
+                    owner_user_id,
+                    posizione,
+                    is_active
+                )
+                VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT(league_id, nome)
+                DO UPDATE SET
+                    owner_user_id = excluded.owner_user_id,
+                    posizione = excluded.posizione,
+                    is_active = 1,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (
+                league_id,
+                username,
+                user_id,
+                posizione
+            ))
+
+            team_id = _ml_fetch_id(
+                cur,
+                """
+                SELECT id
+                FROM teams
+                WHERE league_id = ?
+                  AND nome = ?
+                """,
+                (
+                    league_id,
+                    username
+                )
+            )
+
+            cur.execute("""
+                INSERT INTO league_members (
+                    league_id,
+                    user_id,
+                    team_id,
+                    is_admin,
+                    is_auctioneer,
+                    is_team_member,
+                    is_active
+                )
+                VALUES (?, ?, ?, ?, ?, 1, 1)
+                ON CONFLICT(league_id, user_id, team_id)
+                DO UPDATE SET
+                    is_admin = excluded.is_admin,
+                    is_auctioneer = excluded.is_auctioneer,
+                    is_team_member = 1,
+                    is_active = 1
+            """, (
+                league_id,
+                user_id,
+                team_id,
+                1 if username == "IBBINI IDIOTA" else 0,
+                1 if username == "IBBINI IDIOTA" else 0
+            ))
+
+        conn.commit()
+
+        return league_id
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+
+def sincronizza_legacy_in_multilega():
+    """
+    Copia nel nuovo schema una fotografia dei dati legacy correnti.
+
+    In V83 il sistema legacy resta la fonte autorevole.
+    Le nuove tabelle servono a verificare e preparare
+    l'isolamento league_id/team_id.
+    """
+
+    league_id = migra_profili_legacy_in_multilega()
+
+    raw_conn = _get_raw_connection()
+    raw_cur = raw_conn.cursor()
+
+    try:
+
+        for username in PROFILI_APP:
+
+            raw_cur.execute(
+                "SELECT id FROM users WHERE username = ?",
+                (
+                    username,
+                )
+            )
+            r_user = raw_cur.fetchone()
+
+            if not r_user:
+                continue
+
+            user_id = int(
+                r_user[0]
+            )
+
+            raw_cur.execute("""
+                SELECT id
+                FROM teams
+                WHERE league_id = ?
+                  AND nome = ?
+            """, (
+                league_id,
+                username
+            ))
+            r_team = raw_cur.fetchone()
+
+            if not r_team:
+                continue
+
+            team_id = int(
+                r_team[0]
+            )
+
+            tabella_giocatori = (
+                "giocatori"
+                if username == "IBBINI IDIOTA"
+                else "giocatori_gostobar"
+            )
+
+            tabella_config = (
+                "configurazione_app"
+                if username == "IBBINI IDIOTA"
+                else "configurazione_app_gostobar"
+            )
+
+            # Budget legacy
+            budget = 500.0
+
+            try:
+
+                raw_cur.execute(
+                    f"""
+                    SELECT valore
+                    FROM {tabella_config}
+                    WHERE chiave = 'budget_asta'
+                    """
+                )
+
+                r_budget = raw_cur.fetchone()
+
+                if r_budget and r_budget[0] not in (
+                    None,
+                    ""
+                ):
+                    budget = float(
+                        r_budget[0]
+                    )
+
+            except Exception:
+                budget = 500.0
+
+            # Rosa legacy
+            try:
+
+                raw_cur.execute(
+                    f"""
+                    SELECT
+                        id,
+                        COALESCE(prezzo_acquisto, 0)
+                    FROM {tabella_giocatori}
+                    WHERE stato = 'MIO'
+                    """
+                )
+
+                rosa_legacy = (
+                    raw_cur.fetchall()
+                    or []
+                )
+
+            except Exception:
+                rosa_legacy = []
+
+            # La fotografia viene ricostruita ad ogni avvio V83.
+            raw_cur.execute("""
+                DELETE FROM rosters
+                WHERE league_id = ?
+                  AND team_id = ?
+                  AND fonte = 'LEGACY'
+            """, (
+                league_id,
+                team_id
+            ))
+
+            valore_acquisti = 0.0
+
+            for player_id, prezzo in rosa_legacy:
+
+                prezzo = float(
+                    prezzo
+                    or 0
+                )
+
+                valore_acquisti += prezzo
+
+                raw_cur.execute("""
+                    INSERT INTO rosters (
+                        league_id,
+                        team_id,
+                        player_id,
+                        prezzo_acquisto,
+                        fonte,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, 'LEGACY', CURRENT_TIMESTAMP)
+                    ON CONFLICT(league_id, team_id, player_id)
+                    DO UPDATE SET
+                        prezzo_acquisto = excluded.prezzo_acquisto,
+                        fonte = 'LEGACY',
+                        updated_at = CURRENT_TIMESTAMP
+                """, (
+                    league_id,
+                    team_id,
+                    int(
+                        player_id
+                    ),
+                    prezzo
+                ))
+
+            raw_cur.execute("""
+                INSERT INTO team_budgets (
+                    league_id,
+                    team_id,
+                    budget_impostato,
+                    valore_acquisti,
+                    spesa_effettiva,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(league_id, team_id)
+                DO UPDATE SET
+                    budget_impostato = excluded.budget_impostato,
+                    valore_acquisti = excluded.valore_acquisti,
+                    spesa_effettiva = excluded.spesa_effettiva,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (
+                league_id,
+                team_id,
+                budget,
+                valore_acquisti,
+                valore_acquisti
+            ))
+
+        raw_conn.commit()
+
+        return league_id
+
+    finally:
+
+        if not USA_DATABASE_CLOUD:
+
+            try:
+                raw_conn.close()
+            except Exception:
+                pass
+
+
+def imposta_contesto_multilega_sessione(
+    league_id
+):
+    """
+    Espone nel session_state il contesto multilega corrente.
+    L'interfaccia V83 continua comunque a utilizzare il legacy.
+    """
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute(
+            "SELECT id FROM users WHERE username = ?",
+            (
+                PROFILO_ATTIVO,
+            )
+        )
+        r_user = cur.fetchone()
+
+        cur.execute("""
+            SELECT id
+            FROM teams
+            WHERE league_id = ?
+              AND nome = ?
+        """, (
+            league_id,
+            PROFILO_ATTIVO
+        ))
+        r_team = cur.fetchone()
+
+        st.session_state[
+            "ml_schema_version"
+        ] = MULTILEGA_SCHEMA_VERSION
+
+        st.session_state[
+            "ml_league_id"
+        ] = int(
+            league_id
+        )
+
+        st.session_state[
+            "ml_user_id"
+        ] = (
+            int(
+                r_user[0]
+            )
+            if r_user
+            else None
+        )
+
+        st.session_state[
+            "ml_team_id"
+        ] = (
+            int(
+                r_team[0]
+            )
+            if r_team
+            else None
+        )
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+
+
 # ============================================================
 # IMPORT LISTONE
 # ============================================================
@@ -14081,6 +14765,30 @@ def gestisci_backup_cloud():
 inizializza_database(
     PROFILO_ATTIVO
 )
+
+# ------------------------------------------------------------
+# MULTILEGA 0.1
+# ------------------------------------------------------------
+# Non modifica ancora il comportamento dell'app.
+# Crea e sincronizza la struttura league/user/team in parallelo.
+inizializza_database_multilega()
+
+try:
+
+    _ml_league_id = sincronizza_legacy_in_multilega()
+
+    imposta_contesto_multilega_sessione(
+        _ml_league_id
+    )
+
+except Exception as errore_multilega:
+
+    # La foundation non deve mai impedire l'avvio della V82 legacy.
+    st.session_state[
+        "ml_foundation_error"
+    ] = str(
+        errore_multilega
+    )
 
 if "budget_asta_corrente" not in st.session_state:
 
@@ -18862,7 +19570,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V81 &nbsp;|&nbsp; Offline Resiliente'
+        'MULTILEGA 0.1 &nbsp;|&nbsp; V83 Foundation'
         '</div>',
         unsafe_allow_html=True
     )
