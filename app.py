@@ -14809,6 +14809,75 @@ st.markdown(
         white-space: nowrap !important;
     }
 
+
+    /* ======================================================
+       V47 - IQR: titolo visibile e card più grande
+       ====================================================== */
+
+    div[class*="st-key-iqr_card_clickable"] {
+        min-height: 225px !important;
+        height: 225px !important;
+        padding: 16px 16px 16px 16px !important;
+        overflow: visible !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-card {
+        width: 100% !important;
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        overflow: visible !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-title {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        height: auto !important;
+        min-height: 34px !important;
+        overflow: visible !important;
+        color: #ffffff !important;
+        font-size: 18px !important;
+        line-height: 1.15 !important;
+        font-weight: 900 !important;
+        letter-spacing: 0 !important;
+        text-align: center !important;
+        margin: 0 0 16px 0 !important;
+        padding: 0 !important;
+        white-space: nowrap !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-scale-wrap {
+        width: 84% !important;
+        margin: 0 auto !important;
+        padding-bottom: 30px !important;
+        overflow: visible !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-scale {
+        height: 38px !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-pointer {
+        bottom: 3px !important;
+        border-left: 16px solid transparent !important;
+        border-right: 16px solid transparent !important;
+        border-bottom: 21px solid #ffc21c !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-description {
+        width: 66% !important;
+        min-width: 0 !important;
+        font-size: 18px !important;
+        line-height: 1.05 !important;
+        font-weight: 950 !important;
+        padding: 12px 10px !important;
+        margin: 8px auto 0 auto !important;
+        white-space: nowrap !important;
+    }
+
     /* MENU IN FONDO */
     section[data-testid="stSidebar"] details {
         margin-top: 3px !important;
