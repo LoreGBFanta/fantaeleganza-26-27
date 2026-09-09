@@ -261,6 +261,47 @@ PROFILI_APP = [
     "GOSTOBAR"
 ]
 
+# ------------------------------------------------------------
+# Navigazione interna IQR
+# ------------------------------------------------------------
+# Il click sulla card IQR usa un normale link HTML. Un link può creare
+# una nuova sessione Streamlit; per questo trasportiamo il profilo nella
+# query string e lo ripristiniamo PRIMA della schermata di login.
+profilo_da_url = str(
+    st.query_params.get(
+        "profilo",
+        ""
+    )
+).strip()
+
+if (
+    "profilo_attivo" not in st.session_state
+    and profilo_da_url in PROFILI_APP
+):
+    st.session_state[
+        "profilo_attivo"
+    ] = profilo_da_url
+
+# Memorizza la richiesta di apertura IQR e poi pulisce la URL.
+if str(
+    st.query_params.get(
+        "iqr_detail",
+        ""
+    )
+) == "1":
+
+    st.session_state[
+        "_apri_popup_iqr"
+    ] = True
+
+    # La richiesta è stata acquisita; togliamo i parametri dalla URL
+    # per evitare che il popup si riapra dopo la chiusura.
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
+
+
 if "profilo_attivo" not in st.session_state:
 
     st.markdown(
@@ -16116,7 +16157,12 @@ with st.sidebar:
     st.markdown(
         (
             '<a class="iqr-v51-link" '
-            'href="?iqr_detail=1" '
+            'href="?iqr_detail=1&amp;profilo='
+            + html.escape(
+                PROFILO_ATTIVO,
+                quote=True
+            )
+            + '" '
             '>'
             '<div class="iqr-v51-card">'
             + genera_html_gauge_iqr(
@@ -16128,21 +16174,12 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-    # Apertura del popup IQR tramite query parameter.
-    # Non usiamo più alcun bottone Streamlit dentro la card.
-    if str(
-        st.query_params.get(
-            "iqr_detail",
-            ""
-        )
-    ) == "1":
-
-        try:
-            del st.query_params[
-                "iqr_detail"
-            ]
-        except Exception:
-            pass
+    # Apertura popup richiesta dal click sulla card IQR.
+    # Il flag è in session_state, quindi il profilo resta quello corrente.
+    if st.session_state.pop(
+        "_apri_popup_iqr",
+        False
+    ):
 
         mostra_dettaglio_iqr(
             iqr,
@@ -16294,7 +16331,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V51 &nbsp;|&nbsp; Offline Resiliente'
+        'V52 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
