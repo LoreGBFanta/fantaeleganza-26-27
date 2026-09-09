@@ -14686,6 +14686,381 @@ st.markdown(
             height: 76px !important;
         }
     }
+
+    /* ======================================================
+       V43 — SIDEBAR COME MOCKUP ALLEGATO
+       ====================================================== */
+
+    section[data-testid="stSidebar"] {
+        width: 390px !important;
+        min-width: 390px !important;
+        background:
+            linear-gradient(
+                180deg,
+                #061f3a 0%,
+                #062744 48%,
+                #041b31 100%
+            ) !important;
+        border-right: 1px solid #0d3c67 !important;
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"] > div {
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        padding: 14px 16px 18px 16px !important;
+        box-sizing: border-box !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: #2b638e #061f3a !important;
+    }
+
+    section[data-testid="stSidebar"] > div::-webkit-scrollbar {
+        width: 7px !important;
+    }
+
+    section[data-testid="stSidebar"] > div::-webkit-scrollbar-track {
+        background: #061f3a !important;
+    }
+
+    section[data-testid="stSidebar"] > div::-webkit-scrollbar-thumb {
+        background: #2b638e !important;
+        border-radius: 8px !important;
+    }
+
+    /* HEADER */
+    section[data-testid="stSidebar"] .fanta-header {
+        width: 100% !important;
+        min-height: 126px !important;
+        margin: 0 0 12px 0 !important;
+        padding: 14px 16px !important;
+        background:
+            linear-gradient(
+                105deg,
+                #06213d 0%,
+                #082b4f 100%
+            ) !important;
+        border: 2px solid #ffc21c !important;
+        border-radius: 18px !important;
+        box-shadow: 0 8px 22px rgba(0,0,0,.16) !important;
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand {
+        display: flex !important;
+        align-items: center !important;
+        gap: 16px !important;
+        width: 100% !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-logo {
+        width: 76px !important;
+        height: 76px !important;
+        min-width: 76px !important;
+        border: 3px solid #ffc21c !important;
+        border-radius: 17px !important;
+        background: #fff !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand-title {
+        color: #fff !important;
+        font-size: 27px !important;
+        line-height: 1.02 !important;
+        font-weight: 950 !important;
+        white-space: normal !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand-title span {
+        color: #ffc21c !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand-subtitle {
+        color: #fff !important;
+        font-size: 14px !important;
+        margin-top: 6px !important;
+    }
+
+    /* PROFILO */
+    .sidebar-profile {
+        width: 100% !important;
+        min-height: 58px !important;
+        display: flex !important;
+        align-items: center !important;
+        padding: 0 16px !important;
+        margin: 0 0 12px 0 !important;
+        border-radius: 14px !important;
+        background:
+            linear-gradient(
+                90deg,
+                #0a345f 0%,
+                #0b3a69 100%
+            ) !important;
+        border: 1px solid rgba(62,132,190,.30) !important;
+        box-sizing: border-box !important;
+    }
+
+    .sidebar-profile-icon {
+        color: #ffc21c !important;
+        font-size: 20px !important;
+        margin-right: 11px !important;
+    }
+
+    .sidebar-profile-name {
+        flex: 1 !important;
+        color: #fff !important;
+        font-size: 16px !important;
+        font-weight: 900 !important;
+        text-align: left !important;
+    }
+
+    .sidebar-profile-arrow {
+        color: #fff !important;
+        font-size: 24px !important;
+    }
+
+    /* CARD CUSTOM */
+    .fe-side-card {
+        display: grid !important;
+        grid-template-columns: 58px 1fr auto !important;
+        align-items: center !important;
+        gap: 12px !important;
+        width: 100% !important;
+        min-height: 96px !important;
+        margin: 0 0 10px 0 !important;
+        padding: 13px 16px !important;
+        box-sizing: border-box !important;
+        background:
+            linear-gradient(
+                100deg,
+                #0b3158 0%,
+                #0a2b4d 100%
+            ) !important;
+        border: 1px solid #165387 !important;
+        border-radius: 15px !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.025) !important;
+    }
+
+    .fe-card-icon {
+        color: #ffc21c !important;
+        font-size: 35px !important;
+        line-height: 1 !important;
+        text-align: center !important;
+    }
+
+    .fe-card-label {
+        color: #fff !important;
+        font-size: 15px !important;
+        font-weight: 850 !important;
+        line-height: 1.15 !important;
+        margin-bottom: 5px !important;
+    }
+
+    .fe-card-value {
+        color: #ffc21c !important;
+        font-size: 28px !important;
+        line-height: 1 !important;
+        font-weight: 950 !important;
+        white-space: nowrap !important;
+    }
+
+    .fe-card-help {
+        color: #b9d1e8 !important;
+        font-size: 18px !important;
+        line-height: 1 !important;
+        align-self: start !important;
+        padding-top: 3px !important;
+    }
+
+    /* BUDGET */
+    div[class*="st-key-sidebar_budget_card"] {
+        min-height: 104px !important;
+        margin: 0 0 10px 0 !important;
+        padding: 11px 14px 12px 14px !important;
+        background:
+            linear-gradient(
+                100deg,
+                #0b3158 0%,
+                #0a2b4d 100%
+            ) !important;
+        border: 1px solid #165387 !important;
+        border-radius: 15px !important;
+        box-sizing: border-box !important;
+    }
+
+    .fe-budget-head {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        margin-bottom: 7px !important;
+    }
+
+    .fe-budget-icon {
+        color: #ffc21c !important;
+        font-size: 33px !important;
+        width: 48px !important;
+        text-align: center !important;
+    }
+
+    .fe-budget-title {
+        color: #fff !important;
+        font-size: 15px !important;
+        font-weight: 850 !important;
+        flex: 1 !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] label {
+        display: none !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] input {
+        height: 44px !important;
+        min-height: 44px !important;
+        background: #092947 !important;
+        color: #ffc21c !important;
+        border: 1px solid #1a5a8d !important;
+        border-radius: 10px !important;
+        font-size: 24px !important;
+        font-weight: 950 !important;
+        box-shadow: none !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] button {
+        width: 42px !important;
+        height: 42px !important;
+        min-height: 42px !important;
+        background: #124776 !important;
+        color: #fff !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        padding: 0 !important;
+    }
+
+    /* IQR */
+    div[class*="st-key-iqr_card_clickable"] {
+        min-height: 138px !important;
+        margin: 0 0 10px 0 !important;
+        padding: 9px 14px !important;
+        background:
+            linear-gradient(
+                100deg,
+                #0b3158 0%,
+                #0a2b4d 100%
+            ) !important;
+        border: 1px solid #165387 !important;
+        border-radius: 15px !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-card {
+        transform: scale(.82) !important;
+        transform-origin: center top !important;
+        margin-top: -3px !important;
+        margin-bottom: -14px !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-title {
+        color: #fff !important;
+        font-size: 14px !important;
+        font-weight: 900 !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-value {
+        color: #ffc21c !important;
+        font-size: 23px !important;
+        font-weight: 950 !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-hint {
+        display: none !important;
+    }
+
+    /* MENU IN FONDO */
+    section[data-testid="stSidebar"] details {
+        width: 100% !important;
+        margin: 2px 0 0 0 !important;
+        background: transparent !important;
+        border: 0 !important;
+    }
+
+    section[data-testid="stSidebar"] details > summary {
+        min-height: 52px !important;
+        display: flex !important;
+        align-items: center !important;
+        padding: 0 16px !important;
+        background: #082744 !important;
+        color: #ffc21c !important;
+        border: 2px solid #ffc21c !important;
+        border-radius: 14px !important;
+        font-size: 17px !important;
+        font-weight: 950 !important;
+    }
+
+    section[data-testid="stSidebar"] details > summary * {
+        color: #ffc21c !important;
+    }
+
+    section[data-testid="stSidebar"] details[open] {
+        background: rgba(8,43,80,.72) !important;
+        border: 1px solid #164b78 !important;
+        border-radius: 14px !important;
+        padding: 0 8px 9px 8px !important;
+    }
+
+    section[data-testid="stSidebar"] details[open] > summary {
+        margin: 0 -8px 8px -8px !important;
+    }
+
+    section[data-testid="stSidebar"] details div[data-testid="stHorizontalBlock"] {
+        gap: 8px !important;
+        margin-bottom: 4px !important;
+    }
+
+    section[data-testid="stSidebar"] details .stButton > button,
+    section[data-testid="stSidebar"] details .stDownloadButton > button {
+        min-height: 36px !important;
+        height: 36px !important;
+        padding: 4px 9px !important;
+        background: transparent !important;
+        color: #fff !important;
+        border: 0 !important;
+        border-radius: 7px !important;
+        font-size: 13px !important;
+        font-weight: 650 !important;
+        justify-content: flex-start !important;
+    }
+
+    section[data-testid="stSidebar"] details .stButton > button *,
+    section[data-testid="stSidebar"] details .stDownloadButton > button * {
+        color: #fff !important;
+    }
+
+    section[data-testid="stSidebar"] details [data-testid="stToggle"] label,
+    section[data-testid="stSidebar"] details [data-testid="stToggle"] span {
+        color: #fff !important;
+        font-size: 13px !important;
+    }
+
+    @media (max-width: 950px) {
+        section[data-testid="stSidebar"] {
+            width: 345px !important;
+            min-width: 345px !important;
+        }
+
+        .fe-side-card {
+            grid-template-columns: 48px 1fr auto !important;
+            min-height: 88px !important;
+        }
+
+        .fe-card-icon {
+            font-size: 30px !important;
+        }
+
+        .fe-card-value {
+            font-size: 24px !important;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -14730,6 +15105,110 @@ with st.sidebar:
     # --------------------------------------------------------
     # MENU STRUMENTI: chiuso per default
     # --------------------------------------------------------
+
+
+    # --------------------------------------------------------
+    # INDICATORI PRINCIPALI
+    # Soglia base eliminata
+    # --------------------------------------------------------
+    with st.container(
+        key="sidebar_budget_card"
+    ):
+
+        st.markdown(
+            """
+            <div class="fe-budget-head">
+                <div class="fe-budget-icon">🪙</div>
+                <div class="fe-budget-title">Budget</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.number_input(
+            "Budget",
+            min_value=0.0,
+            step=10.0,
+            format="%.2f",
+            key="budget_asta_input",
+            on_change=aggiorna_budget_da_widget,
+            help=(
+                "Budget totale che hai deciso di destinare all'asta."
+            )
+        )
+
+    st.markdown(
+        f"""
+        <div class="fe-side-card">
+            <div class="fe-card-icon">👛</div>
+            <div>
+                <div class="fe-card-label">Budget rimanente</div>
+                <div class="fe-card-value">{formatta_crediti(budget_rimanente)} €</div>
+            </div>
+            <div class="fe-card-help">?</div>
+        </div>
+
+        <div class="fe-side-card">
+            <div class="fe-card-icon">📊</div>
+            <div>
+                <div class="fe-card-label">Spesa effettiva</div>
+                <div class="fe-card-value">{formatta_crediti(spesa_effettiva)} €</div>
+            </div>
+            <div class="fe-card-help">?</div>
+        </div>
+
+        <div class="fe-side-card">
+            <div class="fe-card-icon">⚠</div>
+            <div>
+                <div class="fe-card-label">Oltre soglia</div>
+                <div class="fe-card-value">{formatta_crediti(oltre_soglia)} €</div>
+            </div>
+            <div class="fe-card-help">?</div>
+        </div>
+
+        <div class="fe-side-card">
+            <div class="fe-card-icon">👥</div>
+            <div>
+                <div class="fe-card-label">Giocatori</div>
+                <div class="fe-card-value">{numero_rosa}/{MAX_GIOCATORI}</div>
+            </div>
+            <div class="fe-card-help">?</div>
+        </div>
+
+        <div class="fe-side-card">
+            <div class="fe-card-icon">✋</div>
+            <div>
+                <div class="fe-card-label">Portieri</div>
+                <div class="fe-card-value">{numero_portieri}/{MIN_PORTIERI}</div>
+            </div>
+            <div class="fe-card-help">?</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    with st.container(
+        key="iqr_card_clickable"
+    ):
+
+        st.markdown(
+            genera_html_gauge_iqr(
+                iqr
+            ),
+            unsafe_allow_html=True
+        )
+
+        if st.button(
+            "Apri dettaglio IQR",
+            key="btn_apri_dettaglio_iqr",
+            help="Apri il dettaglio dell'Indice Qualità Rosa"
+        ):
+
+            mostra_dettaglio_iqr(
+                iqr,
+                df_rosa_globale
+            )
+
     with st.expander(
         "☰  MENU",
         expanded=False
@@ -14867,84 +15346,6 @@ with st.sidebar:
 
                 st.rerun()
 
-    st.markdown("")
-
-    # --------------------------------------------------------
-    # INDICATORI PRINCIPALI
-    # Soglia base eliminata
-    # --------------------------------------------------------
-    with st.container(
-        key="sidebar_budget_card"
-    ):
-
-        st.number_input(
-            "💰 Budget",
-            min_value=0.0,
-            step=10.0,
-            format="%.2f",
-            key="budget_asta_input",
-            on_change=aggiorna_budget_da_widget,
-            help=(
-                "Budget totale che hai deciso di destinare all'asta."
-            )
-        )
-
-    st.metric(
-        "💵 Budget rimanente",
-        f"{formatta_crediti(budget_rimanente)} €",
-        delta=(
-            "Disponibile"
-            if budget_rimanente >= 0
-            else "Budget superato"
-        ),
-        delta_color=(
-            "off"
-            if budget_rimanente >= 0
-            else "inverse"
-        )
-    )
-
-    st.metric(
-        "🪙 Spesa effettiva",
-        f"{formatta_crediti(spesa_effettiva)} €"
-    )
-
-    st.metric(
-        "⚡ Oltre soglia",
-        f"{formatta_crediti(oltre_soglia)} €"
-    )
-
-    st.metric(
-        "👥 Giocatori",
-        f"{numero_rosa}/{MAX_GIOCATORI}"
-    )
-
-    st.metric(
-        "🧤 Portieri",
-        f"{numero_portieri}/{MIN_PORTIERI}"
-    )
-
-    with st.container(
-        key="iqr_card_clickable"
-    ):
-
-        st.markdown(
-            genera_html_gauge_iqr(
-                iqr
-            ),
-            unsafe_allow_html=True
-        )
-
-        if st.button(
-            "Apri dettaglio IQR",
-            key="btn_apri_dettaglio_iqr",
-            help="Apri il dettaglio dell'Indice Qualità Rosa"
-        ):
-
-            mostra_dettaglio_iqr(
-                iqr,
-                df_rosa_globale
-            )
 
     st.markdown(
         '<div style="'
@@ -14953,7 +15354,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V42 &nbsp;|&nbsp; Offline Resiliente'
+        'V43 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
