@@ -17508,6 +17508,266 @@ st.markdown(
         font-weight: 950 !important;
     }
 
+
+    /* V66 - IQR ESATTAMENTE COME V64 */
+    /* ======================================================
+       V55 - FIX MENU SOTTO IQR
+       ====================================================== */
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"] {
+        position: relative !important;
+        width: 100% !important;
+
+        /* niente height fissa qui */
+        height: auto !important;
+        min-height: 0 !important;
+
+        margin: 0 0 10px 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-spacer {
+        display: block !important;
+        width: 100% !important;
+        height: 225px !important;
+        min-height: 225px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        pointer-events: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card {
+        position: absolute !important;
+        inset: 0 auto auto 0 !important;
+        z-index: 1 !important;
+
+        width: 100% !important;
+        height: 225px !important;
+
+        box-sizing: border-box !important;
+        padding: 15px 16px 16px 16px !important;
+
+        background: linear-gradient(
+            100deg,
+            #0b3158 0%,
+            #0a2b4d 100%
+        ) !important;
+
+        border: 1px solid #165387 !important;
+        border-radius: 15px !important;
+        overflow: hidden !important;
+
+        pointer-events: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card * {
+        pointer-events: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card .iqr-gauge-card {
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card .iqr-gauge-title {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+
+        margin: 0 0 15px 0 !important;
+        padding: 0 !important;
+
+        color: #ffffff !important;
+        font-size: 15px !important;
+        line-height: 1.15 !important;
+        font-weight: 850 !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card .iqr-scale-wrap {
+        position: relative !important;
+        width: 84% !important;
+        margin: 0 auto !important;
+        padding: 0 0 30px 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card .iqr-scale {
+        display: grid !important;
+        grid-template-columns: 40fr 25fr 15fr 20fr !important;
+        width: 100% !important;
+        height: 38px !important;
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card .iqr-pointer {
+        bottom: 3px !important;
+        border-left: 16px solid transparent !important;
+        border-right: 16px solid transparent !important;
+        border-bottom: 21px solid #ffc21c !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card .iqr-gauge-value {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card .iqr-gauge-description {
+        display: block !important;
+        width: 66% !important;
+        min-width: 0 !important;
+        margin: 8px auto 0 auto !important;
+        padding: 12px 10px !important;
+
+        color: #ffffff !important;
+        font-size: 18px !important;
+        line-height: 1.05 !important;
+        font-weight: 950 !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+
+        border: 2px solid #050505 !important;
+        border-radius: 8px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* overlay cliccabile, limitato ESATTAMENTE alla card */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    div[data-testid="stButton"] {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+
+        width: 100% !important;
+        height: 225px !important;
+
+        z-index: 50 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+
+        pointer-events: auto !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    div[data-testid="stButton"] > button {
+        width: 100% !important;
+        height: 225px !important;
+        min-height: 225px !important;
+
+        margin: 0 !important;
+        padding: 0 !important;
+
+        background: transparent !important;
+        border: 0 !important;
+        border-radius: 15px !important;
+        box-shadow: none !important;
+        outline: none !important;
+
+        color: transparent !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+
+        opacity: .01 !important;
+        cursor: pointer !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    div[data-testid="stButton"] > button * {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* tooltip */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]::after {
+        content: "Clicca per aprire dettaglio IQR";
+
+        position: absolute !important;
+        left: 50% !important;
+        top: 186px !important;
+        transform: translate(-50%, 4px) !important;
+
+        z-index: 60 !important;
+
+        padding: 6px 10px !important;
+
+        background: rgba(5,18,34,.94) !important;
+        color: #ffffff !important;
+        border: 1px solid rgba(255,194,28,.55) !important;
+        border-radius: 7px !important;
+
+        font-size: 12px !important;
+        line-height: 1.15 !important;
+        font-weight: 700 !important;
+        white-space: nowrap !important;
+
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]:hover::after {
+        opacity: 1 !important;
+        visibility: visible !important;
+        transform: translate(-50%, 0) !important;
+    }
+
+
+
+    /* ------------------------------------------------------
+       IQR
+       Mantiene le ultime modifiche V55.
+       Cambiamo solo bordo/background per uniformarlo alle card.
+       ------------------------------------------------------ */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card {
+        background: linear-gradient(
+            100deg,
+            var(--fe-side-card) 0%,
+            var(--fe-side-card-2) 100%
+        ) !important;
+
+        border: 1px solid var(--fe-side-border) !important;
+        border-radius: 12px !important;
+    }
+
+
 </style>
     """,
     unsafe_allow_html=True
@@ -17635,12 +17895,13 @@ with st.sidebar:
     )
 
     with st.container(
-        key="iqr_v65_clickable"
+        key="iqr_v55_clickable"
     ):
 
+        # Bottone Streamlit reale, reso invisibile via CSS.
         if st.button(
             "Apri dettaglio IQR",
-            key="btn_iqr_v65_overlay",
+            key="btn_iqr_v55_overlay",
             use_container_width=True
         ):
 
@@ -17649,107 +17910,21 @@ with st.sidebar:
                 df_rosa_globale
             )
 
-        valore_iqr_sidebar = max(
-            0.0,
-            min(
-                100.0,
-                float(
+        st.markdown(
+            (
+                '<div class="iqr-v55-card">'
+                + genera_html_gauge_iqr(
                     iqr
                 )
-            )
+                + '</div>'
+            ),
+            unsafe_allow_html=True
         )
 
-        # ago: -180° -> 0°
-        angolo_iqr = (
-            -180.0
-            + (
-                valore_iqr_sidebar
-                * 1.8
-            )
-        )
-
-        descrizione_iqr_sidebar = (
-            descrizione_iqr(
-                valore_iqr_sidebar
-            )
-        )
-
+        # Spacer reale: serve a far terminare correttamente il container
+        # e impedisce che il menu successivo finisca sotto l'overlay.
         st.markdown(
-            f"""
-            <div class="iqr-v65-card">
-                <div class="iqr-v65-left">
-                    <div class="iqr-v65-star">★</div>
-                    <div class="iqr-v65-title">IQR</div>
-                    <div class="iqr-v65-help">?</div>
-                </div>
-
-                <div class="iqr-v65-gauge-wrap">
-                    <svg
-                        class="iqr-v65-gauge"
-                        viewBox="0 0 220 120"
-                        preserveAspectRatio="xMidYMid meet"
-                    >
-                        <path
-                            d="M20 100 A90 90 0 0 1 58 28"
-                            fill="none"
-                            stroke="#111827"
-                            stroke-width="18"
-                            stroke-linecap="butt"
-                        />
-                        <path
-                            d="M58 28 A90 90 0 0 1 108 10"
-                            fill="none"
-                            stroke="#ff1e1e"
-                            stroke-width="18"
-                            stroke-linecap="butt"
-                        />
-                        <path
-                            d="M108 10 A90 90 0 0 1 162 31"
-                            fill="none"
-                            stroke="#2f66f3"
-                            stroke-width="18"
-                            stroke-linecap="butt"
-                        />
-                        <path
-                            d="M162 31 A90 90 0 0 1 200 100"
-                            fill="none"
-                            stroke="#17b94d"
-                            stroke-width="18"
-                            stroke-linecap="butt"
-                        />
-
-                        <g transform="translate(110,100) rotate({angolo_iqr:.1f})">
-                            <line
-                                x1="0"
-                                y1="0"
-                                x2="63"
-                                y2="0"
-                                stroke="#101827"
-                                stroke-width="6"
-                                stroke-linecap="round"
-                            />
-                        </g>
-
-                        <circle
-                            cx="110"
-                            cy="100"
-                            r="8"
-                            fill="#101827"
-                        />
-                    </svg>
-
-                    <div class="iqr-v65-value">
-                        {valore_iqr_sidebar:.1f}%
-                    </div>
-
-                    <div class="iqr-v65-desc">
-                        {html.escape(descrizione_iqr_sidebar)}
-                    </div>
-                </div>
-            </div>
-
-            <div class="iqr-v65-spacer"></div>
-            """,
+            '<div class="iqr-v55-spacer"></div>',
             unsafe_allow_html=True
         )
 
@@ -17898,7 +18073,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V65 &nbsp;|&nbsp; Offline Resiliente'
+        'V66 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
