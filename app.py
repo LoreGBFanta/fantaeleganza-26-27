@@ -3437,13 +3437,89 @@ def formatta_crediti(valore):
 # ============================================================
 
 
-def leggi_config_generica(chiave, default=""):
-    conn=get_connection(); cur=conn.cursor()
-    try:
-        cur.execute("SELECT valore FROM configurazione_app WHERE chiave = ?",(chiave,))
-        r=cur.fetchone()
-    finally: chiudi_connessione(conn)
-    return r[0] if r else default
+def leggi_config_generica(
+    chiave,
+    default=""
+):
+    """
+    Lettura robusta della configurazione.
+
+    In modalità Cloud/libsql una connessione persistente può diventare
+    temporaneamente non valida e generare ValueError durante execute().
+    Questo non deve bloccare la sezione ROSA: tentiamo una riconnessione
+    una volta e, se fallisce ancora, restituiamo il default così le
+    formazioni possono usare la cache locale/snapshot.
+    """
+
+    ultimo_errore = None
+
+    for tentativo in range(2):
+
+        conn = None
+
+        try:
+
+            conn = get_connection()
+            cur = conn.cursor()
+
+            cur.execute(
+                "SELECT valore "
+                "FROM configurazione_app "
+                "WHERE chiave = ?",
+                (
+                    chiave,
+                )
+            )
+
+            riga = cur.fetchone()
+
+            return (
+                riga[0]
+                if riga
+                else default
+            )
+
+        except Exception as errore:
+
+            ultimo_errore = errore
+
+            # In Cloud forza una nuova connessione al secondo tentativo.
+            if (
+                USA_DATABASE_CLOUD
+                and tentativo == 0
+            ):
+
+                vecchia = st.session_state.pop(
+                    "_turso_connessione_raw",
+                    None
+                )
+
+                if vecchia is not None:
+
+                    try:
+                        vecchia.close()
+                    except Exception:
+                        pass
+
+                continue
+
+            break
+
+        finally:
+
+            if conn is not None:
+
+                try:
+                    chiudi_connessione(
+                        conn
+                    )
+                except Exception:
+                    pass
+
+    # La configurazione web non è critica per il rendering:
+    # carica_probabili_web() passerà automaticamente alla cache locale
+    # o allo snapshot incorporato.
+    return default
 
 def salva_config_generica(chiave,valore):
     conn=get_connection(); cur=conn.cursor()
@@ -6578,10 +6654,18 @@ def aggiorna_probabili_web():
 def carica_probabili_web():
 
     # 1) Database/configurazione del profilo attivo.
-    raw = leggi_config_generica(
-        "formazioni_tipo_fantacalcio_v21",
-        ""
-    )
+    try:
+
+        raw = leggi_config_generica(
+            "formazioni_tipo_fantacalcio_v21",
+            ""
+        )
+
+    except Exception:
+
+        # La ROSA deve restare utilizzabile anche se il database cloud
+        # della configurazione è momentaneamente indisponibile.
+        raw = ""
 
     if raw:
 
