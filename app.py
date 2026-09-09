@@ -188,6 +188,15 @@ div[data-testid="stMainBlockContainer"] div[data-testid="stHorizontalBlock"] {
     margin-top: 0 !important;
 }
 
+
+/* V68 - percentuale IQR accanto al titolo */
+.iqr-gauge-title .iqr-title-percent {
+    color: #ffc21c !important;
+    font-size: inherit !important;
+    font-weight: 950 !important;
+    margin-left: 5px !important;
+    white-space: nowrap !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -3022,7 +3031,7 @@ def genera_html_gauge_iqr(
 
     return (
         '<div class="iqr-gauge-card">'
-        '<div class="iqr-gauge-title">⭐ IQR</div>'
+        f'<div class="iqr-gauge-title">⭐ IQR <span class="iqr-title-percent">{valore:.1f}%</span></div>'
 
         '<div class="iqr-scale-wrap">'
 
