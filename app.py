@@ -17847,6 +17847,66 @@ st.markdown(
         box-shadow: none !important;
     }
 
+
+    /* V78 - Budget: pulsanti +/- puliti e simmetrici */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] {
+        overflow: visible !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] > div {
+        gap: 5px !important;
+        overflow: visible !important;
+        background: transparent !important;
+        border: 0 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button {
+        width: 38px !important;
+        min-width: 38px !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: 1px solid #8fc7f5 !important;
+        border-radius: 9px !important;
+        background: #164f82 !important;
+        color: #ffffff !important;
+        box-shadow: none !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button:hover {
+        background: #1d609b !important;
+        border-color: #ffffff !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button:focus {
+        box-shadow: 0 0 0 1px rgba(255,255,255,.30) !important;
+        outline: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button svg {
+        width: 15px !important;
+        height: 15px !important;
+        color: #ffffff !important;
+        fill: currentColor !important;
+    }
+
     /* Menu */
     section[data-testid="stSidebar"] details > summary {
         min-height: 48px !important;
@@ -18537,7 +18597,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V76 &nbsp;|&nbsp; Offline Resiliente'
+        'V78 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
