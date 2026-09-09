@@ -16984,6 +16984,29 @@ st.markdown(
         color: #ffc21c !important;
         filter: none !important;
     }
+
+    /* ======================================================
+       V58 - ICONE REALMENTE MONOCROMATICHE ORO
+       ====================================================== */
+    section[data-testid="stSidebar"] .fe-card-icon,
+    section[data-testid="stSidebar"] .fe-budget-icon,
+    section[data-testid="stSidebar"] .sidebar-profile-icon {
+        color: #ffc21c !important;
+        -webkit-text-fill-color: #ffc21c !important;
+        filter: none !important;
+        text-shadow: none !important;
+        font-family: Arial, "Noto Sans Symbols 2", sans-serif !important;
+        font-weight: 900 !important;
+    }
+
+    section[data-testid="stSidebar"] .fe-card-icon *,
+    section[data-testid="stSidebar"] .fe-budget-icon *,
+    section[data-testid="stSidebar"] .sidebar-profile-icon * {
+        color: #ffc21c !important;
+        fill: #ffc21c !important;
+        stroke: #ffc21c !important;
+        filter: none !important;
+    }
 </style>
     """,
     unsafe_allow_html=True
@@ -17015,7 +17038,7 @@ with st.sidebar:
     st.markdown(
         (
             '<div class="sidebar-profile">'
-            '<span class="sidebar-profile-icon">👤</span>'
+            '<span class="sidebar-profile-icon">●</span>'
             '<span class="sidebar-profile-name">'
             + html.escape(PROFILO_ATTIVO)
             + '</span>'
@@ -17041,7 +17064,7 @@ with st.sidebar:
         st.markdown(
             """
             <div class="fe-budget-head">
-                <div class="fe-budget-icon">🪙</div>
+                <div class="fe-budget-icon">●</div>
                 <div class="fe-budget-title">Budget</div>
             </div>
             """,
@@ -17063,7 +17086,7 @@ with st.sidebar:
     st.markdown(
         f"""
         <div class="fe-side-card">
-            <div class="fe-card-icon">👛</div>
+            <div class="fe-card-icon">▣</div>
             <div>
                 <div class="fe-card-label">Budget rimanente</div>
                 <div class="fe-card-value">{formatta_crediti(budget_rimanente)} €</div>
@@ -17072,7 +17095,7 @@ with st.sidebar:
         </div>
 
         <div class="fe-side-card">
-            <div class="fe-card-icon">📊</div>
+            <div class="fe-card-icon">▥</div>
             <div>
                 <div class="fe-card-label">Spesa effettiva</div>
                 <div class="fe-card-value">{formatta_crediti(spesa_effettiva)} €</div>
@@ -17081,7 +17104,7 @@ with st.sidebar:
         </div>
 
         <div class="fe-side-card">
-            <div class="fe-card-icon">⚠</div>
+            <div class="fe-card-icon">▲</div>
             <div>
                 <div class="fe-card-label">Oltre soglia</div>
                 <div class="fe-card-value">{formatta_crediti(oltre_soglia)} €</div>
@@ -17090,7 +17113,7 @@ with st.sidebar:
         </div>
 
         <div class="fe-side-card">
-            <div class="fe-card-icon">👥</div>
+            <div class="fe-card-icon">♟</div>
             <div>
                 <div class="fe-card-label">Giocatori</div>
                 <div class="fe-card-value">{numero_rosa}/{MAX_GIOCATORI}</div>
@@ -17099,7 +17122,7 @@ with st.sidebar:
         </div>
 
         <div class="fe-side-card">
-            <div class="fe-card-icon">✋</div>
+            <div class="fe-card-icon">♜</div>
             <div>
                 <div class="fe-card-label">Portieri</div>
                 <div class="fe-card-value">{numero_portieri}/{MIN_PORTIERI}</div>
@@ -17289,7 +17312,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V57 &nbsp;|&nbsp; Offline Resiliente'
+        'V58 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
