@@ -10109,7 +10109,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "0.1"
+MULTILEGA_SCHEMA_VERSION = "0.2"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -10776,6 +10776,603 @@ def imposta_contesto_multilega_sessione(
         chiudi_connessione(
             conn
         )
+
+
+
+
+# ============================================================
+# MULTILEGA 0.2 - ACCESSI UTENTE -> LEGA -> SQUADRA
+# ============================================================
+
+def elenca_accessi_multilega(
+    username
+):
+    """
+    Restituisce tutte le membership attive dell'utente.
+
+    Un accesso è definito dalla relazione:
+        user -> league_members -> league -> team
+
+    I ruoli appartengono alla membership nella lega,
+    non all'utente in senso assoluto.
+    """
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute("""
+            SELECT
+                u.id,
+                l.id,
+                l.nome,
+                COALESCE(l.stagione, ''),
+                COALESCE(l.modalita, ''),
+                COALESCE(l.stato, ''),
+                t.id,
+                COALESCE(t.nome, ''),
+                lm.is_admin,
+                lm.is_auctioneer,
+                lm.is_team_member
+            FROM users u
+
+            JOIN league_members lm
+              ON lm.user_id = u.id
+             AND lm.is_active = 1
+
+            JOIN leagues l
+              ON l.id = lm.league_id
+
+            LEFT JOIN teams t
+              ON t.id = lm.team_id
+             AND t.is_active = 1
+
+            WHERE u.username = ?
+              AND u.is_active = 1
+
+            ORDER BY
+                l.nome,
+                t.posizione,
+                t.nome
+        """, (
+            username,
+        ))
+
+        righe = (
+            cur.fetchall()
+            or []
+        )
+
+        accessi = []
+
+        for riga in righe:
+
+            (
+                user_id,
+                league_id,
+                league_nome,
+                stagione,
+                modalita,
+                league_stato,
+                team_id,
+                team_nome,
+                is_admin,
+                is_auctioneer,
+                is_team_member
+            ) = riga
+
+            ruoli = []
+
+            if int(is_admin or 0) == 1:
+                ruoli.append(
+                    "ADMIN"
+                )
+
+            if int(is_auctioneer or 0) == 1:
+                ruoli.append(
+                    "BANDITORE"
+                )
+
+            if int(is_team_member or 0) == 1:
+                ruoli.append(
+                    "SQUADRA"
+                )
+
+            accessi.append({
+                "user_id":
+                    int(user_id),
+
+                "league_id":
+                    int(league_id),
+
+                "league_nome":
+                    str(league_nome),
+
+                "stagione":
+                    str(stagione or ""),
+
+                "modalita":
+                    str(modalita or ""),
+
+                "league_stato":
+                    str(league_stato or ""),
+
+                "team_id":
+                    (
+                        int(team_id)
+                        if team_id is not None
+                        else None
+                    ),
+
+                "team_nome":
+                    str(team_nome or ""),
+
+                "ruoli":
+                    ruoli
+            })
+
+        return accessi
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+
+def accesso_multilega_corrente():
+    """
+    Verifica che il contesto salvato in sessione appartenga davvero
+    all'utente attivo. Nessun team_id viene accettato solo perché
+    presente nel browser/session_state.
+    """
+
+    league_id = st.session_state.get(
+        "ml_league_id"
+    )
+
+    team_id = st.session_state.get(
+        "ml_team_id"
+    )
+
+    user_id = st.session_state.get(
+        "ml_user_id"
+    )
+
+    if (
+        league_id is None
+        or user_id is None
+    ):
+        return None
+
+    accessi = elenca_accessi_multilega(
+        PROFILO_ATTIVO
+    )
+
+    for accesso in accessi:
+
+        if (
+            int(accesso["league_id"])
+            == int(league_id)
+            and int(accesso["user_id"])
+            == int(user_id)
+            and (
+                accesso["team_id"]
+                == team_id
+            )
+        ):
+
+            return accesso
+
+    return None
+
+
+def applica_accesso_multilega(
+    accesso
+):
+    """
+    Imposta il contesto autorevole della lega selezionata.
+    """
+
+    st.session_state[
+        "ml_schema_version"
+    ] = MULTILEGA_SCHEMA_VERSION
+
+    st.session_state[
+        "ml_user_id"
+    ] = int(
+        accesso[
+            "user_id"
+        ]
+    )
+
+    st.session_state[
+        "ml_league_id"
+    ] = int(
+        accesso[
+            "league_id"
+        ]
+    )
+
+    st.session_state[
+        "ml_team_id"
+    ] = (
+        int(
+            accesso[
+                "team_id"
+            ]
+        )
+        if accesso[
+            "team_id"
+        ] is not None
+        else None
+    )
+
+    st.session_state[
+        "ml_league_nome"
+    ] = accesso[
+        "league_nome"
+    ]
+
+    st.session_state[
+        "ml_team_nome"
+    ] = accesso[
+        "team_nome"
+    ]
+
+    st.session_state[
+        "ml_ruoli"
+    ] = list(
+        accesso[
+            "ruoli"
+        ]
+    )
+
+    st.session_state[
+        "ml_stagione"
+    ] = accesso[
+        "stagione"
+    ]
+
+    st.session_state[
+        "ml_modalita"
+    ] = accesso[
+        "modalita"
+    ]
+
+
+def azzera_contesto_multilega():
+    """
+    Torna alla schermata LE MIE LEGHE senza scollegare l'utente.
+    """
+
+    for chiave in [
+        "ml_user_id",
+        "ml_league_id",
+        "ml_team_id",
+        "ml_league_nome",
+        "ml_team_nome",
+        "ml_ruoli",
+        "ml_stagione",
+        "ml_modalita"
+    ]:
+
+        st.session_state.pop(
+            chiave,
+            None
+        )
+
+
+def schermata_le_mie_leghe(
+    accessi
+):
+    """
+    Schermata MULTILEGA 0.2.
+
+    È volutamente separata dall'interfaccia operativa:
+    prima si identifica l'utente, poi si sceglie il contesto
+    Lega/Squadra, soltanto dopo si entra in FANTAELEGANZA.
+    """
+
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stMainBlockContainer"] {
+            padding-top: 1.4rem !important;
+        }
+
+        .ml02-wrap {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .ml02-header {
+            background:
+                linear-gradient(
+                    110deg,
+                    #061f3a 0%,
+                    #0b3158 100%
+                );
+            border: 2px solid #ffc21c;
+            border-radius: 18px;
+            padding: 22px 26px;
+            margin-bottom: 20px;
+            color: white;
+        }
+
+        .ml02-title {
+            font-size: 28px;
+            font-weight: 950;
+            line-height: 1;
+        }
+
+        .ml02-title span {
+            color: #ffc21c;
+        }
+
+        .ml02-user {
+            margin-top: 8px;
+            color: #cbd5e1;
+            font-size: 14px;
+        }
+
+        .ml02-card {
+            background: white;
+            border: 1px solid #dbe3ec;
+            border-radius: 14px;
+            padding: 17px 19px;
+            margin: 0 0 10px 0;
+            box-shadow: 0 3px 12px rgba(15,23,42,.05);
+        }
+
+        .ml02-league {
+            color: #071a2f;
+            font-size: 19px;
+            line-height: 1.1;
+            font-weight: 950;
+        }
+
+        .ml02-meta {
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .ml02-team {
+            color: #071a2f;
+            font-size: 14px;
+            font-weight: 850;
+            margin-top: 10px;
+        }
+
+        .ml02-role {
+            display: inline-block;
+            margin: 7px 5px 0 0;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #eef4fb;
+            border: 1px solid #c9d9e9;
+            color: #0b3158;
+            font-size: 10px;
+            font-weight: 900;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        (
+            '<div class="ml02-wrap">'
+            '<div class="ml02-header">'
+            '<div class="ml02-title">'
+            'FANTAELEGANZA <span>MULTILEGA</span>'
+            '</div>'
+            '<div class="ml02-user">'
+            'Le mie leghe · '
+            + html.escape(
+                PROFILO_ATTIVO
+            )
+            + '</div>'
+            '</div>'
+            '</div>'
+        ),
+        unsafe_allow_html=True
+    )
+
+    if not accessi:
+
+        st.error(
+            "Questo utente non è associato ad alcuna lega attiva."
+        )
+
+        if st.button(
+            "← TORNA ALLA SCELTA UTENTE",
+            use_container_width=False,
+            key="ml02_logout_senza_leghe"
+        ):
+
+            azzera_contesto_multilega()
+
+            st.session_state.pop(
+                "profilo_attivo",
+                None
+            )
+
+            st.session_state.pop(
+                "profilo_login_select",
+                None
+            )
+
+            st.rerun()
+
+        st.stop()
+
+    for indice, accesso in enumerate(
+        accessi
+    ):
+
+        ruoli_html = "".join(
+            (
+                '<span class="ml02-role">'
+                + html.escape(
+                    ruolo
+                )
+                + '</span>'
+            )
+            for ruolo in accesso[
+                "ruoli"
+            ]
+        )
+
+        team_testo = (
+            accesso[
+                "team_nome"
+            ]
+            or "Nessuna squadra associata"
+        )
+
+        stagione_modalita = " · ".join(
+            [
+                valore
+                for valore in [
+                    accesso[
+                        "stagione"
+                    ],
+                    accesso[
+                        "modalita"
+                    ]
+                ]
+                if valore
+            ]
+        )
+
+        col_card, col_enter = st.columns(
+            [
+                4.7,
+                1.3
+            ],
+            vertical_alignment="center"
+        )
+
+        with col_card:
+
+            st.markdown(
+                (
+                    '<div class="ml02-card">'
+                    '<div class="ml02-league">'
+                    + html.escape(
+                        accesso[
+                            "league_nome"
+                        ]
+                    )
+                    + '</div>'
+                    '<div class="ml02-meta">'
+                    + html.escape(
+                        stagione_modalita
+                    )
+                    + '</div>'
+                    '<div class="ml02-team">'
+                    'Squadra: '
+                    + html.escape(
+                        team_testo
+                    )
+                    + '</div>'
+                    + ruoli_html
+                    + '</div>'
+                ),
+                unsafe_allow_html=True
+            )
+
+        with col_enter:
+
+            if st.button(
+                "ENTRA",
+                type="primary",
+                use_container_width=True,
+                key=(
+                    "ml02_entra_"
+                    + str(
+                        accesso[
+                            "league_id"
+                        ]
+                    )
+                    + "_"
+                    + str(
+                        accesso[
+                            "team_id"
+                        ]
+                    )
+                )
+            ):
+
+                applica_accesso_multilega(
+                    accesso
+                )
+
+                st.session_state[
+                    "pagina"
+                ] = "DASHBOARD"
+
+                # Elimina soltanto cache operative che potrebbero
+                # appartenere al contesto precedente.
+                for chiave_sessione in list(
+                    st.session_state.keys()
+                ):
+
+                    if (
+                        chiave_sessione.startswith(
+                            "_df_"
+                        )
+                        or chiave_sessione.startswith(
+                            "_ultime_"
+                        )
+                        or chiave_sessione.startswith(
+                            "_costi_"
+                        )
+                        or chiave_sessione.startswith(
+                            "pdf_"
+                        )
+                    ):
+
+                        st.session_state.pop(
+                            chiave_sessione,
+                            None
+                        )
+
+                st.rerun()
+
+    st.markdown(
+        "---"
+    )
+
+    if st.button(
+        "← CAMBIA UTENTE",
+        use_container_width=False,
+        key="ml02_cambia_utente"
+    ):
+
+        azzera_contesto_multilega()
+
+        st.session_state.pop(
+            "profilo_attivo",
+            None
+        )
+
+        st.session_state.pop(
+            "profilo_login_select",
+            None
+        )
+
+        st.rerun()
+
+    st.caption(
+        "MULTILEGA 0.2 · La lega e la squadra vengono determinate "
+        "dalle membership registrate nel database."
+    )
+
+    st.stop()
 
 
 
@@ -14767,28 +15364,86 @@ inizializza_database(
 )
 
 # ------------------------------------------------------------
-# MULTILEGA 0.1
+# MULTILEGA 0.2
 # ------------------------------------------------------------
-# Non modifica ancora il comportamento dell'app.
-# Crea e sincronizza la struttura league/user/team in parallelo.
+# 1. prepara/sincronizza la foundation;
+# 2. legge le membership reali dell'utente;
+# 3. richiede la selezione Lega/Squadra;
+# 4. solo dopo entra nell'app operativa.
 inizializza_database_multilega()
 
 try:
 
-    _ml_league_id = sincronizza_legacy_in_multilega()
-
-    imposta_contesto_multilega_sessione(
-        _ml_league_id
-    )
+    sincronizza_legacy_in_multilega()
 
 except Exception as errore_multilega:
 
-    # La foundation non deve mai impedire l'avvio della V82 legacy.
+    # La foundation non deve impedire la diagnostica dell'app.
     st.session_state[
         "ml_foundation_error"
     ] = str(
         errore_multilega
     )
+
+try:
+
+    ACCESSI_MULTILEGA = (
+        elenca_accessi_multilega(
+            PROFILO_ATTIVO
+        )
+    )
+
+except Exception as errore_accessi:
+
+    st.error(
+        "Impossibile leggere le associazioni dell'utente alle leghe."
+    )
+
+    st.exception(
+        errore_accessi
+    )
+
+    st.stop()
+
+
+ACCESSO_MULTILEGA_ATTIVO = (
+    accesso_multilega_corrente()
+)
+
+if ACCESSO_MULTILEGA_ATTIVO is None:
+
+    azzera_contesto_multilega()
+
+    schermata_le_mie_leghe(
+        ACCESSI_MULTILEGA
+    )
+
+
+# Il contesto corrente è stato validato server-side tramite league_members.
+applica_accesso_multilega(
+    ACCESSO_MULTILEGA_ATTIVO
+)
+
+LEGA_ATTIVA_NOME = (
+    st.session_state.get(
+        "ml_league_nome",
+        ""
+    )
+)
+
+TEAM_ATTIVO_NOME = (
+    st.session_state.get(
+        "ml_team_nome",
+        ""
+    )
+)
+
+RUOLI_ATTIVI = (
+    st.session_state.get(
+        "ml_ruoli",
+        []
+    )
+)
 
 if "budget_asta_corrente" not in st.session_state:
 
@@ -19307,6 +19962,50 @@ with st.sidebar:
             + '</span>'
             '<span class="sidebar-profile-arrow">⌄</span>'
             '</div>'
+
+            '<div style="'
+            'margin:-3px 2px 8px 2px;'
+            'padding:6px 9px;'
+            'border-radius:8px;'
+            'background:rgba(255,255,255,.045);'
+            'border:1px solid rgba(255,255,255,.07);'
+            '">'
+            '<div style="'
+            'color:#ffc21c;'
+            'font-size:10px;'
+            'font-weight:900;'
+            'white-space:nowrap;'
+            'overflow:hidden;'
+            'text-overflow:ellipsis;'
+            '">'
+            + html.escape(
+                LEGA_ATTIVA_NOME
+            )
+            + '</div>'
+            '<div style="'
+            'color:#ffffff;'
+            'font-size:10px;'
+            'margin-top:2px;'
+            'white-space:nowrap;'
+            'overflow:hidden;'
+            'text-overflow:ellipsis;'
+            '">'
+            + html.escape(
+                TEAM_ATTIVO_NOME
+                or "Nessuna squadra"
+            )
+            + (
+                " · "
+                + html.escape(
+                    " / ".join(
+                        RUOLI_ATTIVI
+                    )
+                )
+                if RUOLI_ATTIVI
+                else ""
+            )
+            + '</div>'
+            '</div>'
         ),
         unsafe_allow_html=True
     )
@@ -19464,8 +20163,15 @@ with st.sidebar:
                             None
                         )
 
+                azzera_contesto_multilega()
+
                 st.session_state.pop(
                     "profilo_attivo",
+                    None
+                )
+
+                st.session_state.pop(
+                    "profilo_login_select",
                     None
                 )
 
@@ -19570,7 +20276,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 0.1 &nbsp;|&nbsp; V83 Foundation'
+        'MULTILEGA 0.2 &nbsp;|&nbsp; V84 League Access'
         '</div>',
         unsafe_allow_html=True
     )
