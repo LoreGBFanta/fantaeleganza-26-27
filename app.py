@@ -18478,6 +18478,100 @@ st.markdown(
         stroke: currentColor !important;
     }
 
+
+    /* ======================================================
+       V80 - BUDGET COMPATTO COME DASHBOARD, ANCHE IN ASTA
+       ====================================================== */
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"] {
+        min-height: 98px !important;
+        height: 98px !important;
+        padding: 9px 13px 10px 13px !important;
+        margin-bottom: 8px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-head {
+        grid-template-columns: 46px 1fr 22px !important;
+        gap: 9px !important;
+        min-height: 36px !important;
+        margin-bottom: 5px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-icon {
+        width: 46px !important;
+        min-width: 46px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-icon img {
+        width: 38px !important;
+        height: 38px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-title {
+        font-size: 14px !important;
+        line-height: 1 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-head::after {
+        font-size: 19px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] {
+        margin-left: 54px !important;
+        width: calc(100% - 54px) !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] > div {
+        gap: 3px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] input {
+        height: 40px !important;
+        min-height: 40px !important;
+        font-size: 21px !important;
+        border-radius: 7px !important;
+        padding: 0 10px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button {
+        width: 36px !important;
+        min-width: 36px !important;
+        max-width: 36px !important;
+
+        height: 36px !important;
+        min-height: 36px !important;
+        max-height: 36px !important;
+
+        border-radius: 7px !important;
+        border: 1px solid #8fc7f5 !important;
+        background: #164f82 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button svg {
+        width: 14px !important;
+        height: 14px !important;
+    }
 </style>
     """,
     unsafe_allow_html=True
@@ -18778,7 +18872,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V79 &nbsp;|&nbsp; Offline Resiliente'
+        'V80 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
