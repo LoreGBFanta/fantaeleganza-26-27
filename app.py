@@ -13158,109 +13158,146 @@ def mostra_dettaglio_iqr(
     descrizione_popup = html.escape(
         descrizione_iqr(
             valore_popup
-        ).upper()
+        )
     )
 
     colore_popup = colore_iqr(
         valore_popup
     )
 
-    st.markdown(
-        """
-<style>
-div[role="dialog"] {
-    max-width:760px !important;
-}
-
-/* Blocco IQR popup */
-div[role="dialog"] .iqr-popup-v75 {
-    width:100%;
-    max-width:560px;
-    margin:0 auto 22px auto;
-    text-align:center;
-}
-
-div[role="dialog"] .iqr-popup-v75-head {
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:10px;
-    margin:4px 0 18px 0;
-}
-
-div[role="dialog"] .iqr-popup-v75-star {
-    color:#ffc21c !important;
-    font-size:28px !important;
-    line-height:1 !important;
-    font-weight:950 !important;
-}
-
-div[role="dialog"] .iqr-popup-v75-title {
-    color:#111827 !important;
-    font-size:24px !important;
-    line-height:1 !important;
-    font-weight:900 !important;
-}
-
-div[role="dialog"] .iqr-popup-v75-percent {
-    color:#ffc21c !important;
-    font-size:24px !important;
-    line-height:1 !important;
-    font-weight:950 !important;
-}
-
-/* Nel popup mostriamo SOLO la barra della fascia qualitativa corrente */
-div[role="dialog"] .iqr-popup-v75-current-bar {
-    width:100%;
-    height:34px;
-    margin:0 auto 12px auto;
-    border-radius:0;
-    box-sizing:border-box;
-}
-
-div[role="dialog"] .iqr-popup-v75-status {
-    color:#111827 !important;
-    font-size:22px !important;
-    line-height:1.1 !important;
-    font-weight:900 !important;
-    margin:0 auto 10px auto;
-    text-align:center;
-}
-
-/* Responsive */
-@media (max-width:700px) {
-    div[role="dialog"] .iqr-popup-v75 {
-        max-width:96% !important;
-    }
-
-    div[role="dialog"] .iqr-popup-v75-star {
-        font-size:25px !important;
-    }
-
-    div[role="dialog"] .iqr-popup-v75-title,
-    div[role="dialog"] .iqr-popup-v75-percent {
-        font-size:22px !important;
-    }
-
-    div[role="dialog"] .iqr-popup-v75-status {
-        font-size:22px !important;
-    }
-}
-</style>
-        """,
-        unsafe_allow_html=True
+    # Posizione reale del triangolo sulla scala 0-100.
+    posizione_popup = max(
+        1.5,
+        min(
+            98.5,
+            valore_popup
+        )
     )
 
+    # ========================================================
+    # CARD IQR POPUP
+    # Tutta la grafica è INLINE per evitare interferenze CSS
+    # di Streamlit e ottenere lo stesso risultato del mockup.
+    # ========================================================
+
     popup_html = (
-        '<div class="iqr-popup-v75">'
-        '<div class="iqr-popup-v75-head">'
-        '<span class="iqr-popup-v75-star">★</span>'
-        '<span class="iqr-popup-v75-title">IQR</span>'
-        f'<span class="iqr-popup-v75-percent">{valore_popup:.1f}%</span>'
+        '<div style="'
+        'width:100%;'
+        'max-width:560px;'
+        'margin:0 auto 22px auto;'
+        'padding:14px 18px 16px 18px;'
+        'box-sizing:border-box;'
+        'background:#0b3158;'
+        'border-radius:12px;'
+        'text-align:center;'
+        '">'
+
+        # ----- Titolo -----
+        '<div style="'
+        'display:flex;'
+        'align-items:center;'
+        'justify-content:center;'
+        'gap:8px;'
+        'margin:0 0 18px 0;'
+        'white-space:nowrap;'
+        '">'
+
+        '<span style="'
+        'color:#ffc21c;'
+        'font-size:25px;'
+        'line-height:1;'
+        'font-weight:950;'
+        '">★</span>'
+
+        '<span style="'
+        'color:#ffffff;'
+        'font-size:22px;'
+        'line-height:1;'
+        'font-weight:950;'
+        '">IQR</span>'
+
+        f'<span style="'
+        f'color:#ffc21c;'
+        f'font-size:22px;'
+        f'line-height:1;'
+        f'font-weight:950;'
+        f'">{valore_popup:.1f}%</span>'
+
         '</div>'
-        f'<div class="iqr-popup-v75-current-bar" '
-        f'style="background:{colore_popup};"></div>'
-        f'<div class="iqr-popup-v75-status">{descrizione_popup}</div>'
+
+        # ----- Barra + triangolo -----
+        '<div style="'
+        'position:relative;'
+        'width:82%;'
+        'height:48px;'
+        'margin:0 auto 10px auto;'
+        'padding-top:14px;'
+        'box-sizing:border-box;'
+        '">'
+
+        '<div style="'
+        'width:100%;'
+        'height:31px;'
+        'display:flex;'
+        'overflow:hidden;'
+        'box-sizing:border-box;'
+        '">'
+
+        '<div style="'
+        'width:40%;'
+        'height:31px;'
+        'background:#050505;'
+        '"></div>'
+
+        '<div style="'
+        'width:25%;'
+        'height:31px;'
+        'background:#ff1616;'
+        '"></div>'
+
+        '<div style="'
+        'width:20%;'
+        'height:31px;'
+        'background:#0b6df5;'
+        '"></div>'
+
+        '<div style="'
+        'width:15%;'
+        'height:31px;'
+        'background:#16a34a;'
+        '"></div>'
+
+        '</div>'
+
+        f'<div style="'
+        f'position:absolute;'
+        f'top:0;'
+        f'left:{posizione_popup:.1f}%;'
+        f'width:0;'
+        f'height:0;'
+        f'transform:translateX(-50%);'
+        f'border-left:10px solid transparent;'
+        f'border-right:10px solid transparent;'
+        f'border-top:14px solid #ffffff;'
+        f'"></div>'
+
+        '</div>'
+
+        # ----- Stato qualitativo -----
+        f'<div style="'
+        f'display:inline-block;'
+        f'min-width:148px;'
+        f'margin:0 auto;'
+        f'padding:8px 18px;'
+        f'box-sizing:border-box;'
+        f'background:{colore_popup};'
+        f'color:#ffffff;'
+        f'font-size:22px;'
+        f'line-height:1.05;'
+        f'font-weight:950;'
+        f'border-radius:7px;'
+        f'">{descrizione_popup}</div>'
+
         '</div>'
     )
 
@@ -13276,9 +13313,11 @@ div[role="dialog"] .iqr-popup-v75-status {
     c1, c2, c3 = st.columns(3)
 
     with c1:
+
         st.markdown(
             "**1. Qualità della rosa**"
         )
+
         st.caption(
             "Ogni giocatore vale in base alla fascia FVM M "
             "del primo ruolo Mantra: Verde 100, Blu 70, "
@@ -13286,9 +13325,11 @@ div[role="dialog"] .iqr-popup-v75-status {
         )
 
     with c2:
+
         st.markdown(
             "**2. Densità fasce alte**"
         )
+
         st.caption(
             "Premia il numero di giocatori Verdi e Blu. "
             "Riferimenti calibrati per una lega a 12: "
@@ -13296,9 +13337,11 @@ div[role="dialog"] .iqr-popup-v75-status {
         )
 
     with c3:
+
         st.markdown(
             "**3. Bonus ruoli offensivi**"
         )
+
         st.caption(
             "Premia la presenza di Verdi/Blu nei ruoli "
             "Pc, A, W, T e C. Riferimenti: "
@@ -13309,15 +13352,20 @@ div[role="dialog"] .iqr-popup-v75-status {
         "### Dettaglio qualità per ruolo"
     )
 
-    dettaglio = dettaglio_iqr_per_ruolo(
-        df_rosa
+    dettaglio = (
+        dettaglio_iqr_per_ruolo(
+            df_rosa
+        )
     )
 
     if dettaglio.empty:
+
         st.info(
             "La rosa è ancora vuota."
         )
+
     else:
+
         st.dataframe(
             dettaglio,
             use_container_width=True,
@@ -18436,7 +18484,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V75 &nbsp;|&nbsp; Offline Resiliente'
+        'V76 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
