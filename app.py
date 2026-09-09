@@ -56,6 +56,92 @@ div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button {
         line-height: 1.15 !important;
     }
 }
+
+/* ==========================================================
+   IQR V45 - BARRA ORIZZONTALE
+   ========================================================== */
+
+.iqr-gauge-card {
+    width:100%;
+    box-sizing:border-box;
+    text-align:center;
+}
+
+.iqr-gauge-title {
+    color:#ffffff;
+    font-size:1rem;
+    font-weight:900;
+    margin-bottom:10px;
+}
+
+.iqr-scale-wrap {
+    position:relative;
+    width:82%;
+    margin:0 auto;
+    padding-bottom:20px;
+}
+
+.iqr-scale {
+    display:grid;
+    grid-template-columns:40fr 25fr 15fr 20fr;
+    width:100%;
+    height:24px;
+    border-radius:2px;
+    overflow:hidden;
+}
+
+.iqr-seg {
+    height:100%;
+}
+
+.iqr-seg-black {
+    background:#050505;
+}
+
+.iqr-seg-red {
+    background:#ff1616;
+}
+
+.iqr-seg-blue {
+    background:#0b6df5;
+}
+
+.iqr-seg-green {
+    background:#16a34a;
+}
+
+.iqr-pointer {
+    position:absolute;
+    bottom:0;
+    width:0;
+    height:0;
+    transform:translateX(-50%);
+    border-left:11px solid transparent;
+    border-right:11px solid transparent;
+    border-bottom:15px solid #ffc21c;
+}
+
+.iqr-gauge-value {
+    color:#ffc21c;
+    font-size:1.05rem;
+    font-weight:950;
+    margin-top:-2px;
+    margin-bottom:7px;
+}
+
+.iqr-gauge-description {
+    display:inline-block;
+    min-width:58%;
+    color:#ffffff !important;
+    font-size:1rem;
+    font-weight:950;
+    line-height:1;
+    text-align:center;
+    border:2px solid #050505;
+    border-radius:7px;
+    padding:8px 14px;
+    box-sizing:border-box;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -2566,7 +2652,11 @@ def descrizione_iqr(
     valore
 ):
     """
-    Etichetta qualitativa dell'Indice Qualità Rosa.
+    Fasce qualitative IQR:
+    0-40%      -> Rosa debole
+    40.1-65%   -> Rosa buona
+    65.1-80%   -> Rosa forte
+    >80%       -> Rosa eccellente
     """
 
     try:
@@ -2574,24 +2664,19 @@ def descrizione_iqr(
             valore
         )
     except Exception:
-        return "Rosa debole"
+        valore = 0.0
 
-    if valore >= 95:
-        return "Rosa eccezionale"
-
-    if valore >= 85:
+    if valore > 80.0:
         return "Rosa eccellente"
 
-    if valore >= 75:
-        return "Rosa molto forte"
+    if valore > 65.0:
+        return "Rosa forte"
 
-    if valore >= 60:
+    if valore > 40.0:
         return "Rosa buona"
 
-    if valore >= 40:
-        return "Rosa discreta"
-
     return "Rosa debole"
+
 
 
 def calcola_iqr(
@@ -2821,8 +2906,8 @@ def colore_iqr(
     valore
 ):
     """
-    Colore sintetico dell'indicatore IQR.
-    Scala richiesta: NERO -> ROSSO -> BLU -> VERDE.
+    Colore della fascia qualitativa IQR.
+    Nero -> Rosso -> Blu -> Verde.
     """
 
     try:
@@ -2832,23 +2917,25 @@ def colore_iqr(
     except Exception:
         valore = 0.0
 
-    if valore >= 85:
+    if valore > 80.0:
         return "#16a34a"
 
-    if valore >= 60:
-        return "#2563eb"
+    if valore > 65.0:
+        return "#0b6df5"
 
-    if valore >= 40:
-        return "#dc2626"
+    if valore > 40.0:
+        return "#ff1616"
 
-    return "#111827"
+    return "#050505"
+
 
 
 def genera_html_gauge_iqr(
     valore
 ):
     """
-    Crea il tachimetro semicircolare IQR in puro SVG/HTML.
+    Indicatore IQR orizzontale a 4 fasce.
+    La posizione del triangolo oro rappresenta il valore corrente.
     """
 
     try:
@@ -2866,103 +2953,10 @@ def genera_html_gauge_iqr(
         )
     )
 
-    cx = 120.0
-    cy = 108.0
-    r = 86.0
-
-    segmenti = [
-        (0.0, 40.0, "#111827"),
-        (40.0, 60.0, "#dc2626"),
-        (60.0, 85.0, "#2563eb"),
-        (85.0, 100.0, "#16a34a")
-    ]
-
-    polilinee = []
-
-    for inizio, fine, colore in segmenti:
-
-        punti = []
-
-        passi = 18
-
-        for indice in range(
-            passi + 1
-        ):
-
-            quota = (
-                inizio
-                + (
-                    fine
-                    - inizio
-                )
-                * indice
-                / passi
-            )
-
-            angolo = (
-                math.pi
-                - quota
-                / 100.0
-                * math.pi
-            )
-
-            x = (
-                cx
-                + r
-                * math.cos(
-                    angolo
-                )
-            )
-
-            y = (
-                cy
-                - r
-                * math.sin(
-                    angolo
-                )
-            )
-
-            punti.append(
-                f"{x:.1f},{y:.1f}"
-            )
-
-        polilinee.append(
-            (
-                f'<polyline points="{" ".join(punti)}" '
-                f'fill="none" stroke="{colore}" '
-                f'stroke-width="18" stroke-linecap="butt"/>'
-            )
-        )
-
-    angolo_indicatore = (
-        math.pi
-        - valore
-        / 100.0
-        * math.pi
-    )
-
-    lunghezza = 66.0
-
-    x2 = (
-        cx
-        + lunghezza
-        * math.cos(
-            angolo_indicatore
-        )
-    )
-
-    y2 = (
-        cy
-        - lunghezza
-        * math.sin(
-            angolo_indicatore
-        )
-    )
-
     descrizione = html.escape(
         descrizione_iqr(
             valore
-        )
+        ).upper()
     )
 
     colore_descrizione = (
@@ -2971,36 +2965,51 @@ def genera_html_gauge_iqr(
         )
     )
 
+    # posizione percentuale reale del triangolo sulla barra
+    posizione = max(
+        1.5,
+        min(
+            98.5,
+            valore
+        )
+    )
+
     return (
         '<div class="iqr-gauge-card">'
         '<div class="iqr-gauge-title">⭐ IQR</div>'
-        '<svg viewBox="0 0 240 128" class="iqr-gauge-svg" '
-        'role="img" aria-label="Indice Qualità Rosa">'
-        + "".join(
-            polilinee
-        )
+
+        '<div class="iqr-scale-wrap">'
+
+        '<div class="iqr-scale">'
+        '<div class="iqr-seg iqr-seg-black"></div>'
+        '<div class="iqr-seg iqr-seg-red"></div>'
+        '<div class="iqr-seg iqr-seg-blue"></div>'
+        '<div class="iqr-seg iqr-seg-green"></div>'
+        '</div>'
+
         + (
-            f'<line x1="{cx:.1f}" y1="{cy:.1f}" '
-            f'x2="{x2:.1f}" y2="{y2:.1f}" '
-            'stroke="#0f172a" stroke-width="5" '
-            'stroke-linecap="round"/>'
+            f'<div class="iqr-pointer" '
+            f'style="left:{posizione:.1f}%"></div>'
         )
+
+        + '</div>'
+
         + (
-            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="9" '
-            'fill="#0f172a"/>'
+            f'<div class="iqr-gauge-value">'
+            f'{valore:.1f}%'
+            f'</div>'
         )
-        + '</svg>'
-        + (
-            f'<div class="iqr-gauge-value">{valore:.1f}%</div>'
-        )
+
         + (
             f'<div class="iqr-gauge-description" '
-            f'style="background:{colore_descrizione};color:#ffffff;">'
-            f'{descrizione}</div>'
+            f'style="background:{colore_descrizione};">'
+            f'{descrizione}'
+            f'</div>'
         )
-        + '<div class="iqr-gauge-hint">Tocca / clicca per i dettagli</div>'
+
         + '</div>'
     )
+
 
 
 def dettaglio_iqr_per_ruolo(
@@ -12905,65 +12914,63 @@ def mostra_dettaglio_iqr(
     st.markdown(
         """
         <style>
-        /* Popup IQR compatto */
         div[role="dialog"] {
-            max-width: 760px !important;
+            max-width:760px !important;
         }
 
         div[role="dialog"] .iqr-popup-wrap {
-            width: 100%;
-            max-width: 350px;
-            margin: 0 auto 8px auto;
+            width:100%;
+            max-width:500px;
+            margin:0 auto 18px auto;
         }
 
         div[role="dialog"] .iqr-popup-wrap .iqr-gauge-card {
-            width: 100% !important;
-            max-width: 350px !important;
-            margin: 0 auto !important;
-        }
-
-        div[role="dialog"] .iqr-popup-wrap .iqr-gauge-svg {
-            width: 100% !important;
-            max-width: 350px !important;
-            height: auto !important;
-            display: block !important;
-            margin: 0 auto !important;
+            width:100% !important;
+            margin:0 auto !important;
+            text-align:center !important;
         }
 
         div[role="dialog"] .iqr-popup-wrap .iqr-gauge-title {
-            color: #0f172a !important;
-            font-size: 15px !important;
-            font-weight: 900 !important;
-            margin-bottom: 2px !important;
+            color:#0f172a !important;
+            font-size:18px !important;
+            font-weight:950 !important;
+            text-align:left !important;
+            margin-bottom:16px !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-scale-wrap {
+            width:86% !important;
+            padding-bottom:24px !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-scale {
+            height:34px !important;
+            box-shadow:0 4px 12px rgba(15,23,42,.10);
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-pointer {
+            border-left-width:13px !important;
+            border-right-width:13px !important;
+            border-bottom-width:17px !important;
         }
 
         div[role="dialog"] .iqr-popup-wrap .iqr-gauge-value {
-            color: #0f172a !important;
-            font-size: 24px !important;
-            line-height: 1 !important;
-            font-weight: 950 !important;
-            text-align: center !important;
-            margin-top: -4px !important;
+            color:#ffc21c !important;
+            font-size:24px !important;
+            font-weight:950 !important;
+            margin-top:0 !important;
+            margin-bottom:10px !important;
         }
 
         div[role="dialog"] .iqr-popup-wrap .iqr-gauge-description {
-            color: #ffffff !important;
-            font-size: 17px !important;
-            line-height: 1.1 !important;
-            font-weight: 900 !important;
-            padding: 7px 14px !important;
-            border-radius: 8px !important;
-            min-width: 150px !important;
-            text-align: center !important;
-            margin: 7px auto 0 auto !important;
-            display: table !important;
-        }
-
-        div[role="dialog"] .iqr-popup-wrap .iqr-gauge-hint {
-            color: #64748b !important;
-            font-size: 11px !important;
-            text-align: center !important;
-            margin-top: 5px !important;
+            min-width:68% !important;
+            color:#ffffff !important;
+            font-size:21px !important;
+            font-weight:950 !important;
+            padding:11px 18px !important;
+            border:2px solid #050505 !important;
+            border-radius:8px !important;
+            margin:0 auto !important;
         }
         </style>
         """,
@@ -13053,12 +13060,10 @@ def mostra_dettaglio_iqr(
 
     st.markdown(
         """
-- **0–39%** — Rosa debole
-- **40–59%** — Rosa discreta
-- **60–74%** — Rosa buona
-- **75–84%** — Rosa molto forte
-- **85–94%** — Rosa eccellente
-- **95–100%** — Rosa eccezionale
+- **0–40%** — Rosa debole
+- **40,1–65%** — Rosa buona
+- **65,1–80%** — Rosa forte
+- **>80%** — Rosa eccellente
         """
     )
 
@@ -14648,6 +14653,57 @@ st.markdown(
     section[data-testid="stSidebar"] div[class*="st-key-iqr_card_clickable"] .stButton > button {
         min-height: 100% !important;
         height: 100% !important;
+    }
+
+
+    /* IQR V45 - proporzioni card sidebar */
+    div[class*="st-key-iqr_card_clickable"] {
+        min-height: 150px !important;
+        height: auto !important;
+        padding: 10px 14px 12px 14px !important;
+        overflow: visible !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-card {
+        transform: none !important;
+        width:100% !important;
+        margin:0 !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-title {
+        color:#ffffff !important;
+        font-size:15px !important;
+        margin-bottom:8px !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-scale-wrap {
+        width:76% !important;
+        padding-bottom:18px !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-scale {
+        height:20px !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-pointer {
+        border-left-width:9px !important;
+        border-right-width:9px !important;
+        border-bottom-width:12px !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-value {
+        font-size:18px !important;
+        margin-top:-1px !important;
+        margin-bottom:6px !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-description {
+        min-width:66% !important;
+        color:#ffffff !important;
+        font-size:15px !important;
+        padding:7px 12px !important;
+        border-radius:7px !important;
+        margin:0 auto !important;
     }
 
     /* MENU IN FONDO */
