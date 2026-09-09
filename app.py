@@ -15384,7 +15384,165 @@ st.markdown(
             font-size: 24px !important;
         }
     }
-    </style>
+    
+    /* ======================================================
+       V48 - OVERRIDE FINALE IQR
+       Deve restare DOPO tutti gli stili precedenti.
+       ====================================================== */
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"] {
+        min-height: 225px !important;
+        height: 225px !important;
+        max-height: none !important;
+        margin: 0 0 10px 0 !important;
+        padding: 15px 16px 16px 16px !important;
+        overflow: visible !important;
+
+        background:
+            linear-gradient(
+                100deg,
+                #0b3158 0%,
+                #0a2b4d 100%
+            ) !important;
+
+        border: 1px solid #165387 !important;
+        border-radius: 15px !important;
+        box-sizing: border-box !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    .iqr-gauge-card {
+        transform: none !important;
+        transform-origin: initial !important;
+
+        width: 100% !important;
+        height: auto !important;
+
+        margin: 0 !important;
+        padding: 0 !important;
+
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+
+        overflow: visible !important;
+    }
+
+    /* Titolo: stessa dimensione delle etichette delle altre card */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    .iqr-gauge-title {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+
+        width: 100% !important;
+        height: auto !important;
+        min-height: 24px !important;
+
+        margin: 0 0 15px 0 !important;
+        padding: 0 !important;
+
+        color: #ffffff !important;
+
+        font-size: 15px !important;
+        line-height: 1.15 !important;
+        font-weight: 850 !important;
+
+        text-align: center !important;
+        white-space: nowrap !important;
+
+        overflow: visible !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    .iqr-scale-wrap {
+        position: relative !important;
+
+        width: 84% !important;
+
+        margin: 0 auto !important;
+        padding: 0 0 30px 0 !important;
+
+        overflow: visible !important;
+        box-sizing: border-box !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    .iqr-scale {
+        width: 100% !important;
+        height: 38px !important;
+
+        display: grid !important;
+        grid-template-columns: 40fr 25fr 15fr 20fr !important;
+
+        overflow: hidden !important;
+        border-radius: 0 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    .iqr-pointer {
+        position: absolute !important;
+
+        bottom: 3px !important;
+
+        width: 0 !important;
+        height: 0 !important;
+
+        transform: translateX(-50%) !important;
+
+        border-left: 16px solid transparent !important;
+        border-right: 16px solid transparent !important;
+        border-bottom: 21px solid #ffc21c !important;
+    }
+
+    /* Percentuale nascosta solo nella card laterale */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    .iqr-gauge-value {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    .iqr-gauge-description {
+        display: block !important;
+
+        width: 66% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+
+        margin: 8px auto 0 auto !important;
+        padding: 12px 10px !important;
+
+        color: #ffffff !important;
+
+        font-size: 18px !important;
+        line-height: 1.05 !important;
+        font-weight: 950 !important;
+
+        text-align: center !important;
+        white-space: nowrap !important;
+
+        border: 2px solid #050505 !important;
+        border-radius: 8px !important;
+
+        box-sizing: border-box !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    .iqr-gauge-hint {
+        display: none !important;
+    }
+
+</style>
     """,
     unsafe_allow_html=True
 )
