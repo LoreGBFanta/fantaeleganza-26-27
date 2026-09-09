@@ -10109,7 +10109,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "0.2"
+MULTILEGA_SCHEMA_VERSION = "0.3"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -11055,7 +11055,8 @@ def azzera_contesto_multilega():
         "ml_team_nome",
         "ml_ruoli",
         "ml_stagione",
-        "ml_modalita"
+        "ml_modalita",
+        "ml_accesso_validato"
     ]:
 
         st.session_state.pop(
@@ -11312,8 +11313,20 @@ def schermata_le_mie_leghe(
                 )
 
                 st.session_state[
+                    "ml_accesso_validato"
+                ] = dict(
+                    accesso
+                )
+
+                st.session_state[
                     "pagina"
-                ] = "DASHBOARD"
+                ] = (
+                    "DASHBOARD"
+                    if accesso.get(
+                        "team_id"
+                    ) is not None
+                    else "ADMIN LEGA"
+                )
 
                 # Elimina soltanto cache operative che potrebbero
                 # appartenere al contesto precedente.
@@ -11373,6 +11386,807 @@ def schermata_le_mie_leghe(
     )
 
     st.stop()
+
+
+
+
+# ============================================================
+# MULTILEGA 0.3 - ADMIN LEGA
+# ============================================================
+
+def crea_lega_multilega(
+    nome,
+    stagione,
+    modalita,
+    partecipanti,
+    max_giocatori,
+    min_portieri,
+    budget_iniziale,
+    incremento_minimo,
+    soglia_budget,
+    moltiplicatore_oltre_soglia,
+    tipo_asta,
+    fonte_listone
+):
+    """
+    Crea atomicamente:
+    - league
+    - league_rules
+    - N squadre placeholder
+    - membership ADMIN del creatore
+    - audit log
+    """
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute(
+            "SELECT id FROM users WHERE username = ?",
+            (
+                PROFILO_ATTIVO,
+            )
+        )
+
+        r_user = cur.fetchone()
+
+        if not r_user:
+            raise ValueError(
+                "Utente multilega non trovato."
+            )
+
+        user_id = int(
+            r_user[0]
+        )
+
+        cur.execute("""
+            INSERT INTO leagues (
+                nome,
+                stagione,
+                modalita,
+                stato,
+                created_by_user_id,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                ?, ?, ?, 'DRAFT', ?,
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            )
+        """, (
+            nome.strip(),
+            stagione.strip(),
+            modalita,
+            user_id
+        ))
+
+        league_id = int(
+            cur.lastrowid
+        )
+
+        cur.execute("""
+            INSERT INTO league_rules (
+                league_id,
+                partecipanti,
+                max_giocatori,
+                min_portieri,
+                budget_iniziale,
+                incremento_minimo,
+                soglia_budget,
+                moltiplicatore_oltre_soglia,
+                tipo_asta,
+                fonte_listone,
+                regolamento_bloccato,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            int(partecipanti),
+            int(max_giocatori),
+            int(min_portieri),
+            float(budget_iniziale),
+            float(incremento_minimo),
+            float(soglia_budget),
+            float(moltiplicatore_oltre_soglia),
+            tipo_asta,
+            fonte_listone.strip()
+        ))
+
+        # L'Admin inizialmente appartiene alla lega senza essere
+        # obbligatoriamente proprietario di una squadra.
+        cur.execute("""
+            INSERT INTO league_members (
+                league_id,
+                user_id,
+                team_id,
+                is_admin,
+                is_auctioneer,
+                is_team_member,
+                is_active,
+                joined_at
+            )
+            VALUES (?, ?, NULL, 1, 0, 0, 1, CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            user_id
+        ))
+
+        for posizione in range(
+            1,
+            int(partecipanti) + 1
+        ):
+
+            cur.execute("""
+                INSERT INTO teams (
+                    league_id,
+                    nome,
+                    owner_user_id,
+                    posizione,
+                    is_active,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, NULL, ?, 1,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """, (
+                league_id,
+                f"Squadra {posizione}",
+                posizione
+            ))
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,
+                user_id,
+                team_id,
+                azione,
+                entita,
+                entita_id,
+                dettagli_json,
+                created_at
+            )
+            VALUES (?, ?, NULL, 'LEAGUE_CREATED',
+                    'LEAGUE', ?, ?, CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            user_id,
+            str(league_id),
+            json.dumps(
+                {
+                    "nome":
+                        nome.strip(),
+
+                    "partecipanti":
+                        int(partecipanti),
+
+                    "budget":
+                        float(budget_iniziale),
+
+                    "modalita":
+                        modalita
+                },
+                ensure_ascii=False
+            )
+        ))
+
+        conn.commit()
+
+        return league_id
+
+    except Exception:
+
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+        raise
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+
+def leghe_amministrate_multilega():
+    """
+    Elenco compatto delle leghe in cui l'utente corrente è ADMIN.
+    Una sola query.
+    """
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute("""
+            SELECT
+                l.id,
+                l.nome,
+                COALESCE(l.stagione, ''),
+                COALESCE(l.modalita, ''),
+                COALESCE(l.stato, ''),
+                r.partecipanti,
+                r.max_giocatori,
+                r.min_portieri,
+                r.budget_iniziale,
+                r.incremento_minimo,
+                r.soglia_budget,
+                r.moltiplicatore_oltre_soglia,
+                COALESCE(r.tipo_asta, ''),
+                COALESCE(r.fonte_listone, ''),
+                r.regolamento_bloccato,
+                (
+                    SELECT COUNT(*)
+                    FROM teams t
+                    WHERE t.league_id = l.id
+                      AND t.is_active = 1
+                ) AS squadre_attive
+            FROM league_members lm
+
+            JOIN users u
+              ON u.id = lm.user_id
+
+            JOIN leagues l
+              ON l.id = lm.league_id
+
+            JOIN league_rules r
+              ON r.league_id = l.id
+
+            WHERE u.username = ?
+              AND lm.is_admin = 1
+              AND lm.is_active = 1
+
+            ORDER BY l.id DESC
+        """, (
+            PROFILO_ATTIVO,
+        ))
+
+        colonne = [
+            "league_id",
+            "nome",
+            "stagione",
+            "modalita",
+            "stato",
+            "partecipanti",
+            "max_giocatori",
+            "min_portieri",
+            "budget_iniziale",
+            "incremento_minimo",
+            "soglia_budget",
+            "moltiplicatore",
+            "tipo_asta",
+            "fonte_listone",
+            "regolamento_bloccato",
+            "squadre_attive"
+        ]
+
+        return [
+            dict(
+                zip(
+                    colonne,
+                    riga
+                )
+            )
+            for riga in (
+                cur.fetchall()
+                or []
+            )
+        ]
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+
+def squadre_lega_multilega(
+    league_id
+):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute("""
+            SELECT
+                id,
+                nome,
+                posizione,
+                owner_user_id
+            FROM teams
+            WHERE league_id = ?
+              AND is_active = 1
+            ORDER BY posizione, id
+        """, (
+            int(league_id),
+        ))
+
+        return [
+            {
+                "team_id":
+                    int(r[0]),
+
+                "nome":
+                    str(r[1]),
+
+                "posizione":
+                    int(r[2] or 0),
+
+                "owner_user_id":
+                    (
+                        int(r[3])
+                        if r[3] is not None
+                        else None
+                    )
+            }
+            for r in (
+                cur.fetchall()
+                or []
+            )
+        ]
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+
+def rinomina_squadra_multilega(
+    league_id,
+    team_id,
+    nuovo_nome
+):
+    nuovo_nome = nuovo_nome.strip()
+
+    if not nuovo_nome:
+        raise ValueError(
+            "Il nome squadra non può essere vuoto."
+        )
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        # Autorizzazione server-side: utente corrente deve essere Admin.
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members lm
+            JOIN users u
+              ON u.id = lm.user_id
+            WHERE lm.league_id = ?
+              AND u.username = ?
+              AND lm.is_admin = 1
+              AND lm.is_active = 1
+        """, (
+            int(league_id),
+            PROFILO_ATTIVO
+        ))
+
+        autorizzato = int(
+            cur.fetchone()[0]
+            or 0
+        ) > 0
+
+        if not autorizzato:
+            raise PermissionError(
+                "Operazione riservata all'Admin della lega."
+            )
+
+        cur.execute("""
+            UPDATE teams
+            SET nome = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND league_id = ?
+        """, (
+            nuovo_nome,
+            int(team_id),
+            int(league_id)
+        ))
+
+        if cur.rowcount == 0:
+            raise ValueError(
+                "Squadra non trovata."
+            )
+
+        conn.commit()
+
+    finally:
+
+        chiudi_connessione(
+            conn
+        )
+
+
+def render_admin_multilega():
+    """
+    MULTILEGA 0.3:
+    creazione lega, regolamento e squadre.
+    """
+
+    if "ADMIN" not in RUOLI_ATTIVI:
+
+        st.error(
+            "Questa sezione è riservata agli amministratori della lega."
+        )
+        return
+
+    st.subheader(
+        "⚙️ Amministrazione lega"
+    )
+
+    st.caption(
+        "MULTILEGA 0.3 · Crea la lega, definisci il regolamento "
+        "e prepara le squadre partecipanti."
+    )
+
+    tab_nuova, tab_esistenti = st.tabs(
+        [
+            "➕ Nuova lega",
+            "🏆 Le mie leghe"
+        ]
+    )
+
+    with tab_nuova:
+
+        with st.form(
+            "ml03_crea_lega",
+            clear_on_submit=False
+        ):
+
+            c1, c2, c3 = st.columns(3)
+
+            with c1:
+
+                nome = st.text_input(
+                    "Nome lega",
+                    value="FANTAELEGANZA 26/27"
+                )
+
+                stagione = st.text_input(
+                    "Stagione",
+                    value="2026/27"
+                )
+
+                modalita = st.selectbox(
+                    "Modalità",
+                    [
+                        "MANTRA",
+                        "CLASSIC"
+                    ],
+                    index=0
+                )
+
+                partecipanti = st.number_input(
+                    "Partecipanti",
+                    min_value=2,
+                    max_value=30,
+                    value=10,
+                    step=1
+                )
+
+            with c2:
+
+                max_giocatori = st.number_input(
+                    "Rosa massima",
+                    min_value=1,
+                    max_value=60,
+                    value=30,
+                    step=1
+                )
+
+                min_portieri = st.number_input(
+                    "Portieri minimi",
+                    min_value=0,
+                    max_value=10,
+                    value=2,
+                    step=1
+                )
+
+                budget_iniziale = st.number_input(
+                    "Budget iniziale",
+                    min_value=1.0,
+                    max_value=10000.0,
+                    value=500.0,
+                    step=10.0
+                )
+
+                incremento_minimo = st.number_input(
+                    "Incremento minimo asta",
+                    min_value=0.1,
+                    max_value=100.0,
+                    value=1.0,
+                    step=0.5
+                )
+
+            with c3:
+
+                soglia_budget = st.number_input(
+                    "Soglia budget",
+                    min_value=0.0,
+                    max_value=10000.0,
+                    value=500.0,
+                    step=10.0
+                )
+
+                moltiplicatore = st.number_input(
+                    "Moltiplicatore oltre soglia",
+                    min_value=1.0,
+                    max_value=10.0,
+                    value=3.0,
+                    step=0.5
+                )
+
+                tipo_asta = st.selectbox(
+                    "Tipologia asta",
+                    [
+                        "CHIAMATA",
+                        "ALTRO"
+                    ],
+                    index=0
+                )
+
+                fonte_listone = st.text_input(
+                    "Fonte listone",
+                    value="Fantacalcio.it"
+                )
+
+            crea = st.form_submit_button(
+                "CREA LEGA",
+                type="primary",
+                use_container_width=True
+            )
+
+            if crea:
+
+                if not nome.strip():
+
+                    st.error(
+                        "Inserisci il nome della lega."
+                    )
+
+                elif int(min_portieri) > int(max_giocatori):
+
+                    st.error(
+                        "I portieri minimi non possono superare "
+                        "la dimensione massima della rosa."
+                    )
+
+                else:
+
+                    try:
+
+                        nuova_lega_id = (
+                            crea_lega_multilega(
+                                nome,
+                                stagione,
+                                modalita,
+                                partecipanti,
+                                max_giocatori,
+                                min_portieri,
+                                budget_iniziale,
+                                incremento_minimo,
+                                soglia_budget,
+                                moltiplicatore,
+                                tipo_asta,
+                                fonte_listone
+                            )
+                        )
+
+                        st.session_state[
+                            "ml03_lega_creata"
+                        ] = (
+                            f"Lega creata correttamente "
+                            f"(ID {nuova_lega_id}). "
+                            f"Sono state predisposte "
+                            f"{int(partecipanti)} squadre."
+                        )
+
+                        # Gli accessi vanno riletti perché ora esiste
+                        # una nuova membership ADMIN.
+                        st.session_state.pop(
+                            "ml_accesso_validato",
+                            None
+                        )
+
+                        st.rerun()
+
+                    except Exception as errore:
+
+                        st.error(
+                            f"Errore durante la creazione della lega: {errore}"
+                        )
+
+        if "ml03_lega_creata" in st.session_state:
+
+            st.success(
+                st.session_state.pop(
+                    "ml03_lega_creata"
+                )
+            )
+
+    with tab_esistenti:
+
+        try:
+
+            leghe = (
+                leghe_amministrate_multilega()
+            )
+
+        except Exception as errore:
+
+            st.error(
+                f"Impossibile leggere le leghe: {errore}"
+            )
+            return
+
+        if not leghe:
+
+            st.info(
+                "Non amministri ancora nessuna lega."
+            )
+            return
+
+        for lega in leghe:
+
+            with st.expander(
+                (
+                    f"🏆 {lega['nome']} "
+                    f"· {lega['stagione']} "
+                    f"· {int(lega['squadre_attive'])} squadre"
+                ),
+                expanded=(
+                    int(
+                        lega[
+                            "league_id"
+                        ]
+                    )
+                    == int(
+                        st.session_state.get(
+                            "ml_league_id",
+                            -1
+                        )
+                    )
+                )
+            ):
+
+                r1, r2, r3, r4 = st.columns(4)
+
+                r1.metric(
+                    "Partecipanti",
+                    int(
+                        lega[
+                            "partecipanti"
+                        ]
+                    )
+                )
+
+                r2.metric(
+                    "Rosa",
+                    int(
+                        lega[
+                            "max_giocatori"
+                        ]
+                    )
+                )
+
+                r3.metric(
+                    "Budget",
+                    formatta_crediti(
+                        lega[
+                            "budget_iniziale"
+                        ]
+                    )
+                )
+
+                r4.metric(
+                    "Incremento",
+                    formatta_crediti(
+                        lega[
+                            "incremento_minimo"
+                        ]
+                    )
+                )
+
+                st.caption(
+                    f"{lega['modalita']} · "
+                    f"Asta {lega['tipo_asta']} · "
+                    f"Listone {lega['fonte_listone']} · "
+                    f"Oltre soglia ×{lega['moltiplicatore']}"
+                )
+
+                squadre = squadre_lega_multilega(
+                    lega[
+                        "league_id"
+                    ]
+                )
+
+                st.markdown(
+                    "**Squadre**"
+                )
+
+                for squadra in squadre:
+
+                    c_nome, c_salva = st.columns(
+                        [
+                            5,
+                            1
+                        ],
+                        vertical_alignment="bottom"
+                    )
+
+                    chiave = (
+                        "ml03_nome_team_"
+                        + str(
+                            squadra[
+                                "team_id"
+                            ]
+                        )
+                    )
+
+                    with c_nome:
+
+                        nuovo_nome = st.text_input(
+                            (
+                                f"Squadra "
+                                f"{squadra['posizione']}"
+                            ),
+                            value=squadra[
+                                "nome"
+                            ],
+                            key=chiave
+                        )
+
+                    with c_salva:
+
+                        if st.button(
+                            "SALVA",
+                            key=(
+                                "ml03_salva_team_"
+                                + str(
+                                    squadra[
+                                        "team_id"
+                                    ]
+                                )
+                            ),
+                            use_container_width=True
+                        ):
+
+                            try:
+
+                                rinomina_squadra_multilega(
+                                    lega[
+                                        "league_id"
+                                    ],
+                                    squadra[
+                                        "team_id"
+                                    ],
+                                    nuovo_nome
+                                )
+
+                                st.success(
+                                    "Nome aggiornato."
+                                )
+
+                                st.rerun()
+
+                            except Exception as errore:
+
+                                st.error(
+                                    str(
+                                        errore
+                                    )
+                                )
 
 
 
@@ -15364,62 +16178,104 @@ inizializza_database(
 )
 
 # ------------------------------------------------------------
-# MULTILEGA 0.2
+# MULTILEGA 0.3 - FAST BOOT
 # ------------------------------------------------------------
-# 1. prepara/sincronizza la foundation;
-# 2. legge le membership reali dell'utente;
-# 3. richiede la selezione Lega/Squadra;
-# 4. solo dopo entra nell'app operativa.
-inizializza_database_multilega()
+# V84 eseguiva CREATE TABLE + sincronizzazione legacy ad ogni rerun.
+# Con DB cloud questo significava molti round-trip ad ogni click
+# e poteva facilmente portare i cambi pagina a 15-20 secondi.
+#
+# Da V85 la foundation viene inizializzata UNA SOLA VOLTA
+# per sessione/profilo. I normali cambi sezione non rifanno
+# migrazione e DDL.
 
-try:
+_ml_boot_key = (
+    "ml03_boot_"
+    + PROFILO_ATTIVO
+)
 
-    sincronizza_legacy_in_multilega()
+if not st.session_state.get(
+    _ml_boot_key,
+    False
+):
 
-except Exception as errore_multilega:
+    try:
 
-    # La foundation non deve impedire la diagnostica dell'app.
-    st.session_state[
-        "ml_foundation_error"
-    ] = str(
-        errore_multilega
-    )
+        inizializza_database_multilega()
 
-try:
+        sincronizza_legacy_in_multilega()
 
-    ACCESSI_MULTILEGA = (
-        elenca_accessi_multilega(
-            PROFILO_ATTIVO
+        st.session_state[
+            _ml_boot_key
+        ] = True
+
+        st.session_state.pop(
+            "ml_foundation_error",
+            None
         )
-    )
 
-except Exception as errore_accessi:
+    except Exception as errore_multilega:
 
-    st.error(
-        "Impossibile leggere le associazioni dell'utente alle leghe."
-    )
-
-    st.exception(
-        errore_accessi
-    )
-
-    st.stop()
+        st.session_state[
+            "ml_foundation_error"
+        ] = str(
+            errore_multilega
+        )
 
 
+# Gli accessi vengono letti dal DB solo quando servono.
+# Una volta selezionata la lega, la membership validata è mantenuta
+# nel session_state server-side e non viene ri-queryata a ogni click.
 ACCESSO_MULTILEGA_ATTIVO = (
-    accesso_multilega_corrente()
+    st.session_state.get(
+        "ml_accesso_validato"
+    )
 )
 
 if ACCESSO_MULTILEGA_ATTIVO is None:
 
-    azzera_contesto_multilega()
+    try:
 
-    schermata_le_mie_leghe(
-        ACCESSI_MULTILEGA
+        ACCESSI_MULTILEGA = (
+            elenca_accessi_multilega(
+                PROFILO_ATTIVO
+            )
+        )
+
+    except Exception as errore_accessi:
+
+        st.error(
+            "Impossibile leggere le associazioni dell'utente alle leghe."
+        )
+
+        st.exception(
+            errore_accessi
+        )
+
+        st.stop()
+
+    accesso_sessione = (
+        accesso_multilega_corrente()
+    )
+
+    if accesso_sessione is None:
+
+        azzera_contesto_multilega()
+
+        schermata_le_mie_leghe(
+            ACCESSI_MULTILEGA
+        )
+
+    ACCESSO_MULTILEGA_ATTIVO = (
+        accesso_sessione
+    )
+
+    st.session_state[
+        "ml_accesso_validato"
+    ] = dict(
+        ACCESSO_MULTILEGA_ATTIVO
     )
 
 
-# Il contesto corrente è stato validato server-side tramite league_members.
 applica_accesso_multilega(
     ACCESSO_MULTILEGA_ATTIVO
 )
@@ -20276,7 +21132,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 0.2 &nbsp;|&nbsp; V84 League Access'
+        'MULTILEGA 0.3 &nbsp;|&nbsp; V85 Admin + Fast Navigation'
         '</div>',
         unsafe_allow_html=True
     )
@@ -20533,12 +21389,25 @@ PAGINE = [
     ("🔴", "VENDUTI AD AVVERSARI")
 ]
 
+if "ADMIN" in RUOLI_ATTIVI:
+
+    PAGINE.append(
+        (
+            "⚙️",
+            "ADMIN LEGA"
+        )
+    )
+
 st.markdown(
     '<div class="nav-title">Navigazione</div>',
     unsafe_allow_html=True
 )
 
-nav_cols = st.columns(7)
+nav_cols = st.columns(
+    len(
+        PAGINE
+    )
+)
 
 for col, (
     icona,
@@ -20579,6 +21448,8 @@ sezione = (
 
 operazioni_undo = (
     carica_ultime_operazioni()
+    if sezione != "ADMIN LEGA"
+    else pd.DataFrame()
 )
 
 undo1, undo2 = st.columns(
@@ -20738,10 +21609,19 @@ def conferma_elimina_tutta_rosa():
 
 
 # ============================================================
+# ADMIN LEGA
+# ============================================================
+
+if sezione == "ADMIN LEGA":
+
+    render_admin_multilega()
+
+
+# ============================================================
 # DASHBOARD
 # ============================================================
 
-if sezione == "DASHBOARD":
+elif sezione == "DASHBOARD":
 
     st.subheader(
         "📊 Dashboard"
