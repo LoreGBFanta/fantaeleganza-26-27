@@ -2995,7 +2995,7 @@ def genera_html_gauge_iqr(
         )
         + (
             f'<div class="iqr-gauge-description" '
-            f'style="background:{colore_descrizione};">'
+            f'style="background:{colore_descrizione};color:#ffffff;">'
             f'{descrizione}</div>'
         )
         + '<div class="iqr-gauge-hint">Tocca / clicca per i dettagli</div>'
@@ -12895,7 +12895,7 @@ def mostra_dettaglio_priorita_acquisto(
 
 @st.dialog(
     "IQR - Indice Qualità Rosa",
-    width="large"
+    width="medium"
 )
 def mostra_dettaglio_iqr(
     valore_iqr,
@@ -12903,8 +12903,80 @@ def mostra_dettaglio_iqr(
 ):
 
     st.markdown(
-        genera_html_gauge_iqr(
-            valore_iqr
+        """
+        <style>
+        /* Popup IQR compatto */
+        div[role="dialog"] {
+            max-width: 760px !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap {
+            width: 100%;
+            max-width: 350px;
+            margin: 0 auto 8px auto;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-gauge-card {
+            width: 100% !important;
+            max-width: 350px !important;
+            margin: 0 auto !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-gauge-svg {
+            width: 100% !important;
+            max-width: 350px !important;
+            height: auto !important;
+            display: block !important;
+            margin: 0 auto !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-gauge-title {
+            color: #0f172a !important;
+            font-size: 15px !important;
+            font-weight: 900 !important;
+            margin-bottom: 2px !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-gauge-value {
+            color: #0f172a !important;
+            font-size: 24px !important;
+            line-height: 1 !important;
+            font-weight: 950 !important;
+            text-align: center !important;
+            margin-top: -4px !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-gauge-description {
+            color: #ffffff !important;
+            font-size: 17px !important;
+            line-height: 1.1 !important;
+            font-weight: 900 !important;
+            padding: 7px 14px !important;
+            border-radius: 8px !important;
+            min-width: 150px !important;
+            text-align: center !important;
+            margin: 7px auto 0 auto !important;
+            display: table !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-gauge-hint {
+            color: #64748b !important;
+            font-size: 11px !important;
+            text-align: center !important;
+            margin-top: 5px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        (
+            '<div class="iqr-popup-wrap">'
+            + genera_html_gauge_iqr(
+                valore_iqr
+            )
+            + '</div>'
         ),
         unsafe_allow_html=True
     )
@@ -14926,19 +14998,29 @@ st.markdown(
     }
 
     div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] button {
-        width: 42px !important;
-        height: 42px !important;
-        min-height: 42px !important;
+        width: 40px !important;
+        height: 44px !important;
+        min-height: 44px !important;
         background: #124776 !important;
         color: #fff !important;
         border: 0 !important;
-        border-radius: 50% !important;
+        border-radius: 6px !important;
         padding: 0 !important;
+        margin-left: 2px !important;
+        box-shadow: none !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] button:hover {
+        background: #185989 !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] button * {
+        color: #fff !important;
     }
 
     /* IQR */
     div[class*="st-key-iqr_card_clickable"] {
-        min-height: 138px !important;
+        min-height: 132px !important;
         margin: 0 0 10px 0 !important;
         padding: 9px 14px !important;
         background:
@@ -14954,10 +15036,10 @@ st.markdown(
     }
 
     div[class*="st-key-iqr_card_clickable"] .iqr-gauge-card {
-        transform: scale(.82) !important;
+        transform: scale(.68) !important;
         transform-origin: center top !important;
-        margin-top: -3px !important;
-        margin-bottom: -14px !important;
+        margin-top: -8px !important;
+        margin-bottom: -32px !important;
     }
 
     div[class*="st-key-iqr_card_clickable"] .iqr-gauge-title {
@@ -14970,6 +15052,19 @@ st.markdown(
         color: #ffc21c !important;
         font-size: 23px !important;
         font-weight: 950 !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-description {
+        color: #ffffff !important;
+        font-size: 15px !important;
+        line-height: 1.15 !important;
+        font-weight: 900 !important;
+        padding: 5px 10px !important;
+        border-radius: 7px !important;
+        min-width: 120px !important;
+        text-align: center !important;
+        margin: 4px auto 0 auto !important;
+        display: table !important;
     }
 
     div[class*="st-key-iqr_card_clickable"] .iqr-gauge-hint {
