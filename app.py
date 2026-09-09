@@ -2710,8 +2710,8 @@ def descrizione_iqr(
     Fasce qualitative IQR:
     0-40%      -> Rosa debole
     40.1-65%   -> Rosa buona
-    65.1-80%   -> Rosa forte
-    >80%       -> Rosa eccellente
+    65.1-90%   -> Rosa forte
+    >90%       -> Rosa eccellente
     """
 
     try:
@@ -2721,7 +2721,7 @@ def descrizione_iqr(
     except Exception:
         valore = 0.0
 
-    if valore > 80.0:
+    if valore > 90.0:
         return "Rosa eccellente"
 
     if valore > 65.0:
@@ -2972,7 +2972,7 @@ def colore_iqr(
     except Exception:
         valore = 0.0
 
-    if valore > 80.0:
+    if valore > 90.0:
         return "#16a34a"
 
     if valore > 65.0:
