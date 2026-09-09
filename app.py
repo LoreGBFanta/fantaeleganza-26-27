@@ -3201,94 +3201,94 @@ def genera_html_gauge_iqr(
 ):
     """
     Card IQR in stile mockup.
+    HTML costruito senza indentazione iniziale per evitare
+    che Streamlit lo interpreti come codice Markdown.
     """
 
     try:
-        valore = float(valore)
+        valore = float(
+            valore
+        )
     except Exception:
         valore = 0.0
 
-    valore = max(0.0, min(100.0, valore))
-
-    descrizione = html.escape(
-        descrizione_iqr(valore)
+    valore = max(
+        0.0,
+        min(
+            100.0,
+            valore
+        )
     )
 
-    colore_descrizione = colore_iqr(valore)
+    descrizione = html.escape(
+        descrizione_iqr(
+            valore
+        )
+    )
+
+    colore_descrizione = (
+        colore_iqr(
+            valore
+        )
+    )
 
     posizione = max(
         1.5,
-        min(98.5, valore)
+        min(
+            98.5,
+            valore
+        )
     )
 
-    return f"""
-    <div class="iqr-gauge-card iqr-card-v71">
+    return (
+        '<div class="iqr-gauge-card iqr-card-v71">'
+        '<div class="iqr-v71-top">'
+        '<div class="iqr-v71-star">★</div>'
+        '<div class="iqr-v71-title">IQR</div>'
+        f'<div class="iqr-v71-percent">{valore:.1f}%</div>'
+        '<div class="iqr-v71-help">?</div>'
+        '</div>'
 
-        <div class="iqr-v71-top">
-            <div class="iqr-v71-star">★</div>
-            <div class="iqr-v71-title">IQR</div>
-            <div class="iqr-v71-percent">{valore:.1f}%</div>
-            <div class="iqr-v71-help">?</div>
-        </div>
+        '<div class="iqr-v71-bar-wrap">'
+        '<div class="iqr-scale">'
+        '<div class="iqr-seg iqr-seg-black" style="width:40%;flex:none;"></div>'
+        '<div class="iqr-seg iqr-seg-red" style="width:25%;flex:none;"></div>'
+        '<div class="iqr-seg iqr-seg-blue" style="width:20%;flex:none;"></div>'
+        '<div class="iqr-seg iqr-seg-green" style="width:15%;flex:none;"></div>'
+        '</div>'
+        f'<div class="iqr-v71-pointer" style="left:{posizione:.1f}%"></div>'
+        '</div>'
 
-        <div class="iqr-v71-bar-wrap">
-            <div class="iqr-scale">
-                <div class="iqr-seg iqr-seg-black" style="width:40%; flex:none;"></div>
-                <div class="iqr-seg iqr-seg-red" style="width:25%; flex:none;"></div>
-                <div class="iqr-seg iqr-seg-blue" style="width:20%; flex:none;"></div>
-                <div class="iqr-seg iqr-seg-green" style="width:15%; flex:none;"></div>
-            </div>
+        f'<div class="iqr-v71-status" '
+        f'style="background:{colore_descrizione};">'
+        f'{descrizione}'
+        '</div>'
 
-            <div
-                class="iqr-v71-pointer"
-                style="left:{posizione:.1f}%"
-            ></div>
-        </div>
+        '<div class="iqr-v71-legend">'
 
-        <div
-            class="iqr-v71-status"
-            style="background:{colore_descrizione};"
-        >
-            {descrizione}
-        </div>
+        '<div class="iqr-v71-legend-item">'
+        '<span class="iqr-v71-swatch sw-black"></span>'
+        '<div><b>0–40%</b><br><span>Rosa debole</span></div>'
+        '</div>'
 
-        <div class="iqr-v71-legend">
+        '<div class="iqr-v71-legend-item">'
+        '<span class="iqr-v71-swatch sw-red"></span>'
+        '<div><b>40,1–65%</b><br><span>Rosa buona</span></div>'
+        '</div>'
 
-            <div class="iqr-v71-legend-item">
-                <span class="iqr-v71-swatch sw-black"></span>
-                <div>
-                    <b>0–40%</b><br>
-                    <span>Rosa debole</span>
-                </div>
-            </div>
+        '<div class="iqr-v71-legend-item">'
+        '<span class="iqr-v71-swatch sw-blue"></span>'
+        '<div><b>65,1–85%</b><br><span>Rosa forte</span></div>'
+        '</div>'
 
-            <div class="iqr-v71-legend-item">
-                <span class="iqr-v71-swatch sw-red"></span>
-                <div>
-                    <b>40,1–65%</b><br>
-                    <span>Rosa buona</span>
-                </div>
-            </div>
+        '<div class="iqr-v71-legend-item">'
+        '<span class="iqr-v71-swatch sw-green"></span>'
+        '<div><b>&gt;85%</b><br><span>Rosa eccellente</span></div>'
+        '</div>'
 
-            <div class="iqr-v71-legend-item">
-                <span class="iqr-v71-swatch sw-blue"></span>
-                <div>
-                    <b>65,1–85%</b><br>
-                    <span>Rosa forte</span>
-                </div>
-            </div>
-
-            <div class="iqr-v71-legend-item">
-                <span class="iqr-v71-swatch sw-green"></span>
-                <div>
-                    <b>&gt;85%</b><br>
-                    <span>Rosa eccellente</span>
-                </div>
-            </div>
-
-        </div>
-    </div>
-    """
+        '</div>'
+        '</div>'
+    )
 
 
 
@@ -18353,7 +18353,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V71 &nbsp;|&nbsp; Offline Resiliente'
+        'V72 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
