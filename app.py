@@ -18416,7 +18416,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V73 &nbsp;|&nbsp; Offline Resiliente'
+        'V74 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
@@ -19661,7 +19661,85 @@ elif sezione == "ASTA":
                 height:68px !important;
             }
         }
-        </style>
+        
+/* ==========================================================
+   V74 - POPUP DETTAGLIO IQR
+   ========================================================== */
+
+/* Titolo interno IQR nel popup */
+div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-star,
+div[role="dialog"] .iqr-gauge-card .iqr-v73-star {
+    color: #ffc21c !important;
+    font-size: 26px !important;
+    line-height: 1 !important;
+    font-weight: 950 !important;
+}
+
+div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-title,
+div[role="dialog"] .iqr-gauge-card .iqr-v73-title {
+    color: #111827 !important;
+    font-size: 24px !important;
+    line-height: 1 !important;
+    font-weight: 900 !important;
+}
+
+div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-percent,
+div[role="dialog"] .iqr-gauge-card .iqr-v73-percent {
+    color: #ffc21c !important;
+    font-size: 24px !important;
+    line-height: 1 !important;
+    font-weight: 950 !important;
+}
+
+/* Stato qualitativo nel popup */
+div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-status,
+div[role="dialog"] .iqr-gauge-card .iqr-v73-status {
+    color: #ffffff !important;
+    font-size: 22px !important;
+    line-height: 1.15 !important;
+    font-weight: 900 !important;
+    padding: 10px 22px !important;
+}
+
+/* Mantiene ben leggibile e centrata l'intestazione */
+div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-top,
+div[role="dialog"] .iqr-gauge-card .iqr-v73-top {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+}
+
+/* Compatibilità con eventuale markup IQR precedente usato nel dettaglio */
+div[data-testid="stDialog"] .iqr-v71-star,
+div[role="dialog"] .iqr-v71-star {
+    color: #ffc21c !important;
+    font-size: 26px !important;
+    font-weight: 950 !important;
+}
+
+div[data-testid="stDialog"] .iqr-v71-title,
+div[role="dialog"] .iqr-v71-title {
+    color: #111827 !important;
+    font-size: 24px !important;
+    font-weight: 900 !important;
+}
+
+div[data-testid="stDialog"] .iqr-v71-percent,
+div[role="dialog"] .iqr-v71-percent {
+    color: #ffc21c !important;
+    font-size: 24px !important;
+    font-weight: 950 !important;
+}
+
+div[data-testid="stDialog"] .iqr-v71-status,
+div[role="dialog"] .iqr-v71-status {
+    color: #ffffff !important;
+    font-size: 22px !important;
+    line-height: 1.15 !important;
+    font-weight: 900 !important;
+}
+</style>
         """,
         unsafe_allow_html=True
     )
