@@ -261,47 +261,6 @@ PROFILI_APP = [
     "GOSTOBAR"
 ]
 
-# ------------------------------------------------------------
-# Navigazione interna IQR
-# ------------------------------------------------------------
-# Il click sulla card IQR usa un normale link HTML. Un link può creare
-# una nuova sessione Streamlit; per questo trasportiamo il profilo nella
-# query string e lo ripristiniamo PRIMA della schermata di login.
-profilo_da_url = str(
-    st.query_params.get(
-        "profilo",
-        ""
-    )
-).strip()
-
-if (
-    "profilo_attivo" not in st.session_state
-    and profilo_da_url in PROFILI_APP
-):
-    st.session_state[
-        "profilo_attivo"
-    ] = profilo_da_url
-
-# Memorizza la richiesta di apertura IQR e poi pulisce la URL.
-if str(
-    st.query_params.get(
-        "iqr_detail",
-        ""
-    )
-) == "1":
-
-    st.session_state[
-        "_apri_popup_iqr"
-    ] = True
-
-    # La richiesta è stata acquisita; togliamo i parametri dalla URL
-    # per evitare che il popup si riapra dopo la chiusura.
-    try:
-        st.query_params.clear()
-    except Exception:
-        pass
-
-
 if "profilo_attivo" not in st.session_state:
 
     st.markdown(
@@ -16028,6 +15987,219 @@ st.markdown(
         transform:translate(-50%,0) !important;
     }
 
+
+    /* ======================================================
+       V53 - IQR: CLICK NELLA STESSA PAGINA
+       Nessun link, nessun query param, nessuna nuova scheda.
+       ====================================================== */
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"] {
+        position: relative !important;
+        width: 100% !important;
+        margin: 0 0 10px 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    .iqr-v53-card {
+        width: 100% !important;
+        min-height: 225px !important;
+        height: 225px !important;
+        box-sizing: border-box !important;
+        padding: 15px 16px 16px 16px !important;
+
+        background: linear-gradient(
+            100deg,
+            #0b3158 0%,
+            #0a2b4d 100%
+        ) !important;
+
+        border: 1px solid #165387 !important;
+        border-radius: 15px !important;
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    .iqr-v53-card .iqr-gauge-card {
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    .iqr-v53-card .iqr-gauge-title {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+
+        margin: 0 0 15px 0 !important;
+        padding: 0 !important;
+
+        color: #ffffff !important;
+        font-size: 15px !important;
+        line-height: 1.15 !important;
+        font-weight: 850 !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    .iqr-v53-card .iqr-scale-wrap {
+        position: relative !important;
+        width: 84% !important;
+        margin: 0 auto !important;
+        padding: 0 0 30px 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    .iqr-v53-card .iqr-scale {
+        display: grid !important;
+        grid-template-columns: 40fr 25fr 15fr 20fr !important;
+        width: 100% !important;
+        height: 38px !important;
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    .iqr-v53-card .iqr-pointer {
+        bottom: 3px !important;
+        border-left: 16px solid transparent !important;
+        border-right: 16px solid transparent !important;
+        border-bottom: 21px solid #ffc21c !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    .iqr-v53-card .iqr-gauge-value {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    .iqr-v53-card .iqr-gauge-description {
+        display: block !important;
+        width: 66% !important;
+        min-width: 0 !important;
+        margin: 8px auto 0 auto !important;
+        padding: 12px 10px !important;
+
+        color: #ffffff !important;
+        font-size: 18px !important;
+        line-height: 1.05 !important;
+        font-weight: 950 !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+
+        border: 2px solid #050505 !important;
+        border-radius: 8px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Il vero bottone Streamlit è un overlay trasparente.
+       Non occupa spazio e non può apparire come cartellino bianco. */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    div[data-testid="stButton"] {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 30 !important;
+        width: 100% !important;
+        height: 225px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    div[data-testid="stButton"] > button {
+        position: absolute !important;
+        inset: 0 !important;
+
+        width: 100% !important;
+        height: 225px !important;
+        min-height: 225px !important;
+
+        margin: 0 !important;
+        padding: 0 !important;
+
+        border: 0 !important;
+        border-radius: 15px !important;
+
+        background: transparent !important;
+        box-shadow: none !important;
+        outline: none !important;
+
+        color: transparent !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+
+        opacity: 0.001 !important;
+        cursor: pointer !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]
+    div[data-testid="stButton"] > button * {
+        visibility: hidden !important;
+        display: none !important;
+    }
+
+    /* Tooltip custom in hover */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]::after {
+        content: "Clicca per aprire dettaglio IQR";
+
+        position: absolute !important;
+        left: 50% !important;
+        bottom: 9px !important;
+        transform: translate(-50%, 4px) !important;
+
+        z-index: 40 !important;
+
+        padding: 6px 10px !important;
+
+        background: rgba(5,18,34,.94) !important;
+        color: #ffffff !important;
+
+        border: 1px solid rgba(255,194,28,.55) !important;
+        border-radius: 7px !important;
+
+        font-size: 12px !important;
+        line-height: 1.15 !important;
+        font-weight: 700 !important;
+
+        white-space: nowrap !important;
+
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+
+        transition: opacity .14s ease, transform .14s ease !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v53_clickable"]:hover::after {
+        opacity: 1 !important;
+        visibility: visible !important;
+        transform: translate(-50%, 0) !important;
+    }
+
 </style>
     """,
     unsafe_allow_html=True
@@ -16154,37 +16326,30 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-    st.markdown(
-        (
-            '<a class="iqr-v51-link" '
-            'href="?iqr_detail=1&amp;profilo='
-            + html.escape(
-                PROFILO_ATTIVO,
-                quote=True
-            )
-            + '" '
-            '>'
-            '<div class="iqr-v51-card">'
-            + genera_html_gauge_iqr(
-                iqr
-            )
-            + '</div>'
-            '</a>'
-        ),
-        unsafe_allow_html=True
-    )
-
-    # Apertura popup richiesta dal click sulla card IQR.
-    # Il flag è in session_state, quindi il profilo resta quello corrente.
-    if st.session_state.pop(
-        "_apri_popup_iqr",
-        False
+    with st.container(
+        key="iqr_v53_clickable"
     ):
 
-        mostra_dettaglio_iqr(
-            iqr,
-            df_rosa_globale
+        st.markdown(
+            (
+                '<div class="iqr-v53-card">'
+                + genera_html_gauge_iqr(
+                    iqr
+                )
+                + '</div>'
+            ),
+            unsafe_allow_html=True
         )
+
+        if st.button(
+            "Apri dettaglio IQR",
+            key="btn_iqr_v53_overlay"
+        ):
+
+            mostra_dettaglio_iqr(
+                iqr,
+                df_rosa_globale
+            )
 
     with st.expander(
         "☰  MENU",
@@ -16331,7 +16496,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V52 &nbsp;|&nbsp; Offline Resiliente'
+        'V53 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
