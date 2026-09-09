@@ -142,6 +142,52 @@ div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] > button {
     padding:8px 14px;
     box-sizing:border-box;
 }
+
+/* ==========================================================
+   V67 - NAVIGAZIONE PORTATA IN ALTO IN TUTTE LE SEZIONI
+   ========================================================== */
+
+/* Nuove versioni Streamlit */
+div[data-testid="stMainBlockContainer"] {
+    padding-top: 0.20rem !important;
+    margin-top: 0 !important;
+}
+
+/* Compatibilità con versioni precedenti */
+section.main > div,
+section[data-testid="stMain"] > div,
+.main .block-container,
+div[data-testid="stAppViewBlockContainer"] {
+    padding-top: 0.20rem !important;
+    margin-top: 0 !important;
+}
+
+/* Elimina eventuale spazio residuo prima della navbar */
+div[data-testid="stMainBlockContainer"] > div:first-child,
+.main .block-container > div:first-child {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+/* Titolo NAVIGAZIONE aderente alla parte alta */
+.nav-title {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+    margin-bottom: 4px !important;
+}
+
+/* Prima riga di colonne della navbar senza spazio superiore */
+div[data-testid="stMainBlockContainer"] .nav-title + div[data-testid="stHorizontalBlock"],
+.main .block-container .nav-title + div[data-testid="stHorizontalBlock"] {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+/* Mantiene un piccolo margine sotto la navigazione */
+div[data-testid="stMainBlockContainer"] div[data-testid="stHorizontalBlock"] {
+    margin-top: 0 !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -18073,7 +18119,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V66 &nbsp;|&nbsp; Offline Resiliente'
+        'V67 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
