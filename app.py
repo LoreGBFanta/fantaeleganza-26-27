@@ -18478,100 +18478,6 @@ st.markdown(
         stroke: currentColor !important;
     }
 
-
-    /* ======================================================
-       V80 - BUDGET COMPATTO COME DASHBOARD, ANCHE IN ASTA
-       ====================================================== */
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"] {
-        min-height: 98px !important;
-        height: 98px !important;
-        padding: 9px 13px 10px 13px !important;
-        margin-bottom: 8px !important;
-    }
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"]
-    .fe-budget-head {
-        grid-template-columns: 46px 1fr 22px !important;
-        gap: 9px !important;
-        min-height: 36px !important;
-        margin-bottom: 5px !important;
-    }
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"]
-    .fe-budget-icon {
-        width: 46px !important;
-        min-width: 46px !important;
-    }
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"]
-    .fe-budget-icon img {
-        width: 38px !important;
-        height: 38px !important;
-    }
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"]
-    .fe-budget-title {
-        font-size: 14px !important;
-        line-height: 1 !important;
-    }
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"]
-    .fe-budget-head::after {
-        font-size: 19px !important;
-    }
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"]
-    div[data-testid="stNumberInput"] {
-        margin-left: 54px !important;
-        width: calc(100% - 54px) !important;
-    }
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"]
-    div[data-testid="stNumberInput"] > div {
-        gap: 3px !important;
-    }
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"]
-    div[data-testid="stNumberInput"] input {
-        height: 40px !important;
-        min-height: 40px !important;
-        font-size: 21px !important;
-        border-radius: 7px !important;
-        padding: 0 10px !important;
-    }
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"]
-    div[data-testid="stNumberInput"] button {
-        width: 36px !important;
-        min-width: 36px !important;
-        max-width: 36px !important;
-
-        height: 36px !important;
-        min-height: 36px !important;
-        max-height: 36px !important;
-
-        border-radius: 7px !important;
-        border: 1px solid #8fc7f5 !important;
-        background: #164f82 !important;
-    }
-
-    section[data-testid="stSidebar"]
-    div[class*="st-key-sidebar_budget_card"]
-    div[data-testid="stNumberInput"] button svg {
-        width: 14px !important;
-        height: 14px !important;
-    }
 </style>
     """,
     unsafe_allow_html=True
@@ -18872,7 +18778,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V80 &nbsp;|&nbsp; Offline Resiliente'
+        'V81 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
@@ -20013,7 +19919,7 @@ elif sezione == "ASTA":
         """
         <style>
         /* VERSIONE B - CONSOLE ASTA COMPATTA */
-        div[data-testid="stNumberInput"] input {
+        section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
             font-size:1.22rem !important;
             font-weight:800 !important;
             text-align:center !important;
@@ -20023,15 +19929,15 @@ elif sezione == "ASTA":
             background:#ffffff !important;
         }
 
-        div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+        section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
             border:2px solid #94a3b8 !important;
             border-radius:10px !important;
             background:#ffffff !important;
             min-height:50px !important;
         }
 
-        div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within > div,
-        div[data-testid="stNumberInput"]:focus-within input {
+        section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within > div,
+        section[data-testid="stMain"] div[data-testid="stNumberInput"]:focus-within input {
             border-color:#071a2f !important;
             box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
         }
@@ -20067,14 +19973,14 @@ elif sezione == "ASTA":
         }
 
         /* OFFERTA: alza l'intero controllo, compresi +/- */
-        div[data-testid="stNumberInput"] > div,
-        div[data-testid="stNumberInput"] [data-baseweb="input"],
-        div[data-testid="stNumberInput"] [data-baseweb="base-input"] {
+        section[data-testid="stMain"] div[data-testid="stNumberInput"] > div,
+        section[data-testid="stMain"] div[data-testid="stNumberInput"] [data-baseweb="input"],
+        section[data-testid="stMain"] div[data-testid="stNumberInput"] [data-baseweb="base-input"] {
             min-height:76px !important;
             height:76px !important;
         }
 
-        div[data-testid="stNumberInput"] input {
+        section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
             min-height:76px !important;
             height:76px !important;
             font-size:1.22rem !important;
@@ -20085,13 +19991,13 @@ elif sezione == "ASTA":
             padding-bottom:0 !important;
         }
 
-        div[data-testid="stNumberInput"] button {
+        section[data-testid="stMain"] div[data-testid="stNumberInput"] button {
             height:38px !important;
             min-height:38px !important;
         }
 
         /* Metriche: riferimento visivo per l'altezza della riga */
-        div[data-testid="stMetric"] {
+        section[data-testid="stMain"] div[data-testid="stMetric"] {
             min-height:76px !important;
             height:76px !important;
             padding:8px 12px !important;
@@ -20102,12 +20008,12 @@ elif sezione == "ASTA":
         }
 
         @media (max-width:768px) {
-            div[data-testid="stNumberInput"] input {
+            section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
                 font-size:1.08rem !important;
                 min-height:52px !important;
             }
 
-            div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+            section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
                 min-height:46px !important;
             }
 
