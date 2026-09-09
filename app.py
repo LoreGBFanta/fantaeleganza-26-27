@@ -13366,8 +13366,61 @@ def mostra_dettaglio_iqr(
 
     else:
 
+        # Colora esclusivamente la cella "Qualità media"
+        # secondo la scala qualitativa IQR.
+        def stile_cella_qualita_media(
+            valore
+        ):
+
+            try:
+                numero = float(
+                    str(
+                        valore
+                    )
+                    .replace(
+                        "%",
+                        ""
+                    )
+                    .replace(
+                        ",",
+                        "."
+                    )
+                    .strip()
+                )
+            except Exception:
+                numero = 0.0
+
+            if numero > 85.0:
+                sfondo = "#16a34a"
+
+            elif numero > 65.0:
+                sfondo = "#0b6df5"
+
+            elif numero > 40.0:
+                sfondo = "#ff1616"
+
+            else:
+                sfondo = "#050505"
+
+            return (
+                f"background-color:{sfondo};"
+                "color:#ffffff;"
+                "font-weight:900;"
+                "text-align:center;"
+            )
+
+        dettaglio_stilizzato = (
+            dettaglio.style
+            .map(
+                stile_cella_qualita_media,
+                subset=[
+                    "Qualità media"
+                ]
+            )
+        )
+
         st.dataframe(
-            dettaglio,
+            dettaglio_stilizzato,
             use_container_width=True,
             hide_index=True
         )
