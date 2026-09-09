@@ -16661,6 +16661,287 @@ st.markdown(
         transform: translate(-50%, 0) !important;
     }
 
+
+    /* ======================================================
+       V56 - SIDEBAR UNIFORME COME MOCKUP
+       ====================================================== */
+
+    :root {
+        --fe-side-bg: #071f38;
+        --fe-side-card: #0b3158;
+        --fe-side-card-2: #0a2b4d;
+        --fe-side-border: #155486;
+        --fe-side-gold: #ffc21c;
+        --fe-side-white: #ffffff;
+        --fe-side-soft: #bfd2e5;
+        --fe-side-blue-btn: #124776;
+    }
+
+    /* ------------------------------------------------------
+       PROFILO
+       ------------------------------------------------------ */
+    section[data-testid="stSidebar"] .sidebar-profile {
+        min-height: 48px !important;
+        height: 48px !important;
+        margin: 0 0 9px 0 !important;
+        padding: 0 14px !important;
+        border-radius: 12px !important;
+        background: linear-gradient(
+            90deg,
+            #0a345f 0%,
+            #0b3a69 100%
+        ) !important;
+        border: 1px solid rgba(62,132,190,.32) !important;
+    }
+
+    section[data-testid="stSidebar"] .sidebar-profile-icon {
+        color: var(--fe-side-gold) !important;
+        font-size: 18px !important;
+        margin-right: 9px !important;
+    }
+
+    section[data-testid="stSidebar"] .sidebar-profile-name {
+        color: var(--fe-side-white) !important;
+        font-size: 14px !important;
+        font-weight: 900 !important;
+    }
+
+    /* ------------------------------------------------------
+       CARD STANDARD
+       ------------------------------------------------------ */
+    section[data-testid="stSidebar"] .fe-side-card {
+        width: 100% !important;
+        min-height: 82px !important;
+        height: 82px !important;
+        margin: 0 0 8px 0 !important;
+        padding: 11px 14px !important;
+
+        display: grid !important;
+        grid-template-columns: 46px 1fr 20px !important;
+        align-items: center !important;
+        column-gap: 10px !important;
+
+        background: linear-gradient(
+            100deg,
+            var(--fe-side-card) 0%,
+            var(--fe-side-card-2) 100%
+        ) !important;
+
+        border: 1px solid var(--fe-side-border) !important;
+        border-radius: 12px !important;
+        box-sizing: border-box !important;
+
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.025) !important;
+    }
+
+    section[data-testid="stSidebar"] .fe-card-icon {
+        width: 46px !important;
+        min-width: 46px !important;
+        color: var(--fe-side-gold) !important;
+        font-size: 29px !important;
+        line-height: 1 !important;
+        text-align: center !important;
+    }
+
+    section[data-testid="stSidebar"] .fe-card-label {
+        margin: 0 0 5px 0 !important;
+        color: var(--fe-side-white) !important;
+        font-size: 13px !important;
+        line-height: 1.05 !important;
+        font-weight: 850 !important;
+    }
+
+    section[data-testid="stSidebar"] .fe-card-value {
+        color: var(--fe-side-gold) !important;
+        font-size: 22px !important;
+        line-height: 1 !important;
+        font-weight: 950 !important;
+        white-space: nowrap !important;
+    }
+
+    section[data-testid="stSidebar"] .fe-card-help {
+        width: 20px !important;
+        height: 20px !important;
+        color: var(--fe-side-soft) !important;
+        font-size: 13px !important;
+        font-weight: 900 !important;
+        line-height: 18px !important;
+        text-align: center !important;
+        border: 1px solid var(--fe-side-soft) !important;
+        border-radius: 50% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* ------------------------------------------------------
+       BUDGET - stessa card delle altre
+       ------------------------------------------------------ */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"] {
+        position: relative !important;
+
+        width: 100% !important;
+        min-height: 94px !important;
+        height: 94px !important;
+
+        margin: 0 0 8px 0 !important;
+        padding: 10px 12px 10px 12px !important;
+
+        background: linear-gradient(
+            100deg,
+            var(--fe-side-card) 0%,
+            var(--fe-side-card-2) 100%
+        ) !important;
+
+        border: 1px solid var(--fe-side-border) !important;
+        border-radius: 12px !important;
+        box-sizing: border-box !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.025) !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-head {
+        display: grid !important;
+        grid-template-columns: 38px 1fr 18px !important;
+        align-items: center !important;
+        gap: 8px !important;
+        margin: 0 0 5px 0 !important;
+        min-height: 27px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-icon {
+        width: 38px !important;
+        color: var(--fe-side-gold) !important;
+        font-size: 26px !important;
+        line-height: 1 !important;
+        text-align: center !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-title {
+        color: var(--fe-side-white) !important;
+        font-size: 13px !important;
+        line-height: 1 !important;
+        font-weight: 850 !important;
+    }
+
+    /* piccolo simbolo modifica, coerente col mockup */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-head::after {
+        content: "✎";
+        color: var(--fe-side-soft) !important;
+        font-size: 18px !important;
+        line-height: 1 !important;
+        text-align: right !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] {
+        margin: 0 0 0 46px !important;
+        width: calc(100% - 46px) !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] label {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] > div {
+        gap: 3px !important;
+        background: transparent !important;
+        border: 0 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] input {
+        height: 38px !important;
+        min-height: 38px !important;
+
+        padding: 0 10px !important;
+
+        color: var(--fe-side-gold) !important;
+        background: #092947 !important;
+
+        border: 1px solid #1a5a8d !important;
+        border-radius: 7px !important;
+
+        font-size: 20px !important;
+        line-height: 1 !important;
+        font-weight: 950 !important;
+
+        box-shadow: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button {
+        width: 34px !important;
+        min-width: 34px !important;
+        height: 38px !important;
+        min-height: 38px !important;
+
+        margin: 0 !important;
+        padding: 0 !important;
+
+        color: #ffffff !important;
+        background: var(--fe-side-blue-btn) !important;
+
+        border: 0 !important;
+        border-radius: 6px !important;
+
+        box-shadow: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button:hover {
+        background: #185989 !important;
+    }
+
+    /* ------------------------------------------------------
+       IQR
+       Mantiene le ultime modifiche V55.
+       Cambiamo solo bordo/background per uniformarlo alle card.
+       ------------------------------------------------------ */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_v55_clickable"]
+    .iqr-v55-card {
+        background: linear-gradient(
+            100deg,
+            var(--fe-side-card) 0%,
+            var(--fe-side-card-2) 100%
+        ) !important;
+
+        border: 1px solid var(--fe-side-border) !important;
+        border-radius: 12px !important;
+    }
+
+    /* ------------------------------------------------------
+       MENU
+       ------------------------------------------------------ */
+    section[data-testid="stSidebar"] details > summary {
+        background: #082744 !important;
+        color: var(--fe-side-gold) !important;
+        border: 2px solid var(--fe-side-gold) !important;
+        border-radius: 12px !important;
+        font-size: 15px !important;
+        font-weight: 950 !important;
+    }
+
+    section[data-testid="stSidebar"] details > summary * {
+        color: var(--fe-side-gold) !important;
+    }
+
 </style>
     """,
     unsafe_allow_html=True
@@ -16966,7 +17247,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V55 &nbsp;|&nbsp; Offline Resiliente'
+        'V56 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
