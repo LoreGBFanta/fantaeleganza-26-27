@@ -1429,6 +1429,144 @@ def migra_password_account_legacy():
         )
 
 
+
+# ============================================================
+# MULTILEGA 0.7 - PROFILO UTENTE
+# ============================================================
+
+def inizializza_schema_profilo_utente():
+    if st.session_state.get("_ml07_profile_schema_ok", False):
+        return
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("PRAGMA table_info(users)")
+        colonne = {str(r[1]) for r in cur.fetchall()}
+        for nome, tipo in [("display_name","TEXT"),("profile_image","TEXT")]:
+            if nome not in colonne:
+                cur.execute(f"ALTER TABLE users ADD COLUMN {nome} {tipo}")
+        conn.commit()
+        st.session_state["_ml07_profile_schema_ok"] = True
+    finally:
+        _portal_close(conn)
+
+
+def carica_profilo_utente():
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, username, email, display_name, profile_image
+            FROM users WHERE id = ? LIMIT 1
+        """,(int(st.session_state.get("auth_user_id")),))
+        r=cur.fetchone()
+        if not r: return None
+        return {"id":int(r[0]),"username":str(r[1] or ""),
+                "email":str(r[2] or ""),"display_name":str(r[3] or ""),
+                "profile_image":str(r[4] or "")}
+    finally:
+        _portal_close(conn)
+
+
+def salva_profilo_utente(display_name,email,immagine_caricata=None,rimuovi_immagine=False):
+    user_id=int(st.session_state.get("auth_user_id"))
+    conn=_portal_raw_connection(); cur=conn.cursor()
+    try:
+        immagine_db=None; aggiorna=False
+        if rimuovi_immagine:
+            immagine_db=""; aggiorna=True
+        elif immagine_caricata is not None:
+            import base64
+            contenuto=immagine_caricata.getvalue()
+            if len(contenuto)>2*1024*1024:
+                raise ValueError("L'immagine profilo non può superare 2 MB.")
+            mime=getattr(immagine_caricata,"type",None) or "image/png"
+            if mime not in ("image/png","image/jpeg","image/webp"):
+                raise ValueError("Formato immagine non supportato.")
+            immagine_db="data:"+mime+";base64,"+base64.b64encode(contenuto).decode("ascii")
+            aggiorna=True
+        if aggiorna:
+            cur.execute("""UPDATE users SET display_name=?,email=?,profile_image=?,
+                           updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                        (str(display_name).strip(),str(email).strip(),immagine_db,user_id))
+        else:
+            cur.execute("""UPDATE users SET display_name=?,email=?,
+                           updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                        (str(display_name).strip(),str(email).strip(),user_id))
+        conn.commit()
+    finally:
+        _portal_close(conn)
+
+
+def modifica_password_utente(password_attuale,nuova_password,conferma_password):
+    user_id=int(st.session_state.get("auth_user_id"))
+    if nuova_password!=conferma_password:
+        raise ValueError("La nuova password e la conferma non coincidono.")
+    if len(str(nuova_password))<8:
+        raise ValueError("La nuova password deve contenere almeno 8 caratteri.")
+    conn=_portal_raw_connection(); cur=conn.cursor()
+    try:
+        cur.execute("SELECT password_hash FROM users WHERE id=? LIMIT 1",(user_id,))
+        r=cur.fetchone()
+        if not r or not verifica_password_sicura(password_attuale,r[0]):
+            raise ValueError("La password attuale non è corretta.")
+        cur.execute("""UPDATE users SET password_hash=?,updated_at=CURRENT_TIMESTAMP
+                       WHERE id=?""",(password_hash_sicuro(nuova_password),user_id))
+        cur.execute("""INSERT INTO audit_log
+                       (league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at)
+                       VALUES (?,?,?,'PASSWORD_CHANGED','USER',?,?,CURRENT_TIMESTAMP)""",
+                    (st.session_state.get("ml_league_id"),user_id,
+                     st.session_state.get("ml_team_id"),str(user_id),
+                     json.dumps({"self_service":True})))
+        conn.commit()
+    finally:
+        _portal_close(conn)
+
+
+def render_profilo_utente():
+    profilo=carica_profilo_utente()
+    if not profilo:
+        st.error("Profilo utente non trovato."); return
+    st.subheader("👤 Profilo")
+    st.caption("Gestisci i dati del profilo, l'immagine e la password.")
+    c1,c2=st.columns([1.1,3.9])
+    with c1:
+        if profilo["profile_image"]:
+            st.image(profilo["profile_image"],width=150)
+        else:
+            st.markdown("""<div style="width:150px;height:150px;border-radius:50%;
+            background:#071a2f;color:#f5b51b;display:flex;align-items:center;
+            justify-content:center;font-size:58px;font-weight:900;">👤</div>""",
+            unsafe_allow_html=True)
+    with c2:
+        st.markdown("**Username:** `"+html.escape(profilo["username"])+"`")
+        st.caption("Lo username di accesso resta invariato.")
+    st.markdown("#### Dati profilo")
+    with st.form("ml07_profile_form"):
+        nome=st.text_input("Nome visualizzato",value=profilo["display_name"])
+        email=st.text_input("Email",value=profilo["email"])
+        immagine=st.file_uploader("Immagine profilo",type=["png","jpg","jpeg","webp"],
+                                 help="PNG, JPG o WEBP · massimo 2 MB")
+        rimuovi=st.checkbox("Rimuovi l'immagine profilo attuale")
+        salva=st.form_submit_button("SALVA PROFILO",type="primary",use_container_width=True)
+    if salva:
+        try:
+            salva_profilo_utente(nome,email,immagine,rimuovi)
+            st.success("Profilo aggiornato."); st.rerun()
+        except Exception as e: st.error(str(e))
+    st.markdown("---"); st.markdown("#### Modifica password")
+    with st.form("ml07_password_form"):
+        attuale=st.text_input("Password attuale",type="password")
+        nuova=st.text_input("Nuova password",type="password")
+        conferma=st.text_input("Conferma nuova password",type="password")
+        cambia=st.form_submit_button("MODIFICA PASSWORD",use_container_width=True)
+    if cambia:
+        try:
+            modifica_password_utente(attuale,nuova,conferma)
+            st.success("Password modificata correttamente.")
+        except Exception as e: st.error(str(e))
+
+
 def render_portale_iniziale():
 
     st.markdown(
@@ -1863,6 +2001,7 @@ def render_portale_iniziale():
 
 
 inizializza_portale_auth()
+inizializza_schema_profilo_utente()
 
 try:
 
@@ -11505,7 +11644,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "0.6"
+MULTILEGA_SCHEMA_VERSION = "0.7"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -22556,7 +22695,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 0.6 &nbsp;|&nbsp; V88 Legacy Auth Migration'
+        'MULTILEGA 0.7 &nbsp;|&nbsp; V89 Profilo Utente'
         '</div>',
         unsafe_allow_html=True
     )
@@ -22813,12 +22952,15 @@ PAGINE = [
     ("🔴", "VENDUTI AD AVVERSARI")
 ]
 
+PAGINE.append(("👤", "PROFILO"))
+
+
 if "ADMIN" in RUOLI_ATTIVI:
 
     PAGINE.append(
         (
             "⚙️",
-            "ADMIN LEGA"
+            "GESTIONE LEGA"
         )
     )
 
@@ -22872,7 +23014,7 @@ sezione = (
 
 operazioni_undo = (
     carica_ultime_operazioni()
-    if sezione != "GESTIONE LEGA"
+    if sezione not in ("GESTIONE LEGA", "PROFILO")
     else pd.DataFrame()
 )
 
@@ -23036,7 +23178,11 @@ def conferma_elimina_tutta_rosa():
 # ADMIN LEGA
 # ============================================================
 
-if sezione == "GESTIONE LEGA":
+if sezione == "PROFILO":
+
+    render_profilo_utente()
+
+elif sezione == "GESTIONE LEGA":
 
     render_admin_multilega()
 
