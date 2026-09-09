@@ -12930,6 +12930,27 @@ def mostra_dettaglio_iqr(
             text-align:center !important;
         }
 
+
+        div[role="dialog"] .iqr-popup-wrap {
+            max-width: 560px !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-scale-wrap {
+            width: 82% !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-scale {
+            height: 40px !important;
+        }
+
+        div[role="dialog"] .iqr-popup-wrap .iqr-gauge-description {
+            width: 62% !important;
+            min-width: 0 !important;
+            font-size: 22px !important;
+            padding: 12px 16px !important;
+            white-space: nowrap !important;
+        }
+
         div[role="dialog"] .iqr-popup-wrap .iqr-gauge-title {
             color:#0f172a !important;
             font-size:18px !important;
@@ -14704,6 +14725,88 @@ st.markdown(
         padding:7px 12px !important;
         border-radius:7px !important;
         margin:0 auto !important;
+    }
+
+
+    /* ======================================================
+       V46 - IQR SIDEBAR PROPORZIONATO COME MOCKUP
+       ====================================================== */
+
+    div[class*="st-key-iqr_card_clickable"] {
+        min-height: 190px !important;
+        height: 190px !important;
+        padding: 12px 16px 14px 16px !important;
+        overflow: hidden !important;
+        display: block !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-card {
+        transform: none !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        box-sizing: border-box !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-title {
+        color: #ffffff !important;
+        font-size: 30px !important;
+        line-height: 1 !important;
+        font-weight: 950 !important;
+        margin: 0 0 13px 0 !important;
+        padding: 0 !important;
+        text-align: center !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-scale-wrap {
+        width: 82% !important;
+        margin: 0 auto !important;
+        padding: 0 0 25px 0 !important;
+        position: relative !important;
+        box-sizing: border-box !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-scale {
+        width: 100% !important;
+        height: 34px !important;
+        border-radius: 0 !important;
+        overflow: hidden !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-pointer {
+        bottom: 2px !important;
+        border-left: 15px solid transparent !important;
+        border-right: 15px solid transparent !important;
+        border-bottom: 19px solid #ffc21c !important;
+    }
+
+    /* Nella card compatta il valore numerico non serve:
+       il mockup richiesto mostra titolo, barra, triangolo e stato. */
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-value {
+        display: none !important;
+    }
+
+    div[class*="st-key-iqr_card_clickable"] .iqr-gauge-description {
+        display: block !important;
+        width: 62% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        color: #ffffff !important;
+        font-size: 20px !important;
+        line-height: 1 !important;
+        font-weight: 950 !important;
+        text-align: center !important;
+        padding: 12px 10px !important;
+        margin: 5px auto 0 auto !important;
+        border: 2px solid #050505 !important;
+        border-radius: 8px !important;
+        box-sizing: border-box !important;
+        white-space: nowrap !important;
     }
 
     /* MENU IN FONDO */
