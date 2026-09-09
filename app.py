@@ -6,6 +6,9 @@ import math
 import os
 import sqlite3
 import re
+import hashlib
+import hmac
+import secrets
 import urllib.request
 import unicodedata
 import unicodedata
@@ -519,88 +522,1195 @@ USA_DATABASE_CLOUD = bool(
 
 
 # ============================================================
-# PROFILI / LOGIN
+# MULTILEGA 0.5 - AUTH & LEAGUE PORTAL
 # ============================================================
 
-PROFILI_APP = [
-    "IBBINI IDIOTA",
-    "GOSTOBAR"
-]
+def _portal_raw_connection():
 
-if "profilo_attivo" not in st.session_state:
+    if USA_DATABASE_CLOUD:
+
+        try:
+            import libsql
+        except ImportError as errore:
+            raise RuntimeError(
+                "La modalità Cloud richiede il pacchetto libsql."
+            ) from errore
+
+        chiave = "_turso_connessione_raw"
+
+        conn = st.session_state.get(
+            chiave
+        )
+
+        if conn is None:
+
+            conn = libsql.connect(
+                database=TURSO_DATABASE_URL,
+                auth_token=TURSO_AUTH_TOKEN
+            )
+
+            st.session_state[
+                chiave
+            ] = conn
+
+        return conn
+
+    return sqlite3.connect(
+        DB_PATH
+    )
+
+
+def _portal_close(
+    conn
+):
+
+    if USA_DATABASE_CLOUD:
+        return
+
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def password_hash_sicuro(
+    password
+):
+    """
+    PBKDF2-HMAC-SHA256 con salt casuale.
+    Nel DB non viene mai salvata la password in chiaro.
+    """
+
+    if len(
+        str(
+            password
+        )
+    ) < 8:
+        raise ValueError(
+            "La password deve contenere almeno 8 caratteri."
+        )
+
+    salt = secrets.token_bytes(
+        16
+    )
+
+    iterazioni = 260000
+
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        str(
+            password
+        ).encode(
+            "utf-8"
+        ),
+        salt,
+        iterazioni
+    )
+
+    return (
+        "pbkdf2_sha256"
+        + "$"
+        + str(
+            iterazioni
+        )
+        + "$"
+        + salt.hex()
+        + "$"
+        + digest.hex()
+    )
+
+
+def verifica_password_sicura(
+    password,
+    hash_salvato
+):
+
+    try:
+
+        algoritmo, iterazioni, salt_hex, digest_hex = (
+            str(
+                hash_salvato
+            ).split(
+                "$",
+                3
+            )
+        )
+
+        if algoritmo != "pbkdf2_sha256":
+            return False
+
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            str(
+                password
+            ).encode(
+                "utf-8"
+            ),
+            bytes.fromhex(
+                salt_hex
+            ),
+            int(
+                iterazioni
+            )
+        )
+
+        return hmac.compare_digest(
+            digest.hex(),
+            digest_hex
+        )
+
+    except Exception:
+        return False
+
+
+def inizializza_portale_auth():
+    """
+    Schema minimo necessario PRIMA del login.
+    Le CREATE TABLE sono eseguite una sola volta per sessione.
+    """
+
+    if st.session_state.get(
+        "_ml05_portal_schema_ok",
+        False
+    ):
+        return
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT,
+                password_hash TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS leagues (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL,
+                stagione TEXT,
+                modalita TEXT NOT NULL DEFAULT 'MANTRA',
+                stato TEXT NOT NULL DEFAULT 'DRAFT',
+                created_by_user_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS teams (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                nome TEXT NOT NULL,
+                owner_user_id INTEGER,
+                posizione INTEGER,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(league_id, nome)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS league_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                team_id INTEGER,
+                is_admin INTEGER NOT NULL DEFAULT 0,
+                is_auctioneer INTEGER NOT NULL DEFAULT 0,
+                is_team_member INTEGER NOT NULL DEFAULT 1,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(league_id, user_id, team_id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS league_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL UNIQUE,
+                partecipanti INTEGER NOT NULL DEFAULT 10,
+                max_giocatori INTEGER NOT NULL DEFAULT 30,
+                min_portieri INTEGER NOT NULL DEFAULT 2,
+                budget_iniziale REAL NOT NULL DEFAULT 500,
+                incremento_minimo REAL NOT NULL DEFAULT 1,
+                soglia_budget REAL NOT NULL DEFAULT 500,
+                moltiplicatore_oltre_soglia REAL NOT NULL DEFAULT 3,
+                tipo_asta TEXT NOT NULL DEFAULT 'CHIAMATA',
+                fonte_listone TEXT NOT NULL DEFAULT 'Fantacalcio.it',
+                regolamento_bloccato INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER,
+                user_id INTEGER,
+                team_id INTEGER,
+                azione TEXT NOT NULL,
+                entita TEXT,
+                entita_id TEXT,
+                dettagli_json TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        conn.commit()
+
+        st.session_state[
+            "_ml05_portal_schema_ok"
+        ] = True
+
+    finally:
+        _portal_close(
+            conn
+        )
+
+
+def autentica_portale(
+    username,
+    password
+):
+
+    username = str(
+        username
+    ).strip()
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute("""
+            SELECT
+                id,
+                username,
+                password_hash,
+                is_active
+            FROM users
+            WHERE LOWER(username) = LOWER(?)
+            LIMIT 1
+        """, (
+            username,
+        ))
+
+        riga = cur.fetchone()
+
+        if not riga:
+            return None
+
+        user_id, username_db, password_hash, is_active = riga
+
+        if int(
+            is_active
+            or 0
+        ) != 1:
+            return None
+
+        if not password_hash:
+            # Account legacy creati nelle release precedenti:
+            # non possono essere autenticati senza una password.
+            return {
+                "legacy_password_missing":
+                    True,
+
+                "username":
+                    str(
+                        username_db
+                    )
+            }
+
+        if not verifica_password_sicura(
+            password,
+            password_hash
+        ):
+            return None
+
+        return {
+            "user_id":
+                int(
+                    user_id
+                ),
+
+            "username":
+                str(
+                    username_db
+                )
+        }
+
+    finally:
+        _portal_close(
+            conn
+        )
+
+
+def crea_lega_da_portale(
+    dati_lega,
+    squadre
+):
+    """
+    Creazione atomica della lega completa dal portale pubblico.
+
+    Ogni riga squadra crea:
+    USER + TEAM + MEMBERSHIP + RUOLI.
+    È obbligatorio almeno un ADMIN.
+    """
+
+    squadre_valide = []
+
+    for posizione, squadra in enumerate(
+        squadre,
+        start=1
+    ):
+
+        username = str(
+            squadra.get(
+                "username",
+                ""
+            )
+        ).strip()
+
+        password = str(
+            squadra.get(
+                "password",
+                ""
+            )
+        )
+
+        if not username:
+            raise ValueError(
+                f"Manca il nome della Squadra {posizione}."
+            )
+
+        if len(
+            password
+        ) < 8:
+            raise ValueError(
+                f"La password di {username} deve avere almeno 8 caratteri."
+            )
+
+        squadre_valide.append({
+            **squadra,
+            "username":
+                username,
+
+            "password_hash":
+                password_hash_sicuro(
+                    password
+                )
+        })
+
+    usernames_norm = [
+        x[
+            "username"
+        ].casefold()
+        for x in squadre_valide
+    ]
+
+    if len(
+        usernames_norm
+    ) != len(
+        set(
+            usernames_norm
+        )
+    ):
+        raise ValueError(
+            "I nomi squadra/username devono essere tutti diversi."
+        )
+
+    if not any(
+        bool(
+            x.get(
+                "is_admin"
+            )
+        )
+        for x in squadre_valide
+    ):
+        raise ValueError(
+            "Devi indicare almeno una squadra come ADMIN."
+        )
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+
+        # Gli username sono globali: non possono essere duplicati
+        # tra leghe diverse.
+        for squadra in squadre_valide:
+
+            cur.execute("""
+                SELECT id
+                FROM users
+                WHERE LOWER(username) = LOWER(?)
+                LIMIT 1
+            """, (
+                squadra[
+                    "username"
+                ],
+            ))
+
+            if cur.fetchone():
+                raise ValueError(
+                    f"Lo username '{squadra['username']}' è già utilizzato."
+                )
+
+        # Creatore tecnico = primo Admin definito nel wizard.
+        primo_admin = next(
+            x
+            for x in squadre_valide
+            if bool(
+                x.get(
+                    "is_admin"
+                )
+            )
+        )
+
+        # Crea prima l'utente Admin per poterlo registrare come creator.
+        cur.execute("""
+            INSERT INTO users (
+                username,
+                password_hash,
+                is_active,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (
+            primo_admin[
+                "username"
+            ],
+            primo_admin[
+                "password_hash"
+            ]
+        ))
+
+        primo_admin_id = int(
+            cur.lastrowid
+        )
+
+        cur.execute("""
+            INSERT INTO leagues (
+                nome,
+                stagione,
+                modalita,
+                stato,
+                created_by_user_id,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, 'DRAFT', ?,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (
+            dati_lega[
+                "nome"
+            ],
+            dati_lega[
+                "stagione"
+            ],
+            dati_lega[
+                "modalita"
+            ],
+            primo_admin_id
+        ))
+
+        league_id = int(
+            cur.lastrowid
+        )
+
+        cur.execute("""
+            INSERT INTO league_rules (
+                league_id,
+                partecipanti,
+                max_giocatori,
+                min_portieri,
+                budget_iniziale,
+                incremento_minimo,
+                soglia_budget,
+                moltiplicatore_oltre_soglia,
+                tipo_asta,
+                fonte_listone,
+                regolamento_bloccato,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            int(
+                dati_lega[
+                    "partecipanti"
+                ]
+            ),
+            int(
+                dati_lega[
+                    "max_giocatori"
+                ]
+            ),
+            int(
+                dati_lega[
+                    "min_portieri"
+                ]
+            ),
+            float(
+                dati_lega[
+                    "budget_iniziale"
+                ]
+            ),
+            float(
+                dati_lega[
+                    "incremento_minimo"
+                ]
+            ),
+            float(
+                dati_lega[
+                    "soglia_budget"
+                ]
+            ),
+            float(
+                dati_lega[
+                    "moltiplicatore"
+                ]
+            ),
+            dati_lega[
+                "tipo_asta"
+            ],
+            dati_lega[
+                "fonte_listone"
+            ]
+        ))
+
+        for posizione, squadra in enumerate(
+            squadre_valide,
+            start=1
+        ):
+
+            if squadra[
+                "username"
+            ].casefold() == primo_admin[
+                "username"
+            ].casefold():
+
+                user_id = (
+                    primo_admin_id
+                )
+
+            else:
+
+                cur.execute("""
+                    INSERT INTO users (
+                        username,
+                        password_hash,
+                        is_active,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, 1,
+                            CURRENT_TIMESTAMP,
+                            CURRENT_TIMESTAMP)
+                """, (
+                    squadra[
+                        "username"
+                    ],
+                    squadra[
+                        "password_hash"
+                    ]
+                ))
+
+                user_id = int(
+                    cur.lastrowid
+                )
+
+            cur.execute("""
+                INSERT INTO teams (
+                    league_id,
+                    nome,
+                    owner_user_id,
+                    posizione,
+                    is_active,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, 1,
+                        CURRENT_TIMESTAMP,
+                        CURRENT_TIMESTAMP)
+            """, (
+                league_id,
+                squadra[
+                    "username"
+                ],
+                user_id,
+                posizione
+            ))
+
+            team_id = int(
+                cur.lastrowid
+            )
+
+            cur.execute("""
+                INSERT INTO league_members (
+                    league_id,
+                    user_id,
+                    team_id,
+                    is_admin,
+                    is_auctioneer,
+                    is_team_member,
+                    is_active,
+                    joined_at
+                )
+                VALUES (?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP)
+            """, (
+                league_id,
+                user_id,
+                team_id,
+                1
+                if squadra.get(
+                    "is_admin"
+                )
+                else 0,
+                1
+                if squadra.get(
+                    "is_auctioneer"
+                )
+                else 0
+            ))
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,
+                user_id,
+                team_id,
+                azione,
+                entita,
+                entita_id,
+                dettagli_json,
+                created_at
+            )
+            VALUES (?, ?, NULL,
+                    'LEAGUE_CREATED_FROM_PORTAL',
+                    'LEAGUE', ?, ?, CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            primo_admin_id,
+            str(
+                league_id
+            ),
+            json.dumps(
+                {
+                    "nome":
+                        dati_lega[
+                            "nome"
+                        ],
+
+                    "partecipanti":
+                        int(
+                            dati_lega[
+                                "partecipanti"
+                            ]
+                        ),
+
+                    "users":
+                        [
+                            {
+                                "username":
+                                    x[
+                                        "username"
+                                    ],
+
+                                "admin":
+                                    bool(
+                                        x.get(
+                                            "is_admin"
+                                        )
+                                    ),
+
+                                "auctioneer":
+                                    bool(
+                                        x.get(
+                                            "is_auctioneer"
+                                        )
+                                    )
+                            }
+                            for x in squadre_valide
+                        ]
+                },
+                ensure_ascii=False
+            )
+        ))
+
+        conn.commit()
+
+        return league_id
+
+    except Exception:
+
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+        raise
+
+    finally:
+        _portal_close(
+            conn
+        )
+
+
+def render_portale_iniziale():
 
     st.markdown(
         """
-        <div style="
-            max-width:560px;
-            margin:55px auto 18px auto;
+        <style>
+        .ml05-hero {
+            max-width:1050px;
+            margin:34px auto 22px auto;
             padding:26px 30px;
-            background:#071a2f;
-            border-radius:18px;
+            background:linear-gradient(110deg,#061f3a,#0b3158);
+            border:2px solid #f5b51b;
+            border-radius:20px;
             text-align:center;
-            box-shadow:0 10px 30px rgba(0,0,0,.18);
-        ">
-            <div style="
-                color:white;
-                font-size:30px;
-                font-weight:900;
-                letter-spacing:.3px;
-            ">
-                FANTAELEGANZA <span style="color:#f5b51b;">26/27</span>
+            box-shadow:0 10px 30px rgba(0,0,0,.14);
+        }
+        .ml05-hero-title {
+            color:#fff;
+            font-size:32px;
+            font-weight:950;
+        }
+        .ml05-hero-title span {
+            color:#f5b51b;
+        }
+        .ml05-hero-sub {
+            color:#cbd5e1;
+            margin-top:7px;
+            font-size:14px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        """
+        <div class="ml05-hero">
+            <div class="ml05-hero-title">
+                FANTAELEGANZA <span>26/27</span>
             </div>
-            <div style="
-                color:#cbd5e1;
-                margin-top:7px;
-                font-size:15px;
-            ">
-                Seleziona la squadra con cui vuoi accedere
+            <div class="ml05-hero-sub">
+                Il tuo Fantacalcio Mantra, dalla creazione della lega all'asta
             </div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    profilo_login = st.selectbox(
-        "Profilo",
-        PROFILI_APP,
-        key="profilo_login_select"
+    tab_login, tab_crea = st.tabs(
+        [
+            "🔐 ACCEDI",
+            "🏆 CREA LA TUA LEGA"
+        ]
     )
 
-    col_login_1, col_login_2, col_login_3 = st.columns(
-        [1.35, 1.3, 1.35]
-    )
+    with tab_login:
 
-    with col_login_2:
+        c1, c2, c3 = st.columns(
+            [
+                1,
+                1.5,
+                1
+            ]
+        )
 
-        if st.button(
-            "ACCEDI",
-            type="primary",
-            use_container_width=True,
-            key="btn_login_profilo"
-        ):
+        with c2:
 
-            st.session_state[
-                "profilo_attivo"
-            ] = profilo_login
+            with st.form(
+                "ml05_login_form"
+            ):
 
-            # Evita che eventuali dati in memoria di una sessione
-            # precedente vengano riutilizzati dopo un cambio profilo.
-            for chiave_sessione in [
-                "_df_giocatori_sessione",
-                "_ultime_operazioni_sessione",
-                "_costi_svincoli_sessione",
-                "budget_asta_corrente",
-                "budget_asta_input",
-                "backup_cloud_bytes",
-                "pdf_rosa_moduli"
-            ]:
-
-                st.session_state.pop(
-                    chiave_sessione,
-                    None
+                username = st.text_input(
+                    "Username / Nome squadra"
                 )
 
-            st.rerun()
+                password = st.text_input(
+                    "Password",
+                    type="password"
+                )
+
+                submit_login = (
+                    st.form_submit_button(
+                        "ACCEDI",
+                        type="primary",
+                        use_container_width=True
+                    )
+                )
+
+            if submit_login:
+
+                risultato = autentica_portale(
+                    username,
+                    password
+                )
+
+                if (
+                    isinstance(
+                        risultato,
+                        dict
+                    )
+                    and risultato.get(
+                        "legacy_password_missing"
+                    )
+                ):
+
+                    st.warning(
+                        "Questo è un account della versione precedente "
+                        "e non possiede ancora una password. "
+                        "La migrazione della password legacy verrà gestita "
+                        "separatamente: nessuna password è stata inventata."
+                    )
+
+                elif risultato is None:
+
+                    st.error(
+                        "Username o password non validi."
+                    )
+
+                else:
+
+                    st.session_state[
+                        "profilo_attivo"
+                    ] = risultato[
+                        "username"
+                    ]
+
+                    st.session_state[
+                        "auth_user_id"
+                    ] = risultato[
+                        "user_id"
+                    ]
+
+                    st.session_state[
+                        "auth_ok"
+                    ] = True
+
+                    st.rerun()
+
+    with tab_crea:
+
+        st.markdown(
+            "### Crea una nuova lega"
+        )
+
+        st.caption(
+            "Definisci il regolamento e crea le credenziali "
+            "per tutte le squadre. Le password vengono salvate "
+            "esclusivamente come hash sicuro."
+        )
+
+        with st.form(
+            "ml05_crea_lega_form"
+        ):
+
+            st.markdown(
+                "#### 1 · Regolamento"
+            )
+
+            a, b, c = st.columns(
+                3
+            )
+
+            with a:
+
+                nome = st.text_input(
+                    "Nome lega",
+                    value="FANTAELEGANZA 26/27"
+                )
+
+                stagione = st.text_input(
+                    "Stagione",
+                    value="2026/27"
+                )
+
+                modalita = st.selectbox(
+                    "Modalità",
+                    [
+                        "MANTRA",
+                        "CLASSIC"
+                    ]
+                )
+
+                partecipanti = st.number_input(
+                    "Numero squadre",
+                    min_value=2,
+                    max_value=20,
+                    value=10,
+                    step=1
+                )
+
+            with b:
+
+                max_giocatori = st.number_input(
+                    "Rosa massima",
+                    min_value=1,
+                    max_value=60,
+                    value=30,
+                    step=1
+                )
+
+                min_portieri = st.number_input(
+                    "Portieri minimi",
+                    min_value=0,
+                    max_value=10,
+                    value=2,
+                    step=1
+                )
+
+                budget = st.number_input(
+                    "Budget iniziale",
+                    min_value=1.0,
+                    value=500.0,
+                    step=10.0
+                )
+
+                incremento = st.number_input(
+                    "Incremento minimo",
+                    min_value=0.1,
+                    value=1.0,
+                    step=0.5
+                )
+
+            with c:
+
+                soglia = st.number_input(
+                    "Soglia budget",
+                    min_value=0.0,
+                    value=500.0,
+                    step=10.0
+                )
+
+                moltiplicatore = st.number_input(
+                    "Moltiplicatore oltre soglia",
+                    min_value=1.0,
+                    value=3.0,
+                    step=0.5
+                )
+
+                tipo_asta = st.selectbox(
+                    "Tipo asta",
+                    [
+                        "CHIAMATA",
+                        "ALTRO"
+                    ]
+                )
+
+                fonte = st.text_input(
+                    "Fonte listone",
+                    value="Fantacalcio.it"
+                )
+
+            st.markdown(
+                "#### 2 · Squadre, password e ruoli"
+            )
+
+            st.caption(
+                "Il nome squadra sarà anche lo username per il primo accesso."
+            )
+
+            squadre = []
+
+            for indice in range(
+                int(
+                    partecipanti
+                )
+            ):
+
+                st.markdown(
+                    f"**Squadra {indice + 1}**"
+                )
+
+                q1, q2, q3, q4 = st.columns(
+                    [
+                        2.4,
+                        2.0,
+                        1.1,
+                        1.1
+                    ]
+                )
+
+                with q1:
+
+                    user_team = st.text_input(
+                        "Nome squadra / Username",
+                        key=f"ml05_team_user_{indice}"
+                    )
+
+                with q2:
+
+                    pass_team = st.text_input(
+                        "Password iniziale",
+                        type="password",
+                        key=f"ml05_team_pass_{indice}"
+                    )
+
+                with q3:
+
+                    banditore = st.checkbox(
+                        "Banditore",
+                        key=f"ml05_team_band_{indice}"
+                    )
+
+                with q4:
+
+                    admin = st.checkbox(
+                        "Admin",
+                        value=(
+                            indice == 0
+                        ),
+                        key=f"ml05_team_admin_{indice}"
+                    )
+
+                squadre.append({
+                    "username":
+                        user_team,
+
+                    "password":
+                        pass_team,
+
+                    "is_admin":
+                        admin,
+
+                    "is_auctioneer":
+                        banditore
+                })
+
+            conferma = st.checkbox(
+                "Confermo la creazione della lega e degli account"
+            )
+
+            crea = st.form_submit_button(
+                "CREA LA TUA LEGA",
+                type="primary",
+                use_container_width=True,
+                disabled=not conferma
+            )
+
+        if crea:
+
+            try:
+
+                if not str(
+                    nome
+                ).strip():
+                    raise ValueError(
+                        "Inserisci il nome della lega."
+                    )
+
+                if int(
+                    min_portieri
+                ) > int(
+                    max_giocatori
+                ):
+                    raise ValueError(
+                        "I portieri minimi non possono superare "
+                        "la rosa massima."
+                    )
+
+                league_id = crea_lega_da_portale(
+                    {
+                        "nome":
+                            str(
+                                nome
+                            ).strip(),
+
+                        "stagione":
+                            str(
+                                stagione
+                            ).strip(),
+
+                        "modalita":
+                            modalita,
+
+                        "partecipanti":
+                            int(
+                                partecipanti
+                            ),
+
+                        "max_giocatori":
+                            int(
+                                max_giocatori
+                            ),
+
+                        "min_portieri":
+                            int(
+                                min_portieri
+                            ),
+
+                        "budget_iniziale":
+                            float(
+                                budget
+                            ),
+
+                        "incremento_minimo":
+                            float(
+                                incremento
+                            ),
+
+                        "soglia_budget":
+                            float(
+                                soglia
+                            ),
+
+                        "moltiplicatore":
+                            float(
+                                moltiplicatore
+                            ),
+
+                        "tipo_asta":
+                            tipo_asta,
+
+                        "fonte_listone":
+                            str(
+                                fonte
+                            ).strip()
+                    },
+                    squadre
+                )
+
+                st.success(
+                    f"Lega creata correttamente (ID {league_id}). "
+                    "Ora ogni squadra può accedere dalla scheda ACCEDI "
+                    "con il proprio nome squadra e la password assegnata."
+                )
+
+            except Exception as errore:
+
+                st.error(
+                    str(
+                        errore
+                    )
+                )
+
+
+inizializza_portale_auth()
+
+if not st.session_state.get(
+    "auth_ok",
+    False
+):
+
+    render_portale_iniziale()
 
     st.stop()
 
@@ -612,7 +1722,19 @@ PROFILO_ATTIVO = st.session_state[
 SUFFIX_PROFILO = (
     ""
     if PROFILO_ATTIVO == "IBBINI IDIOTA"
-    else "_gostobar"
+    else (
+        "_gostobar"
+        if PROFILO_ATTIVO == "GOSTOBAR"
+        else ""
+    )
+)
+
+PROFILO_LEGACY_SUPPORTATO = (
+    PROFILO_ATTIVO
+    in [
+        "IBBINI IDIOTA",
+        "GOSTOBAR"
+    ]
 )
 
 
@@ -10208,7 +11330,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "0.4"
+MULTILEGA_SCHEMA_VERSION = "0.5"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -11424,7 +12546,7 @@ def schermata_le_mie_leghe(
                     if accesso.get(
                         "team_id"
                     ) is not None
-                    else "ADMIN LEGA"
+                    else "GESTIONE LEGA"
                 )
 
                 # Elimina soltanto cache operative che potrebbero
@@ -11921,22 +13043,33 @@ def render_admin_multilega():
         return
 
     st.subheader(
-        "⚙️ Amministrazione lega"
+        "⚙️ Gestione lega"
     )
 
     st.caption(
-        "MULTILEGA 0.3 · Crea la lega, definisci il regolamento "
-        "e prepara le squadre partecipanti."
+        "MULTILEGA 0.5 · La creazione di nuove leghe è stata spostata "
+        "nel portale iniziale. Qui l'Admin gestisce le leghe esistenti."
     )
 
     tab_nuova, tab_esistenti = st.tabs(
         [
-            "➕ Nuova lega",
+            "ℹ️ Creazione lega",
             "🏆 Le mie leghe"
         ]
     )
 
     with tab_nuova:
+
+        st.info(
+            "Per creare una nuova lega esci dall'account e usa "
+            "«CREA LA TUA LEGA» nella schermata iniziale."
+        )
+
+        st.markdown(
+            "<div style='display:none'>",
+            unsafe_allow_html=True
+        )
+
 
         with st.form(
             "ml03_crea_lega",
@@ -12113,6 +13246,11 @@ def render_admin_multilega():
                     "ml03_lega_creata"
                 )
             )
+
+        st.markdown(
+            "</div>",
+            unsafe_allow_html=True
+        )
 
     with tab_esistenti:
 
@@ -16301,7 +17439,9 @@ if not st.session_state.get(
 
         inizializza_database_multilega()
 
-        sincronizza_legacy_in_multilega()
+        if PROFILO_LEGACY_SUPPORTATO:
+
+            sincronizza_legacy_in_multilega()
 
         st.session_state[
             _ml_boot_key
@@ -21126,6 +22266,16 @@ with st.sidebar:
                 )
 
                 st.session_state.pop(
+                    "auth_user_id",
+                    None
+                )
+
+                st.session_state.pop(
+                    "auth_ok",
+                    None
+                )
+
+                st.session_state.pop(
                     "profilo_login_select",
                     None
                 )
@@ -21231,7 +22381,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 0.4 &nbsp;|&nbsp; V86 Rosa Fast Cache'
+        'MULTILEGA 0.5 &nbsp;|&nbsp; V87 Auth + League Portal'
         '</div>',
         unsafe_allow_html=True
     )
@@ -21547,7 +22697,7 @@ sezione = (
 
 operazioni_undo = (
     carica_ultime_operazioni()
-    if sezione != "ADMIN LEGA"
+    if sezione != "GESTIONE LEGA"
     else pd.DataFrame()
 )
 
@@ -21711,7 +22861,7 @@ def conferma_elimina_tutta_rosa():
 # ADMIN LEGA
 # ============================================================
 
-if sezione == "ADMIN LEGA":
+if sezione == "GESTIONE LEGA":
 
     render_admin_multilega()
 
