@@ -197,6 +197,217 @@ div[data-testid="stMainBlockContainer"] div[data-testid="stHorizontalBlock"] {
     margin-left: 5px !important;
     white-space: nowrap !important;
 }
+
+/* ==========================================================
+   V71 - CARD IQR FEDELE AL MOCKUP
+   ========================================================== */
+
+.iqr-card-v71 {
+    width:100%;
+    box-sizing:border-box;
+    text-align:center;
+    color:#ffffff;
+}
+
+.iqr-v71-top {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    margin-bottom:18px;
+}
+
+.iqr-v71-star {
+    color:#ffc21c;
+    font-size:30px;
+    line-height:1;
+    font-weight:900;
+}
+
+.iqr-v71-title {
+    color:#ffffff;
+    font-size:20px;
+    line-height:1;
+    font-weight:900;
+}
+
+.iqr-v71-percent {
+    color:#ffc21c;
+    font-size:20px;
+    line-height:1;
+    font-weight:950;
+}
+
+.iqr-v71-help {
+    width:22px;
+    height:22px;
+    line-height:20px;
+    text-align:center;
+    border:1px solid #c7d7e8;
+    border-radius:50%;
+    color:#c7d7e8;
+    font-size:13px;
+    font-weight:800;
+}
+
+.iqr-v71-bar-wrap {
+    position:relative;
+    width:92%;
+    margin:0 auto 14px auto;
+    padding-top:18px;
+}
+
+.iqr-card-v71 .iqr-scale {
+    display:flex !important;
+    width:100% !important;
+    height:34px !important;
+    overflow:hidden !important;
+    border-radius:0 !important;
+    box-shadow:0 0 0 1px rgba(255,255,255,.12);
+}
+
+.iqr-card-v71 .iqr-seg {
+    height:100% !important;
+}
+
+.iqr-v71-pointer {
+    position:absolute;
+    top:0;
+    width:0;
+    height:0;
+    transform:translateX(-50%);
+    border-left:13px solid transparent;
+    border-right:13px solid transparent;
+    border-top:18px solid #ffffff;
+}
+
+.iqr-v71-status {
+    display:inline-block;
+    min-width:42%;
+    padding:8px 16px;
+    margin:0 auto 18px auto;
+    color:#ffffff !important;
+    font-size:18px;
+    line-height:1;
+    font-weight:900;
+    border-radius:8px;
+    border:1px solid rgba(255,255,255,.18);
+    box-sizing:border-box;
+}
+
+.iqr-v71-legend {
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:10px;
+    width:100%;
+    margin-top:4px;
+}
+
+.iqr-v71-legend-item {
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    gap:8px;
+    text-align:left;
+    color:#ffffff;
+    font-size:11px;
+    line-height:1.2;
+}
+
+.iqr-v71-legend-item b {
+    color:#ffffff;
+    font-size:11px;
+    font-weight:900;
+}
+
+.iqr-v71-legend-item span {
+    color:#dbe8f5;
+    font-size:10px;
+}
+
+.iqr-v71-swatch {
+    display:block;
+    width:18px;
+    min-width:18px;
+    height:18px;
+    border-radius:4px;
+    border:1px solid rgba(255,255,255,.24);
+    margin-top:1px;
+}
+
+.sw-black { background:#050505; }
+.sw-red   { background:#ff1616; }
+.sw-blue  { background:#0b6df5; }
+.sw-green { background:#16a34a; }
+
+/* Sidebar compatta */
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-top {
+    margin-bottom:12px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-star {
+    font-size:24px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-title,
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-percent {
+    font-size:16px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-help {
+    width:20px;
+    height:20px;
+    line-height:18px;
+    font-size:12px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-bar-wrap {
+    width:88%;
+    margin-bottom:10px;
+    padding-top:15px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-scale {
+    height:28px !important;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-pointer {
+    border-left-width:10px;
+    border-right-width:10px;
+    border-top-width:14px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-status {
+    min-width:48%;
+    font-size:15px;
+    padding:7px 12px;
+    margin-bottom:12px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-legend {
+    gap:6px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-legend-item {
+    gap:5px;
+    font-size:9px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-legend-item b {
+    font-size:9px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-legend-item span {
+    font-size:8px;
+}
+
+section[data-testid="stSidebar"] .iqr-card-v71 .iqr-v71-swatch {
+    width:14px;
+    min-width:14px;
+    height:14px;
+    border-radius:3px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -2710,8 +2921,8 @@ def descrizione_iqr(
     Fasce qualitative IQR:
     0-40%      -> Rosa debole
     40.1-65%   -> Rosa buona
-    65.1-90%   -> Rosa forte
-    >90%       -> Rosa eccellente
+    65.1-85%   -> Rosa forte
+    >85%       -> Rosa eccellente
     """
 
     try:
@@ -2721,7 +2932,7 @@ def descrizione_iqr(
     except Exception:
         valore = 0.0
 
-    if valore > 90.0:
+    if valore > 85.0:
         return "Rosa eccellente"
 
     if valore > 65.0:
@@ -2972,7 +3183,7 @@ def colore_iqr(
     except Exception:
         valore = 0.0
 
-    if valore > 90.0:
+    if valore > 85.0:
         return "#16a34a"
 
     if valore > 65.0:
@@ -2989,81 +3200,95 @@ def genera_html_gauge_iqr(
     valore
 ):
     """
-    Indicatore IQR orizzontale a 4 fasce.
-    La posizione del triangolo oro rappresenta il valore corrente.
+    Card IQR in stile mockup.
     """
 
     try:
-        valore = float(
-            valore
-        )
+        valore = float(valore)
     except Exception:
         valore = 0.0
 
-    valore = max(
-        0.0,
-        min(
-            100.0,
-            valore
-        )
-    )
+    valore = max(0.0, min(100.0, valore))
 
     descrizione = html.escape(
-        descrizione_iqr(
-            valore
-        ).upper()
+        descrizione_iqr(valore)
     )
 
-    colore_descrizione = (
-        colore_iqr(
-            valore
-        )
-    )
+    colore_descrizione = colore_iqr(valore)
 
-    # posizione percentuale reale del triangolo sulla barra
     posizione = max(
         1.5,
-        min(
-            98.5,
-            valore
-        )
+        min(98.5, valore)
     )
 
-    return (
-        '<div class="iqr-gauge-card">'
-        f'<div class="iqr-gauge-title">⭐ IQR <span class="iqr-title-percent">{valore:.1f}%</span></div>'
+    return f"""
+    <div class="iqr-gauge-card iqr-card-v71">
 
-        '<div class="iqr-scale-wrap">'
+        <div class="iqr-v71-top">
+            <div class="iqr-v71-star">★</div>
+            <div class="iqr-v71-title">IQR</div>
+            <div class="iqr-v71-percent">{valore:.1f}%</div>
+            <div class="iqr-v71-help">?</div>
+        </div>
 
-        '<div class="iqr-scale">'
-        '<div class="iqr-seg iqr-seg-black"></div>'
-        '<div class="iqr-seg iqr-seg-red"></div>'
-        '<div class="iqr-seg iqr-seg-blue"></div>'
-        '<div class="iqr-seg iqr-seg-green"></div>'
-        '</div>'
+        <div class="iqr-v71-bar-wrap">
+            <div class="iqr-scale">
+                <div class="iqr-seg iqr-seg-black" style="width:40%; flex:none;"></div>
+                <div class="iqr-seg iqr-seg-red" style="width:25%; flex:none;"></div>
+                <div class="iqr-seg iqr-seg-blue" style="width:20%; flex:none;"></div>
+                <div class="iqr-seg iqr-seg-green" style="width:15%; flex:none;"></div>
+            </div>
 
-        + (
-            f'<div class="iqr-pointer" '
-            f'style="left:{posizione:.1f}%"></div>'
-        )
+            <div
+                class="iqr-v71-pointer"
+                style="left:{posizione:.1f}%"
+            ></div>
+        </div>
 
-        + '</div>'
+        <div
+            class="iqr-v71-status"
+            style="background:{colore_descrizione};"
+        >
+            {descrizione}
+        </div>
 
-        + (
-            f'<div class="iqr-gauge-value">'
-            f'{valore:.1f}%'
-            f'</div>'
-        )
+        <div class="iqr-v71-legend">
 
-        + (
-            f'<div class="iqr-gauge-description" '
-            f'style="background:{colore_descrizione};">'
-            f'{descrizione}'
-            f'</div>'
-        )
+            <div class="iqr-v71-legend-item">
+                <span class="iqr-v71-swatch sw-black"></span>
+                <div>
+                    <b>0–40%</b><br>
+                    <span>Rosa debole</span>
+                </div>
+            </div>
 
-        + '</div>'
-    )
+            <div class="iqr-v71-legend-item">
+                <span class="iqr-v71-swatch sw-red"></span>
+                <div>
+                    <b>40,1–65%</b><br>
+                    <span>Rosa buona</span>
+                </div>
+            </div>
+
+            <div class="iqr-v71-legend-item">
+                <span class="iqr-v71-swatch sw-blue"></span>
+                <div>
+                    <b>65,1–85%</b><br>
+                    <span>Rosa forte</span>
+                </div>
+            </div>
+
+            <div class="iqr-v71-legend-item">
+                <span class="iqr-v71-swatch sw-green"></span>
+                <div>
+                    <b>&gt;85%</b><br>
+                    <span>Rosa eccellente</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    """
 
 
 
@@ -18128,7 +18353,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V67 &nbsp;|&nbsp; Offline Resiliente'
+        'V71 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
