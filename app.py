@@ -15542,6 +15542,141 @@ st.markdown(
         display: none !important;
     }
 
+
+    /* ======================================================
+       V49 - IQR CLICK AREA INVISIBILE + TOOLTIP
+       ====================================================== */
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"] {
+        position: relative !important;
+        cursor: pointer !important;
+    }
+
+    /* Il contenitore del bottone non deve occupare spazio nel layout */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    div[data-testid="stButton"] {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 20 !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        pointer-events: auto !important;
+    }
+
+    /* Bottone completamente invisibile ma cliccabile */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    div[data-testid="stButton"] > button {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 20 !important;
+
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+
+        height: 100% !important;
+        min-height: 100% !important;
+        max-height: 100% !important;
+
+        margin: 0 !important;
+        padding: 0 !important;
+
+        background: transparent !important;
+        background-color: transparent !important;
+
+        border: 0 !important;
+        border-radius: 15px !important;
+
+        box-shadow: none !important;
+        outline: none !important;
+
+        color: transparent !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+
+        opacity: 0 !important;
+        overflow: hidden !important;
+
+        cursor: pointer !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    div[data-testid="stButton"] > button * {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* Nessun effetto grafico bianco in hover/focus/active */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    div[data-testid="stButton"] > button:hover,
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    div[data-testid="stButton"] > button:focus,
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    div[data-testid="stButton"] > button:focus-visible,
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]
+    div[data-testid="stButton"] > button:active {
+        background: transparent !important;
+        background-color: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        outline: none !important;
+        opacity: 0 !important;
+    }
+
+    /* Tooltip custom: compare SOLO passando sopra la card */
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]::after {
+        content: "Clicca per aprire dettaglio IQR";
+
+        position: absolute !important;
+        left: 50% !important;
+        bottom: 9px !important;
+        transform: translate(-50%, 5px) !important;
+
+        z-index: 30 !important;
+
+        padding: 6px 10px !important;
+
+        background: rgba(5, 18, 34, .94) !important;
+        color: #ffffff !important;
+
+        border: 1px solid rgba(255, 194, 28, .55) !important;
+        border-radius: 7px !important;
+
+        font-size: 12px !important;
+        line-height: 1.15 !important;
+        font-weight: 700 !important;
+
+        white-space: nowrap !important;
+
+        opacity: 0 !important;
+        visibility: hidden !important;
+
+        pointer-events: none !important;
+
+        transition:
+            opacity .14s ease,
+            transform .14s ease,
+            visibility .14s ease !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"]:hover::after {
+        opacity: 1 !important;
+        visibility: visible !important;
+        transform: translate(-50%, 0) !important;
+    }
+
 </style>
     """,
     unsafe_allow_html=True
