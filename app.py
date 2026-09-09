@@ -14392,227 +14392,87 @@ st.markdown(
     }
 
     /* ======================================================
-       V40 - SIDEBAR TUTTA IN UNA PAGINA + MENU LATERALE
+       V41 - SCROLL SIDEBAR RIPRISTINATO
+       Mantiene l'interfaccia blu / bianco / giallo del mockup.
        ====================================================== */
 
-    /* Nessuno scroll verticale nella sidebar desktop */
+    section[data-testid="stSidebar"] {
+        overflow: hidden !important;
+        width: 390px !important;
+        min-width: 390px !important;
+    }
+
     section[data-testid="stSidebar"] > div {
         height: 100vh !important;
         max-height: 100vh !important;
-        overflow-y: hidden !important;
+        overflow-y: auto !important;
         overflow-x: hidden !important;
-        padding: 9px 14px 8px 14px !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: #2a628f #061f3a !important;
+        padding-bottom: 18px !important;
         box-sizing: border-box !important;
     }
 
-    /* Header più compatto */
+    section[data-testid="stSidebar"] > div::-webkit-scrollbar {
+        width: 8px !important;
+    }
+
+    section[data-testid="stSidebar"] > div::-webkit-scrollbar-track {
+        background: #061f3a !important;
+    }
+
+    section[data-testid="stSidebar"] > div::-webkit-scrollbar-thumb {
+        background: #2a628f !important;
+        border-radius: 8px !important;
+        border: 2px solid #061f3a !important;
+    }
+
+    section[data-testid="stSidebar"] > div::-webkit-scrollbar-thumb:hover {
+        background: #3e7cac !important;
+    }
+
+    /* Dimensioni come nel mockup */
     section[data-testid="stSidebar"] .fanta-header {
-        min-height: 94px !important;
-        height: 94px !important;
-        padding: 10px 13px !important;
-        margin-bottom: 7px !important;
-        border-radius: 15px !important;
+        min-height: 126px !important;
+        margin-bottom: 12px !important;
     }
 
-    section[data-testid="stSidebar"] .fanta-logo {
-        width: 61px !important;
-        height: 61px !important;
-        min-width: 61px !important;
-        border-radius: 14px !important;
-    }
-
-    section[data-testid="stSidebar"] .fanta-brand {
-        gap: 12px !important;
-    }
-
-    section[data-testid="stSidebar"] .fanta-brand-title {
-        font-size: 23px !important;
-        line-height: .98 !important;
-    }
-
-    section[data-testid="stSidebar"] .fanta-brand-subtitle {
-        font-size: 12px !important;
-        margin-top: 4px !important;
-    }
-
-    /* Profilo compatto */
-    .sidebar-profile {
-        min-height: 45px !important;
-        height: 45px !important;
-        padding: 0 13px !important;
-        margin-bottom: 7px !important;
-        border-radius: 12px !important;
-    }
-
-    .sidebar-profile-name {
-        font-size: 14px !important;
-    }
-
-    .sidebar-profile-icon {
-        font-size: 17px !important;
-        margin-right: 8px !important;
-    }
-
-    /* Card metriche compatte ma leggibili */
     section[data-testid="stSidebar"] div[data-testid="stMetric"] {
-        min-height: 67px !important;
-        height: 67px !important;
-        padding: 8px 13px !important;
-        margin-bottom: 5px !important;
-        border-radius: 12px !important;
+        min-height: 102px !important;
+        margin-bottom: 8px !important;
     }
 
-    section[data-testid="stSidebar"] div[data-testid="stMetricLabel"],
-    section[data-testid="stSidebar"] div[data-testid="stMetric"] label {
-        font-size: 12px !important;
-        line-height: 1.05 !important;
-    }
-
-    section[data-testid="stSidebar"] div[data-testid="stMetricValue"] {
-        font-size: 22px !important;
-        line-height: 1 !important;
-    }
-
-    section[data-testid="stSidebar"] div[data-testid="stMetricDelta"] {
-        font-size: 9px !important;
-        line-height: 1 !important;
-    }
-
-    /* Budget della stessa altezza */
     div[class*="st-key-sidebar_budget_card"] {
-        min-height: 70px !important;
-        height: 70px !important;
-        padding: 5px 10px 6px 10px !important;
-        margin-bottom: 5px !important;
-        border-radius: 12px !important;
+        min-height: 102px !important;
+        margin-bottom: 8px !important;
     }
 
-    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] label {
-        font-size: 12px !important;
+    section[data-testid="stSidebar"]
+    div[class*="st-key-iqr_card_clickable"] {
+        min-height: 148px !important;
+        margin-bottom: 9px !important;
     }
 
-    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] input {
-        height: 34px !important;
-        min-height: 34px !important;
-        font-size: 19px !important;
-        border-radius: 8px !important;
+    /* MENU come nell'immagine: apertura sotto il pulsante */
+    section[data-testid="stSidebar"] details {
+        width: 100% !important;
+        margin-top: 5px !important;
+        overflow: visible !important;
     }
 
-    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] button {
-        width: 32px !important;
-        height: 32px !important;
-        min-height: 32px !important;
+    section[data-testid="stSidebar"] details > summary {
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
-    /* IQR compatto */
-    section[data-testid="stSidebar"] div[class*="st-key-iqr_card_clickable"] {
-        min-height: 96px !important;
-        max-height: 105px !important;
-        padding: 6px 10px !important;
-        margin-bottom: 5px !important;
-        border-radius: 12px !important;
-        overflow: hidden !important;
+    section[data-testid="stSidebar"] details[open] {
+        overflow: visible !important;
     }
 
-    section[data-testid="stSidebar"] div[class*="st-key-iqr_card_clickable"] .stButton {
-        margin: 0 !important;
-    }
-
-    section[data-testid="stSidebar"] div[class*="st-key-iqr_card_clickable"] .stButton > button {
-        min-height: 20px !important;
-        height: 20px !important;
-        padding: 0 !important;
-        font-size: 0 !important;
-        border: 0 !important;
-        background: transparent !important;
-    }
-
-    /* Bottone MENU compatto */
-    section[data-testid="stSidebar"] div[data-testid="stPopover"] {
-        margin-top: 2px !important;
-    }
-
-    section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
-        min-height: 43px !important;
-        height: 43px !important;
-        padding: 0 14px !important;
-        border: 2px solid var(--fe-gold) !important;
-        border-radius: 12px !important;
-        background: #082744 !important;
-        color: var(--fe-gold) !important;
-        font-size: 15px !important;
-        font-weight: 950 !important;
-        justify-content: flex-start !important;
-    }
-
-    section[data-testid="stSidebar"] div[data-testid="stPopover"] > button * {
-        color: var(--fe-gold) !important;
-    }
-
-    /* Il pannello del popover deve apparire a DESTRA del pulsante/sidebar.
-       I selettori coprono le versioni Streamlit/BaseWeb più comuni. */
-    div[data-baseweb="popover"] {
-        z-index: 100000 !important;
-    }
-
-    div[data-baseweb="popover"] > div,
-    div[data-baseweb="popover"] [role="dialog"] {
-        max-width: 285px !important;
-    }
-
-    /* Contenuto menu */
-    div[data-baseweb="popover"] .stButton > button,
-    div[data-baseweb="popover"] .stDownloadButton > button {
-        min-height: 38px !important;
-        height: 38px !important;
-        padding: 5px 10px !important;
-        border-radius: 8px !important;
-        font-size: 13px !important;
-    }
-
-    /* Footer quasi aderente */
-    section[data-testid="stSidebar"] div[style*="color:#5f8db5"] {
-        padding-top: 3px !important;
-        font-size: 9px !important;
-    }
-
-    /* Su schermi bassi compattiamo ancora leggermente, sempre senza scroll */
-    @media (max-height: 820px) and (min-width: 851px) {
-        section[data-testid="stSidebar"] .fanta-header {
-            min-height: 78px !important;
-            height: 78px !important;
-        }
-        section[data-testid="stSidebar"] .fanta-logo {
-            width: 51px !important;
-            height: 51px !important;
-            min-width: 51px !important;
-        }
-        section[data-testid="stSidebar"] .fanta-brand-title {
-            font-size: 20px !important;
-        }
-        section[data-testid="stSidebar"] .fanta-brand-subtitle {
-            font-size: 10px !important;
-        }
-        .sidebar-profile {
-            min-height: 38px !important;
-            height: 38px !important;
-        }
-        section[data-testid="stSidebar"] div[data-testid="stMetric"] {
-            min-height: 57px !important;
-            height: 57px !important;
-            padding: 6px 11px !important;
-        }
-        div[class*="st-key-sidebar_budget_card"] {
-            min-height: 61px !important;
-            height: 61px !important;
-        }
-        section[data-testid="stSidebar"] div[class*="st-key-iqr_card_clickable"] {
-            min-height: 82px !important;
-            max-height: 82px !important;
-        }
-        section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
-            min-height: 38px !important;
-            height: 38px !important;
+    @media (max-width: 950px) {
+        section[data-testid="stSidebar"] {
+            width: 345px !important;
+            min-width: 345px !important;
         }
     }
     </style>
@@ -14659,9 +14519,9 @@ with st.sidebar:
     # --------------------------------------------------------
     # MENU STRUMENTI: chiuso per default
     # --------------------------------------------------------
-    with st.popover(
+    with st.expander(
         "☰  MENU",
-        use_container_width=True
+        expanded=False
     ):
 
         if st.button(
@@ -14864,7 +14724,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V40 &nbsp;|&nbsp; Offline Resiliente'
+        'V41 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
