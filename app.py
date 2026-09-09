@@ -14392,87 +14392,298 @@ st.markdown(
     }
 
     /* ======================================================
-       V41 - SCROLL SIDEBAR RIPRISTINATO
-       Mantiene l'interfaccia blu / bianco / giallo del mockup.
+       V42 — LAYOUT SIDEBAR IDENTICO AL MOCKUP
+       tutto visibile senza scroll
        ====================================================== */
 
     section[data-testid="stSidebar"] {
+        width: 365px !important;
+        min-width: 365px !important;
+        height: 100vh !important;
         overflow: hidden !important;
-        width: 390px !important;
-        min-width: 390px !important;
+        background:
+            linear-gradient(
+                180deg,
+                #051d36 0%,
+                #062846 54%,
+                #041b31 100%
+            ) !important;
     }
 
     section[data-testid="stSidebar"] > div {
         height: 100vh !important;
         max-height: 100vh !important;
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-        scrollbar-width: thin !important;
-        scrollbar-color: #2a628f #061f3a !important;
-        padding-bottom: 18px !important;
+        overflow: hidden !important;
+        padding: 10px 13px 8px 13px !important;
         box-sizing: border-box !important;
     }
 
-    section[data-testid="stSidebar"] > div::-webkit-scrollbar {
-        width: 8px !important;
-    }
-
-    section[data-testid="stSidebar"] > div::-webkit-scrollbar-track {
-        background: #061f3a !important;
-    }
-
-    section[data-testid="stSidebar"] > div::-webkit-scrollbar-thumb {
-        background: #2a628f !important;
-        border-radius: 8px !important;
-        border: 2px solid #061f3a !important;
-    }
-
-    section[data-testid="stSidebar"] > div::-webkit-scrollbar-thumb:hover {
-        background: #3e7cac !important;
-    }
-
-    /* Dimensioni come nel mockup */
+    /* HEADER */
     section[data-testid="stSidebar"] .fanta-header {
-        min-height: 126px !important;
-        margin-bottom: 12px !important;
+        min-height: 100px !important;
+        height: 100px !important;
+        margin: 0 0 8px 0 !important;
+        padding: 10px 13px !important;
+        border: 2px solid var(--fe-gold) !important;
+        border-radius: 16px !important;
     }
 
+    section[data-testid="stSidebar"] .fanta-brand {
+        gap: 12px !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-logo {
+        width: 62px !important;
+        height: 62px !important;
+        min-width: 62px !important;
+        border-width: 2px !important;
+        border-radius: 14px !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand-title {
+        font-size: 22px !important;
+        line-height: .98 !important;
+        white-space: normal !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand-subtitle {
+        font-size: 11px !important;
+        margin-top: 4px !important;
+    }
+
+    /* PROFILO */
+    .sidebar-profile {
+        min-height: 43px !important;
+        height: 43px !important;
+        margin-bottom: 7px !important;
+        padding: 0 12px !important;
+        border-radius: 12px !important;
+    }
+
+    .sidebar-profile-icon {
+        font-size: 16px !important;
+        margin-right: 8px !important;
+    }
+
+    .sidebar-profile-name {
+        font-size: 13px !important;
+    }
+
+    .sidebar-profile-arrow {
+        font-size: 21px !important;
+    }
+
+    /* CARD METRICHE: ridotte ma leggibili */
     section[data-testid="stSidebar"] div[data-testid="stMetric"] {
-        min-height: 102px !important;
-        margin-bottom: 8px !important;
+        min-height: 63px !important;
+        height: 63px !important;
+        margin-bottom: 5px !important;
+        padding: 7px 12px !important;
+        border-radius: 12px !important;
     }
 
+    section[data-testid="stSidebar"] div[data-testid="stMetricLabel"],
+    section[data-testid="stSidebar"] div[data-testid="stMetric"] label {
+        font-size: 11.5px !important;
+        line-height: 1.05 !important;
+        font-weight: 850 !important;
+    }
+
+    section[data-testid="stSidebar"] div[data-testid="stMetricValue"] {
+        font-size: 20px !important;
+        line-height: 1 !important;
+        margin-top: 2px !important;
+    }
+
+    section[data-testid="stSidebar"] div[data-testid="stMetricDelta"] {
+        font-size: 8px !important;
+        line-height: 1 !important;
+    }
+
+    /* BUDGET */
     div[class*="st-key-sidebar_budget_card"] {
-        min-height: 102px !important;
-        margin-bottom: 8px !important;
+        min-height: 69px !important;
+        height: 69px !important;
+        margin-bottom: 5px !important;
+        padding: 5px 9px 6px 9px !important;
+        border-radius: 12px !important;
     }
 
-    section[data-testid="stSidebar"]
-    div[class*="st-key-iqr_card_clickable"] {
-        min-height: 148px !important;
-        margin-bottom: 9px !important;
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] {
+        margin: 0 !important;
     }
 
-    /* MENU come nell'immagine: apertura sotto il pulsante */
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] label {
+        font-size: 11.5px !important;
+        line-height: 1 !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] input {
+        height: 35px !important;
+        min-height: 35px !important;
+        font-size: 18px !important;
+        border-radius: 8px !important;
+    }
+
+    div[class*="st-key-sidebar_budget_card"] div[data-testid="stNumberInput"] button {
+        width: 32px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        border-radius: 50% !important;
+        padding: 0 !important;
+    }
+
+    /* IQR RIDOTTO */
+    section[data-testid="stSidebar"] div[class*="st-key-iqr_card_clickable"] {
+        min-height: 90px !important;
+        height: 90px !important;
+        margin-bottom: 6px !important;
+        padding: 5px 10px !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-gauge-card {
+        transform: scale(.74) !important;
+        transform-origin: center top !important;
+        margin-top: -5px !important;
+        margin-bottom: -24px !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-gauge-title {
+        font-size: 12px !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-gauge-value {
+        font-size: 19px !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-gauge-description {
+        font-size: 8px !important;
+        padding: 2px 5px !important;
+        margin-top: 2px !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-gauge-hint {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"] div[class*="st-key-iqr_card_clickable"] .stButton {
+        position: absolute !important;
+        inset: 0 !important;
+    }
+
+    section[data-testid="stSidebar"] div[class*="st-key-iqr_card_clickable"] .stButton > button {
+        min-height: 100% !important;
+        height: 100% !important;
+    }
+
+    /* MENU IN FONDO */
     section[data-testid="stSidebar"] details {
-        width: 100% !important;
-        margin-top: 5px !important;
-        overflow: visible !important;
+        margin-top: 3px !important;
+        margin-bottom: 0 !important;
+        background: transparent !important;
     }
 
     section[data-testid="stSidebar"] details > summary {
-        width: 100% !important;
-        box-sizing: border-box !important;
+        min-height: 42px !important;
+        height: 42px !important;
+        padding: 0 13px !important;
+        font-size: 15px !important;
+        border-radius: 12px !important;
+        border-width: 2px !important;
     }
 
     section[data-testid="stSidebar"] details[open] {
-        overflow: visible !important;
+        padding: 0 7px 5px 7px !important;
+        border-radius: 12px !important;
+        background: rgba(8,43,80,.72) !important;
     }
 
-    @media (max-width: 950px) {
-        section[data-testid="stSidebar"] {
-            width: 345px !important;
-            min-width: 345px !important;
+    section[data-testid="stSidebar"] details[open] > summary {
+        margin: 0 -7px 5px -7px !important;
+    }
+
+    /* 6 COMANDI = 3 RIGHE x 2 COLONNE */
+    section[data-testid="stSidebar"] details div[data-testid="stHorizontalBlock"] {
+        gap: 5px !important;
+        margin-bottom: 2px !important;
+    }
+
+    section[data-testid="stSidebar"] details .stButton > button,
+    section[data-testid="stSidebar"] details .stDownloadButton > button {
+        min-height: 30px !important;
+        height: 30px !important;
+        padding: 2px 7px !important;
+        font-size: 11px !important;
+        line-height: 1 !important;
+        justify-content: flex-start !important;
+        border-radius: 6px !important;
+        background: transparent !important;
+        color: #ffffff !important;
+        border: 0 !important;
+    }
+
+    section[data-testid="stSidebar"] details .stButton > button *,
+    section[data-testid="stSidebar"] details .stDownloadButton > button * {
+        color: #ffffff !important;
+    }
+
+    section[data-testid="stSidebar"] details [data-testid="stToggle"] {
+        min-height: 30px !important;
+        height: 30px !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+
+    section[data-testid="stSidebar"] details [data-testid="stToggle"] label,
+    section[data-testid="stSidebar"] details [data-testid="stToggle"] span {
+        color: #ffffff !important;
+        font-size: 11px !important;
+    }
+
+    /* Footer compatto */
+    section[data-testid="stSidebar"] div[style*="color:#5f8db5"] {
+        padding: 4px 2px 0 2px !important;
+        font-size: 9px !important;
+    }
+
+    /* ulteriore adattamento per notebook bassi */
+    @media (max-height: 820px) and (min-width: 851px) {
+        section[data-testid="stSidebar"] .fanta-header {
+            min-height: 86px !important;
+            height: 86px !important;
+        }
+
+        section[data-testid="stSidebar"] .fanta-logo {
+            width: 52px !important;
+            height: 52px !important;
+            min-width: 52px !important;
+        }
+
+        section[data-testid="stSidebar"] .fanta-brand-title {
+            font-size: 19px !important;
+        }
+
+        .sidebar-profile {
+            min-height: 37px !important;
+            height: 37px !important;
+        }
+
+        section[data-testid="stSidebar"] div[data-testid="stMetric"] {
+            min-height: 54px !important;
+            height: 54px !important;
+            padding: 5px 10px !important;
+        }
+
+        div[class*="st-key-sidebar_budget_card"] {
+            min-height: 59px !important;
+            height: 59px !important;
+        }
+
+        section[data-testid="stSidebar"] div[class*="st-key-iqr_card_clickable"] {
+            min-height: 76px !important;
+            height: 76px !important;
         }
     }
     </style>
@@ -14524,119 +14735,137 @@ with st.sidebar:
         expanded=False
     ):
 
-        if st.button(
-            "🚪 Esci",
-            use_container_width=True,
-            key="btn_logout_profilo"
-        ):
+        menu_r1c1, menu_r1c2 = st.columns(2)
 
-            for chiave_sessione in list(
-                st.session_state.keys()
-            ):
-
-                if chiave_sessione in {
-                    "profilo_attivo",
-                    "profilo_login_select"
-                }:
-                    continue
-
-                if (
-                    chiave_sessione.startswith("_df_")
-                    or chiave_sessione.startswith("_ultime_")
-                    or chiave_sessione.startswith("_costi_")
-                    or chiave_sessione.startswith("budget_")
-                    or chiave_sessione.startswith("backup_")
-                    or chiave_sessione.startswith("pdf_")
-                ):
-
-                    st.session_state.pop(
-                        chiave_sessione,
-                        None
-                    )
-
-            st.session_state.pop(
-                "profilo_attivo",
-                None
-            )
-
-            st.rerun()
-
-        if st.button(
-            "🔄 Aggiorna",
-            use_container_width=True,
-            key="btn_aggiorna_app"
-        ):
-
-            invalida_cache_dati()
-            st.rerun()
-
-        if st.button(
-            "📸 Snapshot",
-            use_container_width=True,
-            key="btn_snapshot"
-        ):
-
-            gestisci_snapshot()
-
-        if USA_DATABASE_CLOUD:
+        with menu_r1c1:
 
             if st.button(
-                "☁ Backup",
+                "↪  Esci",
                 use_container_width=True,
-                key="btn_backup_cloud"
+                key="btn_logout_profilo"
             ):
 
-                gestisci_backup_cloud()
+                for chiave_sessione in list(
+                    st.session_state.keys()
+                ):
 
-        elif DB_PATH.exists():
+                    if chiave_sessione in {
+                        "profilo_attivo",
+                        "profilo_login_select"
+                    }:
+                        continue
 
-            backup_profilo = (
-                crea_backup_logico_bytes()
-            )
+                    if (
+                        chiave_sessione.startswith("_df_")
+                        or chiave_sessione.startswith("_ultime_")
+                        or chiave_sessione.startswith("_costi_")
+                        or chiave_sessione.startswith("budget_")
+                        or chiave_sessione.startswith("backup_")
+                        or chiave_sessione.startswith("pdf_")
+                    ):
 
-            st.download_button(
-                "☁ Backup",
-                data=backup_profilo,
-                file_name=(
-                    "fantaeleganza_backup_"
-                    + PROFILO_ATTIVO
-                    .lower()
-                    .replace(
-                        " ",
-                        "_"
-                    )
-                    + ".json"
+                        st.session_state.pop(
+                            chiave_sessione,
+                            None
+                        )
+
+                st.session_state.pop(
+                    "profilo_attivo",
+                    None
+                )
+
+                st.rerun()
+
+        with menu_r1c2:
+
+            if USA_DATABASE_CLOUD:
+
+                if st.button(
+                    "☁  Backup",
+                    use_container_width=True,
+                    key="btn_backup_cloud"
+                ):
+
+                    gestisci_backup_cloud()
+
+            elif DB_PATH.exists():
+
+                backup_profilo = (
+                    crea_backup_logico_bytes()
+                )
+
+                st.download_button(
+                    "☁  Backup",
+                    data=backup_profilo,
+                    file_name=(
+                        "fantaeleganza_backup_"
+                        + PROFILO_ATTIVO
+                        .lower()
+                        .replace(
+                            " ",
+                            "_"
+                        )
+                        + ".json"
+                    ),
+                    mime="application/json",
+                    use_container_width=True
+                )
+
+        menu_r2c1, menu_r2c2 = st.columns(2)
+
+        with menu_r2c1:
+
+            if st.button(
+                "⟳  Aggiorna",
+                use_container_width=True,
+                key="btn_aggiorna_app"
+            ):
+
+                invalida_cache_dati()
+                st.rerun()
+
+        with menu_r2c2:
+
+            if st.button(
+                "▤  Regole",
+                use_container_width=True,
+                key="btn_regole"
+            ):
+
+                mostra_regole()
+
+        menu_r3c1, menu_r3c2 = st.columns(2)
+
+        with menu_r3c1:
+
+            if st.button(
+                "📷  Snapshot",
+                use_container_width=True,
+                key="btn_snapshot"
+            ):
+
+                gestisci_snapshot()
+
+        with menu_r3c2:
+
+            nuovo_dark = st.toggle(
+                "☾  Modalità scura",
+                value=(
+                    st.session_state.dark_mode
                 ),
-                mime="application/json",
-                use_container_width=True
+                key="toggle_dark"
             )
 
-        if st.button(
-            "❔ Regole",
-            use_container_width=True,
-            key="btn_regole"
-        ):
-
-            mostra_regole()
-
-        nuovo_dark = st.toggle(
-            "🌙 Scuro",
-            value=(
-                st.session_state.dark_mode
-            ),
-            key="toggle_dark"
-        )
-
-        if (
-            nuovo_dark
-            != st.session_state.dark_mode
-        ):
-
-            st.session_state.dark_mode = (
+            if (
                 nuovo_dark
-            )
+                != st.session_state.dark_mode
+            ):
 
-            st.rerun()
+                st.session_state.dark_mode = (
+                    nuovo_dark
+                )
+
+                st.rerun()
 
     st.markdown("")
 
@@ -14724,7 +14953,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V41 &nbsp;|&nbsp; Offline Resiliente'
+        'V42 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
