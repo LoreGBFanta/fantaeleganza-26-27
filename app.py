@@ -3200,92 +3200,41 @@ def genera_html_gauge_iqr(
     valore
 ):
     """
-    Card IQR in stile mockup.
-    HTML costruito senza indentazione iniziale per evitare
-    che Streamlit lo interpreti come codice Markdown.
+    Card IQR pulita:
+    titolo + percentuale, barra completa, indicatore e stato qualitativo.
     """
 
     try:
-        valore = float(
-            valore
-        )
+        valore = float(valore)
     except Exception:
         valore = 0.0
 
-    valore = max(
-        0.0,
-        min(
-            100.0,
-            valore
-        )
-    )
+    valore = max(0.0, min(100.0, valore))
 
     descrizione = html.escape(
-        descrizione_iqr(
-            valore
-        )
+        descrizione_iqr(valore)
     )
 
-    colore_descrizione = (
-        colore_iqr(
-            valore
-        )
-    )
+    colore_descrizione = colore_iqr(valore)
 
     posizione = max(
         1.5,
-        min(
-            98.5,
-            valore
-        )
+        min(98.5, valore)
     )
 
     return (
-        '<div class="iqr-gauge-card iqr-card-v71">'
-        '<div class="iqr-v71-top">'
-        '<div class="iqr-v71-star">★</div>'
-        '<div class="iqr-v71-title">IQR</div>'
-        f'<div class="iqr-v71-percent">{valore:.1f}%</div>'
-        '<div class="iqr-v71-help">?</div>'
+        '<div class="iqr-gauge-card iqr-card-v73">'
+        '<div class="iqr-v73-top">'
+        '<div class="iqr-v73-star">★</div>'
+        '<div class="iqr-v73-title">IQR</div>'
+        f'<div class="iqr-v73-percent">{valore:.1f}%</div>'
         '</div>'
-
-        '<div class="iqr-v71-bar-wrap">'
-        '<div class="iqr-scale">'
-        '<div class="iqr-seg iqr-seg-black" style="width:40%;flex:none;"></div>'
-        '<div class="iqr-seg iqr-seg-red" style="width:25%;flex:none;"></div>'
-        '<div class="iqr-seg iqr-seg-blue" style="width:20%;flex:none;"></div>'
-        '<div class="iqr-seg iqr-seg-green" style="width:15%;flex:none;"></div>'
+        '<div class="iqr-v73-bar-wrap">'
+        '<div class="iqr-v73-bar"></div>'
+        f'<div class="iqr-v73-pointer" style="left:{posizione:.1f}%"></div>'
         '</div>'
-        f'<div class="iqr-v71-pointer" style="left:{posizione:.1f}%"></div>'
-        '</div>'
-
-        f'<div class="iqr-v71-status" '
-        f'style="background:{colore_descrizione};">'
+        f'<div class="iqr-v73-status" style="background:{colore_descrizione};">'
         f'{descrizione}'
-        '</div>'
-
-        '<div class="iqr-v71-legend">'
-
-        '<div class="iqr-v71-legend-item">'
-        '<span class="iqr-v71-swatch sw-black"></span>'
-        '<div><b>0–40%</b><br><span>Rosa debole</span></div>'
-        '</div>'
-
-        '<div class="iqr-v71-legend-item">'
-        '<span class="iqr-v71-swatch sw-red"></span>'
-        '<div><b>40,1–65%</b><br><span>Rosa buona</span></div>'
-        '</div>'
-
-        '<div class="iqr-v71-legend-item">'
-        '<span class="iqr-v71-swatch sw-blue"></span>'
-        '<div><b>65,1–85%</b><br><span>Rosa forte</span></div>'
-        '</div>'
-
-        '<div class="iqr-v71-legend-item">'
-        '<span class="iqr-v71-swatch sw-green"></span>'
-        '<div><b>&gt;85%</b><br><span>Rosa eccellente</span></div>'
-        '</div>'
-
         '</div>'
         '</div>'
     )
@@ -18048,6 +17997,125 @@ st.markdown(
     }
 
 
+
+    /* ======================================================
+       V73 - IQR PULITA + HELP RIMOSSI
+       ====================================================== */
+
+    section[data-testid="stSidebar"] .iqr-card-v73 {
+        width: 100% !important;
+        height: 100% !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: #ffffff !important;
+        text-align: center !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-v73 .iqr-v73-top {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 8px !important;
+        width: 100% !important;
+        margin: 0 0 16px 0 !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-v73 .iqr-v73-star {
+        color: #ffc21c !important;
+        font-size: 24px !important;
+        line-height: 1 !important;
+        font-weight: 950 !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-v73 .iqr-v73-title {
+        color: #ffffff !important;
+        font-size: 16px !important;
+        line-height: 1 !important;
+        font-weight: 900 !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-v73 .iqr-v73-percent {
+        color: #ffc21c !important;
+        font-size: 16px !important;
+        line-height: 1 !important;
+        font-weight: 950 !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-v73 .iqr-v73-bar-wrap {
+        position: relative !important;
+        width: 88% !important;
+        height: 48px !important;
+        margin: 0 auto 12px auto !important;
+        padding-top: 14px !important;
+        box-sizing: border-box !important;
+        overflow: visible !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-v73 .iqr-v73-bar {
+        width: 100% !important;
+        height: 30px !important;
+        background: linear-gradient(
+            to right,
+            #050505 0%,
+            #050505 40%,
+            #ff1616 40%,
+            #ff1616 65%,
+            #0b6df5 65%,
+            #0b6df5 85%,
+            #16a34a 85%,
+            #16a34a 100%
+        ) !important;
+        border: 1px solid rgba(255,255,255,.16) !important;
+        border-radius: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-v73 .iqr-v73-pointer {
+        position: absolute !important;
+        top: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        transform: translateX(-50%) !important;
+        border-left: 10px solid transparent !important;
+        border-right: 10px solid transparent !important;
+        border-top: 14px solid #ffffff !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-v73 .iqr-v73-status {
+        display: inline-block !important;
+        min-width: 48% !important;
+        margin: 2px auto 0 auto !important;
+        padding: 8px 13px !important;
+        color: #ffffff !important;
+        font-size: 15px !important;
+        line-height: 1 !important;
+        font-weight: 900 !important;
+        border: 1px solid rgba(255,255,255,.15) !important;
+        border-radius: 8px !important;
+        box-sizing: border-box !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-v71-legend,
+    section[data-testid="stSidebar"] .iqr-v71-legend-item,
+    section[data-testid="stSidebar"] .iqr-v71-swatch {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"] .fe-card-help,
+    section[data-testid="stSidebar"] .iqr-v65-help,
+    section[data-testid="stSidebar"] .iqr-v71-help,
+    section[data-testid="stSidebar"] .iqr-v73-help {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"] .fe-side-card {
+        grid-template-columns: 54px 1fr !important;
+    }
 </style>
     """,
     unsafe_allow_html=True
@@ -18132,7 +18200,6 @@ with st.sidebar:
                 <div class="fe-card-label">Budget rimanente</div>
                 <div class="fe-card-value">{formatta_crediti(budget_rimanente)} €</div>
             </div>
-            <div class="fe-card-help">?</div>
         </div>
 
         <div class="fe-side-card">
@@ -18141,7 +18208,6 @@ with st.sidebar:
                 <div class="fe-card-label">Spesa effettiva</div>
                 <div class="fe-card-value">{formatta_crediti(spesa_effettiva)} €</div>
             </div>
-            <div class="fe-card-help">?</div>
         </div>
 
         <div class="fe-side-card">
@@ -18150,7 +18216,6 @@ with st.sidebar:
                 <div class="fe-card-label">Oltre soglia</div>
                 <div class="fe-card-value">{formatta_crediti(oltre_soglia)} €</div>
             </div>
-            <div class="fe-card-help">?</div>
         </div>
 
         <div class="fe-side-card">
@@ -18159,7 +18224,6 @@ with st.sidebar:
                 <div class="fe-card-label">Giocatori</div>
                 <div class="fe-card-value">{numero_rosa}/{MAX_GIOCATORI}</div>
             </div>
-            <div class="fe-card-help">?</div>
         </div>
 
         <div class="fe-side-card">
@@ -18168,7 +18232,6 @@ with st.sidebar:
                 <div class="fe-card-label">Portieri</div>
                 <div class="fe-card-value">{numero_portieri}/{MIN_PORTIERI}</div>
             </div>
-            <div class="fe-card-help">?</div>
         </div>
         """,
         unsafe_allow_html=True
@@ -18353,7 +18416,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V72 &nbsp;|&nbsp; Offline Resiliente'
+        'V73 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
