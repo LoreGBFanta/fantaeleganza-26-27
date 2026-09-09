@@ -15677,6 +15677,316 @@ st.markdown(
         transform: translate(-50%, 0) !important;
     }
 
+
+    /* ======================================================
+       V50 - IQR CARD SENZA ST.BUTTON
+       Il click è un link HTML sull'intera card.
+       ====================================================== */
+
+    section[data-testid="stSidebar"] .iqr-card-link {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 0 10px 0 !important;
+
+        text-decoration: none !important;
+        color: inherit !important;
+
+        cursor: pointer !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-link:visited,
+    section[data-testid="stSidebar"] .iqr-card-link:hover,
+    section[data-testid="stSidebar"] .iqr-card-link:active,
+    section[data-testid="stSidebar"] .iqr-card-link:focus {
+        text-decoration: none !important;
+        color: inherit !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-link-inner {
+        min-height: 225px !important;
+        height: 225px !important;
+
+        padding: 15px 16px 16px 16px !important;
+
+        background:
+            linear-gradient(
+                100deg,
+                #0b3158 0%,
+                #0a2b4d 100%
+            ) !important;
+
+        border: 1px solid #165387 !important;
+        border-radius: 15px !important;
+
+        box-sizing: border-box !important;
+        overflow: visible !important;
+
+        transition:
+            border-color .14s ease,
+            box-shadow .14s ease !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-link:hover
+    .iqr-card-link-inner {
+        border-color: rgba(255,194,28,.72) !important;
+        box-shadow:
+            0 0 0 1px rgba(255,194,28,.13),
+            inset 0 1px 0 rgba(255,255,255,.03) !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-link-inner
+    .iqr-gauge-card {
+        transform: none !important;
+        width: 100% !important;
+        height: 100% !important;
+
+        margin: 0 !important;
+        padding: 0 !important;
+
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+
+        overflow: visible !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-link-inner
+    .iqr-gauge-title {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+
+        width: 100% !important;
+        min-height: 24px !important;
+
+        margin: 0 0 15px 0 !important;
+        padding: 0 !important;
+
+        color: #ffffff !important;
+        font-size: 15px !important;
+        line-height: 1.15 !important;
+        font-weight: 850 !important;
+
+        text-align: center !important;
+        white-space: nowrap !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-link-inner
+    .iqr-scale-wrap {
+        position: relative !important;
+
+        width: 84% !important;
+
+        margin: 0 auto !important;
+        padding: 0 0 30px 0 !important;
+
+        overflow: visible !important;
+        box-sizing: border-box !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-link-inner
+    .iqr-scale {
+        width: 100% !important;
+        height: 38px !important;
+
+        display: grid !important;
+        grid-template-columns: 40fr 25fr 15fr 20fr !important;
+
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-link-inner
+    .iqr-pointer {
+        bottom: 3px !important;
+
+        border-left: 16px solid transparent !important;
+        border-right: 16px solid transparent !important;
+        border-bottom: 21px solid #ffc21c !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-link-inner
+    .iqr-gauge-value {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-card-link-inner
+    .iqr-gauge-description {
+        display: block !important;
+
+        width: 66% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+
+        margin: 8px auto 0 auto !important;
+        padding: 12px 10px !important;
+
+        color: #ffffff !important;
+
+        font-size: 18px !important;
+        line-height: 1.05 !important;
+        font-weight: 950 !important;
+
+        text-align: center !important;
+        white-space: nowrap !important;
+
+        border: 2px solid #050505 !important;
+        border-radius: 8px !important;
+
+        box-sizing: border-box !important;
+    }
+
+    /* Tooltip nativo del browser via title.
+       Nessun widget bianco/verticale dentro la card. */
+
+
+    /* ======================================================
+       V51 - CARD IQR PULITA, SENZA WIDGET STREAMLIT
+       ====================================================== */
+
+    section[data-testid="stSidebar"] .iqr-v51-link {
+        display:block !important;
+        width:100% !important;
+        margin:0 0 10px 0 !important;
+        padding:0 !important;
+        text-decoration:none !important;
+        color:inherit !important;
+        cursor:pointer !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-v51-card {
+        width:100% !important;
+        min-height:225px !important;
+        height:225px !important;
+        box-sizing:border-box !important;
+        padding:15px 16px 16px 16px !important;
+        margin:0 !important;
+
+        background:linear-gradient(
+            100deg,
+            #0b3158 0%,
+            #0a2b4d 100%
+        ) !important;
+
+        border:1px solid #165387 !important;
+        border-radius:15px !important;
+        overflow:hidden !important;
+
+        position:relative !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-v51-card .iqr-gauge-card {
+        width:100% !important;
+        height:100% !important;
+        margin:0 !important;
+        padding:0 !important;
+        transform:none !important;
+
+        display:flex !important;
+        flex-direction:column !important;
+        align-items:center !important;
+        justify-content:flex-start !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-v51-card .iqr-gauge-title {
+        display:block !important;
+        visibility:visible !important;
+        opacity:1 !important;
+
+        margin:0 0 15px 0 !important;
+        padding:0 !important;
+
+        color:#ffffff !important;
+        font-size:15px !important;
+        line-height:1.15 !important;
+        font-weight:850 !important;
+        text-align:center !important;
+        white-space:nowrap !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-v51-card .iqr-scale-wrap {
+        position:relative !important;
+        width:84% !important;
+        margin:0 auto !important;
+        padding:0 0 30px 0 !important;
+        box-sizing:border-box !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-v51-card .iqr-scale {
+        display:grid !important;
+        grid-template-columns:40fr 25fr 15fr 20fr !important;
+        width:100% !important;
+        height:38px !important;
+        overflow:hidden !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-v51-card .iqr-pointer {
+        position:absolute !important;
+        bottom:3px !important;
+        width:0 !important;
+        height:0 !important;
+        transform:translateX(-50%) !important;
+
+        border-left:16px solid transparent !important;
+        border-right:16px solid transparent !important;
+        border-bottom:21px solid #ffc21c !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-v51-card .iqr-gauge-value {
+        display:none !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-v51-card .iqr-gauge-description {
+        display:block !important;
+        width:66% !important;
+        min-width:0 !important;
+        margin:8px auto 0 auto !important;
+        padding:12px 10px !important;
+
+        color:#ffffff !important;
+        font-size:18px !important;
+        line-height:1.05 !important;
+        font-weight:950 !important;
+        text-align:center !important;
+        white-space:nowrap !important;
+
+        border:2px solid #050505 !important;
+        border-radius:8px !important;
+        box-sizing:border-box !important;
+    }
+
+    /* Tooltip custom: non usa title/bottone Streamlit */
+    section[data-testid="stSidebar"] .iqr-v51-card::after {
+        content:"Clicca per aprire dettaglio IQR";
+        position:absolute !important;
+        left:50% !important;
+        bottom:8px !important;
+        transform:translate(-50%,4px) !important;
+        z-index:10 !important;
+
+        padding:6px 10px !important;
+        background:rgba(5,18,34,.94) !important;
+        color:#ffffff !important;
+        border:1px solid rgba(255,194,28,.55) !important;
+        border-radius:7px !important;
+
+        font-size:12px !important;
+        font-weight:700 !important;
+        line-height:1.15 !important;
+        white-space:nowrap !important;
+
+        opacity:0 !important;
+        visibility:hidden !important;
+        pointer-events:none !important;
+        transition:opacity .14s ease, transform .14s ease !important;
+    }
+
+    section[data-testid="stSidebar"] .iqr-v51-card:hover::after {
+        opacity:1 !important;
+        visibility:visible !important;
+        transform:translate(-50%,0) !important;
+    }
+
 </style>
     """,
     unsafe_allow_html=True
@@ -15803,27 +16113,41 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-    with st.container(
-        key="iqr_card_clickable"
-    ):
-
-        st.markdown(
-            genera_html_gauge_iqr(
+    st.markdown(
+        (
+            '<a class="iqr-v51-link" '
+            'href="?iqr_detail=1" '
+            '>'
+            '<div class="iqr-v51-card">'
+            + genera_html_gauge_iqr(
                 iqr
-            ),
-            unsafe_allow_html=True
-        )
-
-        if st.button(
-            "Apri dettaglio IQR",
-            key="btn_apri_dettaglio_iqr",
-            help="Apri il dettaglio dell'Indice Qualità Rosa"
-        ):
-
-            mostra_dettaglio_iqr(
-                iqr,
-                df_rosa_globale
             )
+            + '</div>'
+            '</a>'
+        ),
+        unsafe_allow_html=True
+    )
+
+    # Apertura del popup IQR tramite query parameter.
+    # Non usiamo più alcun bottone Streamlit dentro la card.
+    if str(
+        st.query_params.get(
+            "iqr_detail",
+            ""
+        )
+    ) == "1":
+
+        try:
+            del st.query_params[
+                "iqr_detail"
+            ]
+        except Exception:
+            pass
+
+        mostra_dettaglio_iqr(
+            iqr,
+            df_rosa_globale
+        )
 
     with st.expander(
         "☰  MENU",
@@ -15970,7 +16294,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V43 &nbsp;|&nbsp; Offline Resiliente'
+        'V51 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
