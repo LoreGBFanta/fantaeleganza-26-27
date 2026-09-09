@@ -1270,6 +1270,165 @@ def crea_lega_da_portale(
         )
 
 
+
+# ============================================================
+# MULTILEGA 0.6 - MIGRAZIONE ACCOUNT LEGACY
+# ============================================================
+
+LEGACY_AUTH_BOOTSTRAP = {
+    "IBBINI IDIOTA": 'Ibbini26!Asta#91',
+    "GOSTOBAR": 'Gostobar26!Mantra#47'
+}
+
+
+def migra_password_account_legacy():
+    """
+    Migrazione idempotente dei due account storici.
+
+    - NON modifica user_id, league_members, team_id o dati legacy;
+    - NON modifica rosa, budget, operazioni o configurazioni;
+    - scrive la password soltanto se password_hash è NULL/vuoto;
+    - nel DB viene salvato esclusivamente l'hash PBKDF2.
+    """
+
+    chiave_sessione = (
+        "_ml06_legacy_auth_migration_ok"
+    )
+
+    if st.session_state.get(
+        chiave_sessione,
+        False
+    ):
+        return
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+
+        for username, password_iniziale in (
+            LEGACY_AUTH_BOOTSTRAP.items()
+        ):
+
+            cur.execute("""
+                SELECT
+                    id,
+                    password_hash
+                FROM users
+                WHERE username = ?
+                LIMIT 1
+            """, (
+                username,
+            ))
+
+            riga = cur.fetchone()
+
+            if not riga:
+                # L'account verrà eventualmente creato dalla normale
+                # foundation legacy. Non inventiamo membership qui.
+                continue
+
+            user_id = int(
+                riga[0]
+            )
+
+            hash_esistente = (
+                riga[1]
+            )
+
+            if (
+                hash_esistente is None
+                or not str(
+                    hash_esistente
+                ).strip()
+            ):
+
+                nuovo_hash = (
+                    password_hash_sicuro(
+                        password_iniziale
+                    )
+                )
+
+                cur.execute("""
+                    UPDATE users
+                    SET password_hash = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                      AND (
+                            password_hash IS NULL
+                            OR TRIM(password_hash) = ''
+                      )
+                """, (
+                    nuovo_hash,
+                    user_id
+                ))
+
+                cur.execute("""
+                    INSERT INTO audit_log (
+                        league_id,
+                        user_id,
+                        team_id,
+                        azione,
+                        entita,
+                        entita_id,
+                        dettagli_json,
+                        created_at
+                    )
+                    SELECT
+                        lm.league_id,
+                        ?,
+                        lm.team_id,
+                        'LEGACY_AUTH_MIGRATED',
+                        'USER',
+                        ?,
+                        ?,
+                        CURRENT_TIMESTAMP
+                    FROM league_members lm
+                    WHERE lm.user_id = ?
+                    LIMIT 1
+                """, (
+                    user_id,
+                    str(
+                        user_id
+                    ),
+                    json.dumps(
+                        {
+                            "username":
+                                username,
+
+                            "password_storage":
+                                "PBKDF2-HMAC-SHA256",
+
+                            "legacy_data_preserved":
+                                True
+                        },
+                        ensure_ascii=False
+                    ),
+                    user_id
+                ))
+
+        conn.commit()
+
+        st.session_state[
+            chiave_sessione
+        ] = True
+
+    except Exception:
+
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+        raise
+
+    finally:
+
+        _portal_close(
+            conn
+        )
+
+
 def render_portale_iniziale():
 
     st.markdown(
@@ -1377,8 +1536,8 @@ def render_portale_iniziale():
                     st.warning(
                         "Questo è un account della versione precedente "
                         "e non possiede ancora una password. "
-                        "La migrazione della password legacy verrà gestita "
-                        "separatamente: nessuna password è stata inventata."
+                        "La migrazione automatica delle credenziali legacy non risulta "
+                        "ancora completata. Ricarica l’app o verifica il database."
                     )
 
                 elif risultato is None:
@@ -1704,6 +1863,22 @@ def render_portale_iniziale():
 
 
 inizializza_portale_auth()
+
+try:
+
+    migra_password_account_legacy()
+
+except Exception as errore_migrazione_auth:
+
+    st.error(
+        "Errore durante la migrazione delle credenziali legacy: "
+        + str(
+            errore_migrazione_auth
+        )
+    )
+
+    st.stop()
+
 
 if not st.session_state.get(
     "auth_ok",
@@ -11330,7 +11505,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "0.5"
+MULTILEGA_SCHEMA_VERSION = "0.6"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -22381,7 +22556,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 0.5 &nbsp;|&nbsp; V87 Auth + League Portal'
+        'MULTILEGA 0.6 &nbsp;|&nbsp; V88 Legacy Auth Migration'
         '</div>',
         unsafe_allow_html=True
     )
