@@ -16942,6 +16942,48 @@ st.markdown(
         color: var(--fe-side-gold) !important;
     }
 
+
+    /* V57: riduzione spazio superiore + icone oro */
+    section[data-testid="stSidebar"] > div:first-child,
+    section[data-testid="stSidebar"] div[data-testid="stSidebarContent"],
+    section[data-testid="stSidebar"] .block-container {
+        padding-top: 2px !important;
+        margin-top: 0 !important;
+    }
+
+    section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+        height: 2px !important;
+        min-height: 2px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > * {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"] .fanta-brand-card,
+    section[data-testid="stSidebar"] .fanta-brand-wrap {
+        margin-top: 0 !important;
+    }
+
+    section[data-testid="stSidebar"] .fe-card-icon,
+    section[data-testid="stSidebar"] .fe-budget-icon,
+    section[data-testid="stSidebar"] .sidebar-profile-icon {
+        color: #ffc21c !important;
+        filter: grayscale(1) sepia(1) saturate(8)
+                hue-rotate(355deg) brightness(1.18) contrast(1.05) !important;
+    }
+
+    section[data-testid="stSidebar"] .fe-card-icon svg,
+    section[data-testid="stSidebar"] .fe-budget-icon svg,
+    section[data-testid="stSidebar"] .sidebar-profile-icon svg {
+        fill: #ffc21c !important;
+        stroke: #ffc21c !important;
+        color: #ffc21c !important;
+        filter: none !important;
+    }
 </style>
     """,
     unsafe_allow_html=True
@@ -17247,7 +17289,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V56 &nbsp;|&nbsp; Offline Resiliente'
+        'V57 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
