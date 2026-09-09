@@ -18297,6 +18297,187 @@ st.markdown(
     section[data-testid="stSidebar"] .fe-side-card {
         grid-template-columns: 54px 1fr !important;
     }
+
+    /* ======================================================
+       V79 - CARD BUDGET IDENTICA IN TUTTE LE SEZIONI
+       ====================================================== */
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"] {
+        min-height: 106px !important;
+        height: 106px !important;
+        margin: 0 0 9px 0 !important;
+        padding: 11px 14px !important;
+
+        background: linear-gradient(
+            100deg,
+            #0b3158 0%,
+            #0a2b4d 100%
+        ) !important;
+
+        border: 1px solid #155486 !important;
+        border-radius: 13px !important;
+        box-sizing: border-box !important;
+        box-shadow: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-head {
+        display: grid !important;
+        grid-template-columns: 46px 1fr 24px !important;
+        align-items: center !important;
+        gap: 10px !important;
+        margin: 0 0 7px 0 !important;
+        min-height: 40px !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-icon {
+        width: 46px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        filter: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-icon img {
+        width: 40px !important;
+        height: 40px !important;
+        object-fit: contain !important;
+        filter: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-title {
+        color: #ffffff !important;
+        font-size: 15px !important;
+        line-height: 1 !important;
+        font-weight: 850 !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    .fe-budget-head::after {
+        content: "✎";
+        color: #c7d7e8 !important;
+        font-size: 21px !important;
+        line-height: 1 !important;
+        text-align: right !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] {
+        margin-left: 55px !important;
+        width: calc(100% - 55px) !important;
+        overflow: visible !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] label {
+        display: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] > div {
+        display: flex !important;
+        align-items: center !important;
+        gap: 5px !important;
+        overflow: visible !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] input {
+        height: 43px !important;
+        min-height: 43px !important;
+        padding: 0 12px !important;
+
+        color: #ffc21c !important;
+        -webkit-text-fill-color: #ffc21c !important;
+        background: #092947 !important;
+
+        border: 1px solid #8fc7f5 !important;
+        border-radius: 8px !important;
+
+        font-size: 22px !important;
+        line-height: 1 !important;
+        font-weight: 950 !important;
+
+        box-shadow: none !important;
+        outline: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button {
+        width: 38px !important;
+        min-width: 38px !important;
+        max-width: 38px !important;
+
+        height: 38px !important;
+        min-height: 38px !important;
+        max-height: 38px !important;
+
+        margin: 0 !important;
+        padding: 0 !important;
+
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+
+        color: #ffffff !important;
+        background: #164f82 !important;
+
+        border: 1px solid #8fc7f5 !important;
+        border-radius: 9px !important;
+
+        box-shadow: none !important;
+        outline: none !important;
+        overflow: hidden !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button:hover {
+        color: #ffffff !important;
+        background: #1d609b !important;
+        border-color: #ffffff !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button:focus,
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button:active {
+        color: #ffffff !important;
+        background: #164f82 !important;
+        border-color: #8fc7f5 !important;
+        box-shadow: none !important;
+        outline: none !important;
+    }
+
+    section[data-testid="stSidebar"]
+    div[class*="st-key-sidebar_budget_card"]
+    div[data-testid="stNumberInput"] button svg {
+        width: 15px !important;
+        height: 15px !important;
+        color: #ffffff !important;
+        fill: currentColor !important;
+        stroke: currentColor !important;
+    }
+
 </style>
     """,
     unsafe_allow_html=True
@@ -18597,7 +18778,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'V78 &nbsp;|&nbsp; Offline Resiliente'
+        'V79 &nbsp;|&nbsp; Offline Resiliente'
         '</div>',
         unsafe_allow_html=True
     )
