@@ -6123,18 +6123,80 @@ def _stesso_giocatore_specialista(
 
 
 
+def invalida_cache_titolarita():
+    """
+    Invalida soltanto la cache derivata delle Formazioni Tipo.
+    Va chiamata quando i dati delle formazioni vengono aggiornati.
+    """
+
+    prefisso = (
+        "_rosa_titolarita_cache_"
+    )
+
+    for chiave in list(
+        st.session_state.keys()
+    ):
+
+        if chiave.startswith(
+            prefisso
+        ):
+            st.session_state.pop(
+                chiave,
+                None
+            )
+
+    st.session_state.pop(
+        "_formazioni_tipo_fast_cache",
+        None
+    )
+
+
 def costruisci_mappa_titolarita():
     """
-    Costruisce UNA SOLA VOLTA per render della pagina una mappa:
-        (squadra_normalizzata, giocatore_normalizzato) ->
-            {"tipo": "...", "contro": "..."}
+    MULTILEGA 0.4 - FAST CACHE
 
-    Evita di:
-    - rileggere la cache delle formazioni per ogni riga della rosa;
-    - ciclare 20 squadre per ogni giocatore;
-    - rifare matching costosi ripetutamente.
+    La mappa di titolarità è indipendente dal contenuto della rosa:
+    dipende esclusivamente dalle Formazioni Tipo.
+
+    Per questo viene costruita una sola volta e riutilizzata nei
+    successivi ingressi in ROSA. La chiave include profilo, lega e team
+    per evitare contaminazioni tra contesti multilega.
     """
 
+    cache_key = (
+        "_rosa_titolarita_cache_"
+        + str(
+            PROFILO_ATTIVO
+        )
+        + "_"
+        + str(
+            st.session_state.get(
+                "ml_league_id",
+                "legacy"
+            )
+        )
+        + "_"
+        + str(
+            st.session_state.get(
+                "ml_team_id",
+                "none"
+            )
+        )
+    )
+
+    cache_esistente = (
+        st.session_state.get(
+            cache_key
+        )
+    )
+
+    if isinstance(
+        cache_esistente,
+        dict
+    ):
+        return cache_esistente
+
+    # Primo ingresso: usa i dati Formazioni Tipo e costruisce la mappa.
     dati_formazioni = carica_probabili_web()
 
     mappa = {}
@@ -6253,6 +6315,10 @@ def costruisci_mappa_titolarita():
                     "contro":
                         a
                 }
+
+    st.session_state[
+        cache_key
+    ] = mappa
 
     return mappa
 
@@ -6653,6 +6719,27 @@ def aggiorna_probabili_web():
 
 def carica_probabili_web():
 
+    # MULTILEGA 0.4:
+    # se i dati sono già stati letti in questa sessione, non interroga
+    # nuovamente il DB cloud entrando in ROSA o FORMAZIONI TIPO.
+    fast_cache = st.session_state.get(
+        "_formazioni_tipo_fast_cache"
+    )
+
+    if (
+        isinstance(
+            fast_cache,
+            dict
+        )
+        and len(
+            fast_cache.get(
+                "squadre",
+                []
+            )
+        ) == 20
+    ):
+        return fast_cache
+
     # 1) Database/configurazione del profilo attivo.
     try:
 
@@ -6694,6 +6781,10 @@ def carica_probabili_web():
                     dati
                 )
 
+                st.session_state[
+                    "_formazioni_tipo_fast_cache"
+                ] = dati
+
                 return dati
 
         except Exception:
@@ -6718,6 +6809,10 @@ def carica_probabili_web():
         ) == 20
     ):
 
+        st.session_state[
+            "_formazioni_tipo_fast_cache"
+        ] = dati_cache
+
         return dati_cache
 
     # 3) Ultimo fallback incorporato nell'app.
@@ -6727,6 +6822,10 @@ def carica_probabili_web():
         CACHE_FORMAZIONI_PATH,
         dati_snapshot
     )
+
+    st.session_state[
+        "_formazioni_tipo_fast_cache"
+    ] = dati_snapshot
 
     return dati_snapshot
 
@@ -10109,7 +10208,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "0.3"
+MULTILEGA_SCHEMA_VERSION = "0.4"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -21132,7 +21231,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 0.3 &nbsp;|&nbsp; V85 Admin + Fast Navigation'
+        'MULTILEGA 0.4 &nbsp;|&nbsp; V86 Rosa Fast Cache'
         '</div>',
         unsafe_allow_html=True
     )
@@ -23068,13 +23167,17 @@ elif sezione == "ROSA":
         df_rosa_globale.copy()
     )
 
-    # Precalcolo una sola volta i dati di titolarità
-    # per tutta la pagina ROSA.
-    mappa_titolarita_rosa = (
-        costruisci_mappa_titolarita()
-    )
+    # MULTILEGA 0.4:
+    # nessun accesso alle Formazioni Tipo se la rosa è vuota.
+    # Se la rosa contiene giocatori, la mappa viene recuperata dalla
+    # cache RAM e ricostruita solo al primo accesso/aggiornamento.
+    mappa_titolarita_rosa = {}
 
     if not df_rosa.empty:
+
+        mappa_titolarita_rosa = (
+            costruisci_mappa_titolarita()
+        )
         if st.button(
             "🗑️ ELIMINA TUTTA LA ROSA",
             key="btn_reset_tutta_rosa"
@@ -23488,6 +23591,12 @@ elif sezione == "FORMAZIONI TIPO":
                     dati = (
                         aggiorna_probabili_web()
                     )
+
+                    invalida_cache_titolarita()
+
+                    st.session_state[
+                        "_formazioni_tipo_fast_cache"
+                    ] = dati
 
                 st.success(
                     f"Aggiornate "
