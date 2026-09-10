@@ -12203,7 +12203,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "2.7"
+MULTILEGA_SCHEMA_VERSION = "2.8"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -14542,6 +14542,7 @@ def elimina_lega_multilega(
         tabelle_legate = [
             "bids",
             "assignments",
+            "auction_calls",
             "auction_lots",
             "auction_sessions",
             "player_evaluations",
@@ -24507,7 +24508,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 2.7 &nbsp;|&nbsp; V108 Live Refresh e Sync'
+        'MULTILEGA 2.8 &nbsp;|&nbsp; V109 Chiamata e Draft Team'
         '</div>',
         unsafe_allow_html=True
     )
@@ -24824,6 +24825,26 @@ def inizializza_listone_lega_asta(league_id):
             """)
         except Exception:
             pass
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auction_calls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                tipo_asta TEXT NOT NULL,
+                stato TEXT NOT NULL DEFAULT 'PENDING',
+                created_by_user_id INTEGER NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                handled_by_user_id INTEGER,
+                handled_at TEXT
+            )
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS ix_auction_calls_league_state
+            ON auction_calls(league_id, stato, id)
+        """)
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS bids (
@@ -25818,6 +25839,245 @@ def migliore_offerta_lotto_multilega(league_id, lot_id):
 
 
 @st.fragment(run_every="2s")
+
+def chiamata_pendente_multilega(league_id):
+    league_id = int(league_id)
+    inizializza_listone_lega_asta(league_id)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                c.id,
+                c.team_id,
+                COALESCE(t.nome,''),
+                c.player_id,
+                COALESCE(g.nome,''),
+                COALESCE(g.squadra,''),
+                COALESCE(g.ruolo_mantra,''),
+                c.tipo_asta,
+                c.stato,
+                c.created_at
+            FROM auction_calls c
+            LEFT JOIN teams t
+              ON t.id=c.team_id AND t.league_id=c.league_id
+            LEFT JOIN giocatori g ON g.id=c.player_id
+            WHERE c.league_id=? AND c.stato='PENDING'
+            ORDER BY c.id
+            LIMIT 1
+        """, (league_id,))
+        r = cur.fetchone()
+
+        if not r:
+            return None
+
+        return {
+            "call_id": int(r[0]),
+            "team_id": int(r[1]),
+            "team": str(r[2] or ""),
+            "player_id": int(r[3]),
+            "player": str(r[4] or ""),
+            "squadra_reale": str(r[5] or ""),
+            "ruolo_mantra": str(r[6] or ""),
+            "tipo_asta": str(r[7] or "").upper(),
+            "stato": str(r[8] or ""),
+            "created_at": str(r[9] or ""),
+        }
+    finally:
+        _portal_close(conn)
+
+
+def invia_chiamata_team_multilega(league_id, team_id, player_id):
+    """
+    CHIAMATA / DRAFT:
+    la squadra di turno seleziona il giocatore.
+    Il Banditore non sceglie il giocatore al posto della squadra.
+    """
+    league_id = int(league_id)
+    team_id = int(team_id)
+    player_id = int(player_id)
+    user_id = int(st.session_state.get("auth_user_id") or 0)
+
+    tipo_asta = tipo_asta_lega_multilega(league_id)
+    if tipo_asta not in ("CHIAMATA", "DRAFT"):
+        raise ValueError(
+            "La selezione da parte della squadra è disponibile solo "
+            "in modalità A chiamata o Draft."
+        )
+
+    turno = turno_squadra_multilega(league_id, tipo_asta)
+    if not turno or int(turno["team_id"]) != team_id:
+        raise PermissionError("Non è il turno di questa squadra.")
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=? AND team_id=? AND user_id=?
+              AND is_active=1 AND is_team_member=1
+        """, (league_id, team_id, user_id))
+        if int(cur.fetchone()[0] or 0) == 0:
+            raise PermissionError(
+                "L'utente non è autorizzato a selezionare per questa squadra."
+            )
+
+        cur.execute("""
+            SELECT current_lot_id
+            FROM auction_sessions
+            WHERE league_id=?
+            LIMIT 1
+        """, (league_id,))
+        rs = cur.fetchone()
+        if rs and rs[0] is not None:
+            raise ValueError(
+                "Esiste ancora un lotto attivo. Attendi la conclusione."
+            )
+
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM auction_calls
+            WHERE league_id=? AND stato='PENDING'
+        """, (league_id,))
+        if int(cur.fetchone()[0] or 0) > 0:
+            raise ValueError(
+                "Esiste già una chiamata in attesa di gestione dal Banditore."
+            )
+
+        cur.execute("""
+            SELECT stato
+            FROM league_players
+            WHERE league_id=? AND player_id=?
+            LIMIT 1
+        """, (league_id, player_id))
+        rp = cur.fetchone()
+        if not rp or str(rp[0] or "").upper() != "DISPONIBILE":
+            raise ValueError("Il giocatore non è più disponibile.")
+
+        cur.execute("""
+            INSERT INTO auction_calls (
+                league_id,team_id,player_id,tipo_asta,stato,
+                created_by_user_id,created_at
+            )
+            VALUES (?,?,?,?, 'PENDING', ?, CURRENT_TIMESTAMP)
+        """, (
+            league_id, team_id, player_id, tipo_asta, user_id
+        ))
+
+        cur.execute("SELECT last_insert_rowid()")
+        rid = cur.fetchone()
+        call_id = int(rid[0]) if rid and rid[0] is not None else 0
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,team_id,azione,entita,entita_id,
+                dettagli_json,created_at
+            )
+            VALUES (?,?,?,'PLAYER_CALLED','AUCTION_CALL',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            user_id,
+            team_id,
+            str(call_id),
+            json.dumps({
+                "player_id": player_id,
+                "tipo_asta": tipo_asta,
+            }, ensure_ascii=False)
+        ))
+
+        conn.commit()
+        return call_id
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def gestisci_chiamata_banditore_multilega(league_id, call_id):
+    """
+    CHIAMATA: apre il lotto sul giocatore scelto dalla squadra di turno.
+    DRAFT: assegna direttamente il giocatore alla squadra di turno.
+    """
+    league_id = int(league_id)
+    call_id = int(call_id)
+    user_id = int(st.session_state.get("auth_user_id") or 0)
+
+    call = chiamata_pendente_multilega(league_id)
+    if not call or int(call["call_id"]) != call_id:
+        raise ValueError("La chiamata non è più disponibile.")
+
+    tipo_asta = str(call["tipo_asta"]).upper()
+
+    if tipo_asta == "CHIAMATA":
+        lot_id = apri_lotto_banditore(
+            league_id,
+            call["player_id"]
+        )
+
+        conn = _portal_raw_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                UPDATE auction_calls
+                SET stato='OPENED',
+                    handled_by_user_id=?,
+                    handled_at=CURRENT_TIMESTAMP
+                WHERE id=? AND league_id=? AND stato='PENDING'
+            """, (user_id, call_id, league_id))
+            conn.commit()
+        finally:
+            _portal_close(conn)
+
+        return {
+            "azione": "OPENED",
+            "lot_id": lot_id,
+            **call
+        }
+
+    if tipo_asta == "DRAFT":
+        risultato = assegna_giocatore_banditore(
+            league_id,
+            call["player_id"],
+            call["team_id"],
+            0.0
+        )
+
+        avanza_turno_squadra_multilega(
+            league_id,
+            "DRAFT"
+        )
+
+        conn = _portal_raw_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                UPDATE auction_calls
+                SET stato='ASSIGNED',
+                    handled_by_user_id=?,
+                    handled_at=CURRENT_TIMESTAMP
+                WHERE id=? AND league_id=? AND stato='PENDING'
+            """, (user_id, call_id, league_id))
+            conn.commit()
+        finally:
+            _portal_close(conn)
+
+        return {
+            "azione": "ASSIGNED",
+            "risultato": risultato,
+            **call
+        }
+
+    raise ValueError("Modalità asta non compatibile con la chiamata.")
+
+
+
 def render_console_asta_team():
     if "TEAM" not in RUOLI_ATTIVI:
         st.error("Questa sezione è disponibile solo per una squadra della lega.")
@@ -25873,10 +26133,103 @@ def render_console_asta_team():
     st.markdown("---")
 
     if lotto is None:
-        st.info(
-            "⏳ Nessun giocatore è attualmente all'asta. "
-            "Attendi che il Banditore apra il prossimo lotto."
-        )
+        if tipo_asta in ("CHIAMATA","DRAFT"):
+            pending_call = chiamata_pendente_multilega(league_id)
+
+            if pending_call is not None:
+                if int(pending_call["team_id"]) == team_id:
+                    st.success(
+                        f'📣 Hai selezionato **{pending_call["player"]}** · '
+                        "in attesa del Banditore."
+                    )
+                else:
+                    st.info(
+                        f'⏳ In attesa della selezione/gestione della squadra '
+                        f'**{pending_call["team"]}**.'
+                    )
+
+            elif turno_corrente and int(turno_corrente["team_id"]) == team_id:
+                st.success("🎯 È il tuo turno di selezione.")
+
+                try:
+                    _disponibili_call = [
+                        x for x in elenco_giocatori_asta_multilega(league_id)
+                        if str(x["stato"]).upper() == "DISPONIBILE"
+                    ]
+                except Exception as errore:
+                    _disponibili_call = []
+                    st.error("Impossibile leggere i giocatori disponibili: " + str(errore))
+
+                _q_call = st.text_input(
+                    "Cerca il giocatore da chiamare",
+                    placeholder="Nome, squadra o ruolo...",
+                    key=f"team_call_search_{league_id}_{team_id}_{tipo_asta}"
+                ).strip().lower()
+
+                if _q_call:
+                    _filtrati_call = [
+                        x for x in _disponibili_call
+                        if _q_call in str(x["nome"]).lower()
+                        or _q_call in str(x["squadra"]).lower()
+                        or _q_call in str(x["ruolo_mantra"]).lower()
+                    ]
+                else:
+                    _filtrati_call = _disponibili_call[:200]
+
+                if _filtrati_call:
+                    _op_call = {
+                        f'{x["nome"]} · {x["squadra"]} · {x["ruolo_mantra"]} '
+                        f'· FVM {x["fvm"]:g}': x
+                        for x in _filtrati_call
+                    }
+
+                    _sel_call = st.selectbox(
+                        "Giocatore",
+                        list(_op_call.keys()),
+                        key=f"team_call_player_{league_id}_{team_id}_{tipo_asta}"
+                    )
+                    _g_call = _op_call[_sel_call]
+
+                    _label = (
+                        "📣 CHIAMA GIOCATORE"
+                        if tipo_asta == "CHIAMATA"
+                        else "🧩 SELEZIONA PER IL DRAFT"
+                    )
+
+                    if st.button(
+                        _label,
+                        type="primary",
+                        use_container_width=True,
+                        key=f"team_call_submit_{league_id}_{team_id}_{tipo_asta}"
+                    ):
+                        try:
+                            invia_chiamata_team_multilega(
+                                league_id,
+                                team_id,
+                                _g_call["player_id"]
+                            )
+                            st.session_state["team_bid_msg"] = (
+                                f'{_g_call["nome"]} selezionato. '
+                                "Attendi il Banditore."
+                            )
+                            st.rerun(scope="fragment")
+                        except Exception as errore:
+                            st.error(str(errore))
+                else:
+                    st.info("Nessun giocatore disponibile corrisponde alla ricerca.")
+            else:
+                _nome_turno = (
+                    turno_corrente["nome"]
+                    if turno_corrente else "un'altra squadra"
+                )
+                st.info(
+                    f"⏳ Non è il tuo turno. Sta selezionando **{_nome_turno}**."
+                )
+        else:
+            st.info(
+                "⏳ Nessun giocatore è attualmente all'asta. "
+                "Attendi che il Banditore apra il prossimo lotto."
+            )
     else:
         stato_bids = stato_offerte_lotto_multilega(
             league_id,
@@ -26696,7 +27049,8 @@ def audit_asta_multilega(league_id, limit=100):
                 'PLAYER_ASSIGNMENT_UNDONE',
                 'BID_PLACED',
                 'LOT_CLOSING',
-                'LOT_REOPENED'
+                'LOT_REOPENED',
+                'PLAYER_CALLED'
               )
             ORDER BY a.id DESC
             LIMIT ?
@@ -27338,201 +27692,213 @@ def render_banditore_asta():
                 st.error(str(errore))
 
     else:
-        # CHIAMATA e DRAFT:
-        # la scelta di un nuovo giocatore viene resa disponibile solo
-        # quando non esiste alcun lotto aperto / giocatore precedente
-        # ancora da chiudere.
-        ricerca=st.text_input(
-            "Cerca giocatore",
-            placeholder="Nome, squadra o ruolo...",
-            key="auctioneer_search"
-        ).strip().lower()
+        # CHIAMATA / DRAFT:
+        # il Banditore NON sceglie il giocatore. Può vedere esclusivamente
+        # la selezione già confermata dalla squadra di turno.
+        pending_call = chiamata_pendente_multilega(league_id)
 
-        filtrati=disponibili
-        if ricerca:
-            filtrati=[
-                x for x in disponibili
-                if ricerca in x["nome"].lower()
-                or ricerca in x["squadra"].lower()
-                or ricerca in x["ruolo_mantra"].lower()
-            ]
+        if pending_call is None:
+            g = None
+            _nome_turno = (
+                turno_corrente["nome"]
+                if turno_corrente else "squadra di turno"
+            )
+            st.info(
+                f"⏳ In attesa della selezione di **{_nome_turno}**. "
+                "Nessun giocatore è visibile al Banditore finché la squadra "
+                "non conferma la propria scelta."
+            )
+        else:
+            g = {
+                "player_id": pending_call["player_id"],
+                "nome": pending_call["player"],
+                "squadra": pending_call["squadra_reale"],
+                "ruolo_mantra": pending_call["ruolo_mantra"],
+                "fvm": 0.0,
+            }
 
-        if not filtrati:
-            st.info("Nessun giocatore disponibile corrisponde alla ricerca.")
-            return
-
-        etichette_giocatori={
-            f'{x["nome"]} · {x["squadra"]} · {x["ruolo_mantra"]} · FVM {x["fvm"]:g}':x
-            for x in filtrati
-        }
-
-        scelta_g=st.selectbox(
-            "Giocatore chiamato",
-            list(etichette_giocatori.keys()),
-            key="auctioneer_player"
-        )
-        g=etichette_giocatori[scelta_g]
-
-        if tipo_asta == "CHIAMATA":
+            st.success(
+                f'📣 **{pending_call["team"]}** ha selezionato '
+                f'**{pending_call["player"]}**'
+            )
             st.caption(
-                "Il giocatore deve corrispondere alla chiamata effettuata "
-                "dalla squadra di turno."
+                f'{pending_call["squadra_reale"]} · '
+                f'{pending_call["ruolo_mantra"]}'
             )
 
-        if tipo_asta != "DRAFT":
+            _label_gestisci = (
+                "🔨 APRI ASTA SULLA CHIAMATA"
+                if tipo_asta == "CHIAMATA"
+                else "✅ CONFERMA ASSEGNAZIONE DRAFT"
+            )
+
             if st.button(
-                "📣 METTI IL GIOCATORE ALL'ASTA",
+                _label_gestisci,
                 type="primary",
                 use_container_width=True,
-                key="auctioneer_open_lot"
+                key=f"auctioneer_handle_call_{pending_call['call_id']}"
             ):
                 try:
-                    apri_lotto_banditore(
+                    esito = gestisci_chiamata_banditore_multilega(
                         league_id,
-                        g["player_id"]
+                        pending_call["call_id"]
                     )
-                    st.session_state["auctioneer_msg"] = (
-                        f'{g["nome"]} è ora il giocatore all’asta.'
-                    )
+                    invalida_cache_dati()
+
+                    if esito["azione"] == "OPENED":
+                        st.session_state["auctioneer_msg"] = (
+                            f'Asta aperta su {pending_call["player"]}, '
+                            f'chiamato da {pending_call["team"]}.'
+                        )
+                    else:
+                        st.session_state["auctioneer_msg"] = (
+                            f'{pending_call["player"]} assegnato in Draft '
+                            f'a {pending_call["team"]}.'
+                        )
+
                     st.rerun(scope="fragment")
                 except Exception as errore:
                     st.error(str(errore))
 
-    etichette_team={
-        f'{t["nome"]} · {t["giocatori"]} gioc. · {t["spesa_effettiva"]:g}/{t["budget"]:g} cr.':t
-        for t in teams
-    }
-
-    if tipo_asta in ("CHIAMATA","DRAFT") and turno_corrente:
-        _team_turno = next(
-            (x for x in teams if int(x["team_id"]) == int(turno_corrente["team_id"])),
-            None
-        )
-    else:
-        _team_turno = None
-
-    c1,c2=st.columns([2,1])
-    with c1:
-        if tipo_asta == "DRAFT" and _team_turno:
-            st.text_input(
-                "Squadra assegnataria",
-                value=_team_turno["nome"],
-                disabled=True,
-                key="auctioneer_draft_team_display"
-            )
-            t = _team_turno
-        else:
-            _team_labels = list(etichette_team.keys())
-            _default_idx = 0
-            if _team_turno:
-                for _i,_lbl in enumerate(_team_labels):
-                    if int(etichette_team[_lbl]["team_id"]) == int(_team_turno["team_id"]):
-                        _default_idx = _i
-                        break
-
-            scelta_t=st.selectbox(
-                "Squadra vincitrice",
-                _team_labels,
-                index=_default_idx,
-                key="auctioneer_team"
-            )
-            t=etichette_team[scelta_t]
-
-    with c2:
-        prezzo=st.number_input(
-            "Prezzo finale",
-            min_value=0.0,
-            value=1.0,
-            step=1.0,
-            disabled=(tipo_asta=="DRAFT"),
-            key="auctioneer_price"
-        )
-
-    if tipo_asta == "DRAFT":
-        prezzo = 0.0
-
-    st.info(
-        f'**{g["nome"]}** ({g["ruolo_mantra"]}, {g["squadra"]}) → '
-        f'**{t["nome"]}** a **{prezzo:g} crediti**'
-    )
-
-    _assegnazione_bloccata = (
-        tipo_asta != "DRAFT"
-        and lotto_aperto is not None
-        and int(lotto_aperto["player_id"]) != int(g["player_id"])
-    )
-
-    # Se ci sono offerte sul lotto corrente, la fonte autorevole è la
-    # migliore offerta. Il Banditore non può assegnare manualmente il
-    # giocatore a un importo/squadra incompatibili con il bidding.
-    if tipo_asta != "DRAFT" and lotto_aperto is not None:
-        try:
-            _best_manual = migliore_offerta_lotto_multilega(
-                league_id,
-                lotto_aperto["lot_id"]
-            )
-        except Exception:
-            _best_manual = None
-
-        if (
-            _best_manual is not None
-            and int(lotto_aperto["player_id"]) == int(g["player_id"])
-            and (
-                int(t["team_id"]) != int(_best_manual["team_id"])
-                or abs(float(prezzo) - float(_best_manual["amount"])) > 0.0001
-            )
-        ):
-            _assegnazione_bloccata = True
-            st.warning(
-                "Sono presenti offerte: l'assegnazione deve rispettare "
-                "il miglior offerente e il relativo prezzo."
-            )
-
-        if (
-            _best_manual is not None
-            and str(lotto_aperto.get("stato","")).upper() != "CLOSING"
-        ):
-            _assegnazione_bloccata = True
-            st.caption(
-                "Prima dell'assegnazione devi chiudere le offerte."
-            )
-
-    if _assegnazione_bloccata:
-        st.warning(
-            "Il giocatore selezionato non coincide con il lotto aperto. "
-            "Seleziona il giocatore attualmente all'asta oppure chiudi il lotto."
-        )
-
-    if st.button(
-        "✅ ASSEGNA GIOCATORE" if tipo_asta!="DRAFT" else "✅ ASSEGNA DRAFT",
-        type="primary",
-        use_container_width=True,
-        disabled=_assegnazione_bloccata,
-        key="auctioneer_assign"
+    if g is not None and not (
+        tipo_asta == "DRAFT"
+        and lotto_aperto is None
     ):
-        try:
-            risultato=assegna_giocatore_banditore(
-                league_id,g["player_id"],t["team_id"],prezzo
+        etichette_team={
+            f'{t["nome"]} · {t["giocatori"]} gioc. · {t["spesa_effettiva"]:g}/{t["budget"]:g} cr.':t
+            for t in teams
+        }
+
+        if tipo_asta in ("CHIAMATA","DRAFT") and turno_corrente:
+            _team_turno = next(
+                (x for x in teams if int(x["team_id"]) == int(turno_corrente["team_id"])),
+                None
+            )
+        else:
+            _team_turno = None
+
+        c1,c2=st.columns([2,1])
+        with c1:
+            if tipo_asta == "DRAFT" and _team_turno:
+                st.text_input(
+                    "Squadra assegnataria",
+                    value=_team_turno["nome"],
+                    disabled=True,
+                    key="auctioneer_draft_team_display"
+                )
+                t = _team_turno
+            else:
+                _team_labels = list(etichette_team.keys())
+                _default_idx = 0
+                if _team_turno:
+                    for _i,_lbl in enumerate(_team_labels):
+                        if int(etichette_team[_lbl]["team_id"]) == int(_team_turno["team_id"]):
+                            _default_idx = _i
+                            break
+
+                scelta_t=st.selectbox(
+                    "Squadra vincitrice",
+                    _team_labels,
+                    index=_default_idx,
+                    key="auctioneer_team"
+                )
+                t=etichette_team[scelta_t]
+
+        with c2:
+            prezzo=st.number_input(
+                "Prezzo finale",
+                min_value=0.0,
+                value=1.0,
+                step=1.0,
+                disabled=(tipo_asta=="DRAFT"),
+                key="auctioneer_price"
             )
 
-            if tipo_asta in ("CHIAMATA","DRAFT"):
-                avanza_turno_squadra_multilega(
+        if tipo_asta == "DRAFT":
+            prezzo = 0.0
+
+        st.info(
+            f'**{g["nome"]}** ({g["ruolo_mantra"]}, {g["squadra"]}) → '
+            f'**{t["nome"]}** a **{prezzo:g} crediti**'
+        )
+
+        _assegnazione_bloccata = (
+            tipo_asta != "DRAFT"
+            and lotto_aperto is not None
+            and int(lotto_aperto["player_id"]) != int(g["player_id"])
+        )
+
+        # Se ci sono offerte sul lotto corrente, la fonte autorevole è la
+        # migliore offerta. Il Banditore non può assegnare manualmente il
+        # giocatore a un importo/squadra incompatibili con il bidding.
+        if tipo_asta != "DRAFT" and lotto_aperto is not None:
+            try:
+                _best_manual = migliore_offerta_lotto_multilega(
                     league_id,
-                    tipo_asta
+                    lotto_aperto["lot_id"]
+                )
+            except Exception:
+                _best_manual = None
+
+            if (
+                _best_manual is not None
+                and int(lotto_aperto["player_id"]) == int(g["player_id"])
+                and (
+                    int(t["team_id"]) != int(_best_manual["team_id"])
+                    or abs(float(prezzo) - float(_best_manual["amount"])) > 0.0001
+                )
+            ):
+                _assegnazione_bloccata = True
+                st.warning(
+                    "Sono presenti offerte: l'assegnazione deve rispettare "
+                    "il miglior offerente e il relativo prezzo."
                 )
 
-            invalida_cache_dati()
-            st.session_state["auctioneer_msg"]=(
-                f'{g["nome"]} assegnato a {risultato["team"]} '
-                + (
-                    "in modalità Draft."
-                    if tipo_asta=="DRAFT"
-                    else f'a {prezzo:g} crediti.'
+            if (
+                _best_manual is not None
+                and str(lotto_aperto.get("stato","")).upper() != "CLOSING"
+            ):
+                _assegnazione_bloccata = True
+                st.caption(
+                    "Prima dell'assegnazione devi chiudere le offerte."
                 )
+
+        if _assegnazione_bloccata:
+            st.warning(
+                "Il giocatore selezionato non coincide con il lotto aperto. "
+                "Seleziona il giocatore attualmente all'asta oppure chiudi il lotto."
             )
-            st.rerun(scope="fragment")
-        except Exception as errore:
-            st.error(str(errore))
+
+        if st.button(
+            "✅ ASSEGNA GIOCATORE" if tipo_asta!="DRAFT" else "✅ ASSEGNA DRAFT",
+            type="primary",
+            use_container_width=True,
+            disabled=_assegnazione_bloccata,
+            key="auctioneer_assign"
+        ):
+            try:
+                risultato=assegna_giocatore_banditore(
+                    league_id,g["player_id"],t["team_id"],prezzo
+                )
+
+                if tipo_asta in ("CHIAMATA","DRAFT"):
+                    avanza_turno_squadra_multilega(
+                        league_id,
+                        tipo_asta
+                    )
+
+                invalida_cache_dati()
+                st.session_state["auctioneer_msg"]=(
+                    f'{g["nome"]} assegnato a {risultato["team"]} '
+                    + (
+                        "in modalità Draft."
+                        if tipo_asta=="DRAFT"
+                        else f'a {prezzo:g} crediti.'
+                    )
+                )
+                st.rerun(scope="fragment")
+            except Exception as errore:
+                st.error(str(errore))
 
     if st.session_state.get("auctioneer_msg"):
         st.success(st.session_state.pop("auctioneer_msg"))
