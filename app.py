@@ -12203,7 +12203,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "1.7"
+MULTILEGA_SCHEMA_VERSION = "1.8"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -24507,7 +24507,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 1.7 &nbsp;|&nbsp; V99 Navigazione Fast'
+        'MULTILEGA 1.8 &nbsp;|&nbsp; V100 Fragment Navigation'
         '</div>',
         unsafe_allow_html=True
     )
@@ -24751,1970 +24751,1814 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# NAVBAR
+# MULTILEGA 1.8 - NAVIGAZIONE A FRAGMENT
 # ============================================================
 
-PAGINE = [
-    ("🏠", "DASHBOARD"),
-    ("☷", "LISTONE"),
-    ("🔨", "ASTA"),
-    ("👕", "ROSA"),
-    ("▣", "MODULI"),
-    ("⚽", "FORMAZIONI TIPO"),
-    ("🔴", "VENDUTI AD AVVERSARI")
-]
+@st.fragment
+def render_navigazione_e_pagina():
+    # ============================================================
+    # NAVBAR
+    # ============================================================
 
-PAGINE.append(("👤", "PROFILO"))
+    PAGINE = [
+        ("🏠", "DASHBOARD"),
+        ("☷", "LISTONE"),
+        ("🔨", "ASTA"),
+        ("👕", "ROSA"),
+        ("▣", "MODULI"),
+        ("⚽", "FORMAZIONI TIPO"),
+        ("🔴", "VENDUTI AD AVVERSARI")
+    ]
+
+    PAGINE.append(("👤", "PROFILO"))
 
 
-if "ADMIN" in RUOLI_ATTIVI:
+    if "ADMIN" in RUOLI_ATTIVI:
 
-    PAGINE.append(
-        (
-            "⚙️",
-            "GESTIONE LEGA"
+        PAGINE.append(
+            (
+                "⚙️",
+                "GESTIONE LEGA"
+            )
         )
+
+    def _naviga_a(pagina_destinazione):
+        """
+        V100: essendo la navbar dentro st.fragment, il click aggiorna
+        soltanto il fragment di navigazione/pagina. Il boot globale,
+        l'autenticazione, la sidebar e le verifiche DB non vengono
+        rieseguite durante un semplice cambio sezione.
+        """
+        st.session_state.pagina = pagina_destinazione
+
+
+    st.markdown(
+        '<div class="nav-title">Navigazione</div>',
+        unsafe_allow_html=True
     )
 
-def _naviga_a(pagina_destinazione):
-    """
-    V99 PERFORMANCE:
-    il click su un widget Streamlit provoca già un rerun completo.
-    In V98 la navbar chiamava anche st.rerun() nel corpo del bottone,
-    causando DUE esecuzioni complete consecutive per ogni cambio sezione.
-    Il callback aggiorna lo stato PRIMA dell'unico rerun automatico.
-    """
-    st.session_state.pagina = pagina_destinazione
+    nav_cols = st.columns(len(PAGINE))
 
-
-st.markdown(
-    '<div class="nav-title">Navigazione</div>',
-    unsafe_allow_html=True
-)
-
-nav_cols = st.columns(len(PAGINE))
-
-for col, (icona, pagina_nav) in zip(nav_cols, PAGINE):
-    with col:
-        st.button(
-            f"{icona}  {pagina_nav}",
-            use_container_width=True,
-            type=(
-                "primary"
-                if st.session_state.pagina == pagina_nav
-                else "secondary"
-            ),
-            key=f"nav_{pagina_nav}",
-            on_click=_naviga_a,
-            args=(pagina_nav,)
-        )
-
-sezione = st.session_state.pagina
-
-
-# ============================================================
-# TOOLBAR UNDO COMPATTA
-# ============================================================
-
-if sezione not in ("GESTIONE LEGA", "PROFILO"):
-
-    operazioni_undo = carica_ultime_operazioni()
-
-    undo1, undo2 = st.columns([1.7, 7])
-
-    with undo1:
-        if st.button(
-            "↶ ANNULLA ULTIMA OPERAZIONE",
-            use_container_width=True,
-            disabled=operazioni_undo.empty,
-            key="btn_undo_generale"
-        ):
-            conferma_undo()
-
-    with undo2:
-        if not operazioni_undo.empty:
-            ultima = operazioni_undo.iloc[0]
-            testo_ultima = (
-                f'<div class="operation-info">'
-                f'Ultima operazione annullabile:&nbsp;'
-                f'<b>{html.escape(str(ultima["Operazione"]))}'
-                f' — {html.escape(str(ultima["Giocatore"]))}</b>'
-                f'&nbsp;({len(operazioni_undo)}/10)'
-                f'</div>'
-            )
-            st.markdown(testo_ultima, unsafe_allow_html=True)
-
-    with st.expander("📜 Ultime operazioni", expanded=False):
-        if operazioni_undo.empty:
-            st.caption("Nessuna operazione registrata.")
-        else:
-            st.dataframe(
-                operazioni_undo[["Operazione", "Giocatore", "Data"]],
+    for col, (icona, pagina_nav) in zip(nav_cols, PAGINE):
+        with col:
+            st.button(
+                f"{icona}  {pagina_nav}",
                 use_container_width=True,
-                hide_index=True
+                type=(
+                    "primary"
+                    if st.session_state.pagina == pagina_nav
+                    else "secondary"
+                ),
+                key=f"nav_{pagina_nav}",
+                on_click=_naviga_a,
+                args=(pagina_nav,)
             )
-else:
-    operazioni_undo = pd.DataFrame()
+
+    sezione = st.session_state.pagina
 
 
+    # ============================================================
+    # TOOLBAR UNDO COMPATTA
+    # ============================================================
 
-@st.dialog("Ripristina tutti i venduti agli avversari")
-def conferma_ripristina_tutti_avversari():
+    if sezione not in ("GESTIONE LEGA", "PROFILO"):
 
-    df_corrente = carica_tutti_giocatori()
+        operazioni_undo = carica_ultime_operazioni()
 
-    numero = int(
-        (
-            df_corrente["Stato"]
-            == "AVVERSARIO"
-        ).sum()
-    )
+        undo1, undo2 = st.columns([1.7, 7])
 
-    st.warning(
-        f"Stai per rendere nuovamente DISPONIBILI "
-        f"tutti i {numero} giocatori assegnati agli avversari."
-    )
-
-    st.caption(
-        "La tua rosa, i prezzi dei tuoi acquisti e i costi di svincolo "
-        "non verranno modificati."
-    )
-
-    conferma = st.checkbox(
-        "Confermo di voler ripristinare tutti i giocatori degli avversari",
-        key="conferma_reset_totale_avversari"
-    )
-
-    if st.button(
-        "↩️ RIPRISTINA TUTTI",
-        type="primary",
-        use_container_width=True,
-        disabled=not conferma,
-        key="esegui_reset_totale_avversari"
-    ):
-
-        ripristinati = (
-            ripristina_tutti_giocatori_avversari()
-        )
-
-        st.session_state[
-            "messaggio_reset_avversari"
-        ] = (
-            f"Ripristino completato: {ripristinati} giocatori "
-            f"sono tornati disponibili."
-        )
-
-        st.rerun()
-
-
-@st.dialog("Elimina tutta la rosa")
-def conferma_elimina_tutta_rosa():
-    df_corrente = carica_tutti_giocatori()
-    numero = int((df_corrente["Stato"] == "MIO").sum())
-
-    st.warning(
-        f"Stai per eliminare tutti i {numero} giocatori presenti nella rosa. "
-        "Torneranno DISPONIBILI e i prezzi di acquisto verranno azzerati."
-    )
-    st.caption(
-        "Verranno azzerati anche i costi di svincolo e la cronologia UNDO."
-    )
-
-    conferma = st.checkbox(
-        "Confermo di voler eliminare tutta la rosa",
-        key="conferma_reset_totale_rosa"
-    )
-
-    if st.button(
-        "🗑️ ELIMINA TUTTA LA ROSA",
-        type="primary",
-        use_container_width=True,
-        disabled=not conferma,
-        key="esegui_reset_totale_rosa"
-    ):
-        eliminati = elimina_tutta_la_rosa()
-        st.session_state["messaggio_reset_rosa"] = (
-            f"Rosa eliminata: {eliminati} giocatori sono tornati disponibili."
-        )
-        st.rerun()
-
-
-# ============================================================
-# ADMIN LEGA
-# ============================================================
-
-if sezione == "PROFILO":
-
-    render_profilo_utente()
-
-elif sezione == "GESTIONE LEGA":
-
-    render_admin_multilega()
-
-
-# ============================================================
-# DASHBOARD
-# ============================================================
-
-elif sezione == "DASHBOARD":
-
-    st.subheader(
-        "📊 Dashboard"
-    )
-
-    snapshot_disponibili = (
-        elenco_snapshot(PROFILO_ATTIVO)
-    )
-
-    st.caption(
-        f"💾 Protezione attiva — "
-        f"{len(snapshot_disponibili)} snapshot disponibili "
-        f"(massimo {MAX_SNAPSHOT}) · "
-        f"UNDO fino a {MAX_UNDO} operazioni. "
-        + (
-            "🌐 Database Cloud persistente attivo."
-            if USA_DATABASE_CLOUD
-            else "💻 Database locale attivo."
-        )
-    )
-
-
-    # --------------------------------------------------------
-    # STAMPA ROSA E MODULI
-    # --------------------------------------------------------
-
-    stampa_col1, stampa_col2 = st.columns(
-        [
-            1.6,
-            4.4
-        ]
-    )
-
-    with stampa_col1:
-
-        if st.button(
-            "🖨️ STAMPA ROSA E MODULI",
-            use_container_width=True,
-            disabled=(
-                numero_rosa == 0
-            ),
-            key="btn_genera_pdf_rosa_moduli"
-        ):
-
-            with st.spinner(
-                "Creazione PDF..."
+        with undo1:
+            if st.button(
+                "↶ ANNULLA ULTIMA OPERAZIONE",
+                use_container_width=True,
+                disabled=operazioni_undo.empty,
+                key="btn_undo_generale"
             ):
+                conferma_undo()
 
-                try:
+        with undo2:
+            if not operazioni_undo.empty:
+                ultima = operazioni_undo.iloc[0]
+                testo_ultima = (
+                    f'<div class="operation-info">'
+                    f'Ultima operazione annullabile:&nbsp;'
+                    f'<b>{html.escape(str(ultima["Operazione"]))}'
+                    f' — {html.escape(str(ultima["Giocatore"]))}</b>'
+                    f'&nbsp;({len(operazioni_undo)}/10)'
+                    f'</div>'
+                )
+                st.markdown(testo_ultima, unsafe_allow_html=True)
 
-                    st.session_state[
-                        "pdf_rosa_moduli"
-                    ] = (
-                        genera_pdf_rosa_e_moduli(
-                            df_rosa_globale,
-                            valore_attivi,
-                            costi_svincoli,
-                            valore_acquisti,
-                            spesa_effettiva
-                        )
-                    )
+        with st.expander("📜 Ultime operazioni", expanded=False):
+            if operazioni_undo.empty:
+                st.caption("Nessuna operazione registrata.")
+            else:
+                st.dataframe(
+                    operazioni_undo[["Operazione", "Giocatore", "Data"]],
+                    use_container_width=True,
+                    hide_index=True
+                )
+    else:
+        operazioni_undo = pd.DataFrame()
 
-                except Exception as errore:
 
-                    st.session_state[
-                        "pdf_rosa_moduli"
-                    ] = None
 
-                    st.error(
-                        f"Errore durante la creazione del PDF: {errore}"
-                    )
+    @st.dialog("Ripristina tutti i venduti agli avversari")
+    def conferma_ripristina_tutti_avversari():
 
-    with stampa_col2:
+        df_corrente = carica_tutti_giocatori()
 
-        if st.session_state.get(
-            "pdf_rosa_moduli"
-        ):
-
-            st.download_button(
-                "⬇️ SCARICA PDF ROSA E MODULI",
-                data=(
-                    st.session_state[
-                        "pdf_rosa_moduli"
-                    ]
-                ),
-                file_name=(
-                    "FANTAELEGANZA_26-27_ROSA_E_MODULI.pdf"
-                ),
-                mime=(
-                    "application/pdf"
-                ),
-                use_container_width=True,
-                key="download_pdf_rosa_moduli"
-            )
-
-        elif numero_rosa > 0:
-
-            st.caption(
-                "Premi STAMPA ROSA E MODULI per preparare il PDF scaricabile."
-            )
-
-    if numero_rosa == 0:
-
-        st.info(
-            "La rosa è ancora vuota. "
-            "Vai nella sezione ASTA "
-            "per iniziare ad acquistare."
+        numero = int(
+            (
+                df_corrente["Stato"]
+                == "AVVERSARIO"
+            ).sum()
         )
 
-    else:
+        st.warning(
+            f"Stai per rendere nuovamente DISPONIBILI "
+            f"tutti i {numero} giocatori assegnati agli avversari."
+        )
 
-        if (
-            numero_rosa
-            == MAX_GIOCATORI
-            and numero_portieri
-            >= MIN_PORTIERI
+        st.caption(
+            "La tua rosa, i prezzi dei tuoi acquisti e i costi di svincolo "
+            "non verranno modificati."
+        )
+
+        conferma = st.checkbox(
+            "Confermo di voler ripristinare tutti i giocatori degli avversari",
+            key="conferma_reset_totale_avversari"
+        )
+
+        if st.button(
+            "↩️ RIPRISTINA TUTTI",
+            type="primary",
+            use_container_width=True,
+            disabled=not conferma,
+            key="esegui_reset_totale_avversari"
         ):
 
-            st.success(
-                "✅ Rosa completa e conforme."
+            ripristinati = (
+                ripristina_tutti_giocatori_avversari()
             )
 
-        elif (
-            numero_portieri
-            < MIN_PORTIERI
+            st.session_state[
+                "messaggio_reset_avversari"
+            ] = (
+                f"Ripristino completato: {ripristinati} giocatori "
+                f"sono tornati disponibili."
+            )
+
+            st.rerun()
+
+
+    @st.dialog("Elimina tutta la rosa")
+    def conferma_elimina_tutta_rosa():
+        df_corrente = carica_tutti_giocatori()
+        numero = int((df_corrente["Stato"] == "MIO").sum())
+
+        st.warning(
+            f"Stai per eliminare tutti i {numero} giocatori presenti nella rosa. "
+            "Torneranno DISPONIBILI e i prezzi di acquisto verranno azzerati."
+        )
+        st.caption(
+            "Verranno azzerati anche i costi di svincolo e la cronologia UNDO."
+        )
+
+        conferma = st.checkbox(
+            "Confermo di voler eliminare tutta la rosa",
+            key="conferma_reset_totale_rosa"
+        )
+
+        if st.button(
+            "🗑️ ELIMINA TUTTA LA ROSA",
+            type="primary",
+            use_container_width=True,
+            disabled=not conferma,
+            key="esegui_reset_totale_rosa"
         ):
-
-            mancanti = (
-                MIN_PORTIERI
-                - numero_portieri
+            eliminati = elimina_tutta_la_rosa()
+            st.session_state["messaggio_reset_rosa"] = (
+                f"Rosa eliminata: {eliminati} giocatori sono tornati disponibili."
             )
+            st.rerun()
 
-            st.warning(
-                f"⚠️ Mancano ancora "
-                f"{mancanti} portieri."
+
+    # ============================================================
+    # ADMIN LEGA
+    # ============================================================
+
+    if sezione == "PROFILO":
+
+        render_profilo_utente()
+
+    elif sezione == "GESTIONE LEGA":
+
+        render_admin_multilega()
+
+
+    # ============================================================
+    # DASHBOARD
+    # ============================================================
+
+    elif sezione == "DASHBOARD":
+
+        st.subheader(
+            "📊 Dashboard"
+        )
+
+        snapshot_disponibili = (
+            elenco_snapshot(PROFILO_ATTIVO)
+        )
+
+        st.caption(
+            f"💾 Protezione attiva — "
+            f"{len(snapshot_disponibili)} snapshot disponibili "
+            f"(massimo {MAX_SNAPSHOT}) · "
+            f"UNDO fino a {MAX_UNDO} operazioni. "
+            + (
+                "🌐 Database Cloud persistente attivo."
+                if USA_DATABASE_CLOUD
+                else "💻 Database locale attivo."
             )
+        )
 
-        dleft, dright = st.columns(
+
+        # --------------------------------------------------------
+        # STAMPA ROSA E MODULI
+        # --------------------------------------------------------
+
+        stampa_col1, stampa_col2 = st.columns(
             [
-                1,
-                1
+                1.6,
+                4.4
             ]
         )
 
-        with dleft:
+        with stampa_col1:
 
-            st.markdown(
-                "#### Distribuzione rosa"
-            )
-
-            distribuzione = (
-                df_rosa_globale.copy()
-            )
-
-            distribuzione[
-                "Primo ruolo"
-            ] = (
-                distribuzione["RM"]
-                .apply(
-                    primo_ruolo
-                )
-            )
-
-            righe = []
-
-            for ruolo in ELENCO_RUOLI:
-
-                gruppo = (
-                    distribuzione[
-                        distribuzione[
-                            "Primo ruolo"
-                        ]
-                        .str.upper()
-                        == ruolo.upper()
-                    ]
-                )
-
-                numero_giocatori = len(
-                    gruppo
-                )
-
-                righe.append({
-                    "Ruolo":
-                        ruolo,
-
-                    "Giocatori":
-                        numero_giocatori,
-
-                    "Valore":
-                        formatta_crediti(
-                            gruppo[
-                                "Prezzo"
-                            ]
-                            .fillna(0)
-                            .sum()
-                        )
-                        if not gruppo.empty
-                        else "0,00"
-                })
-
-            df_distribuzione = (
-                pd.DataFrame(
-                    righe
-                )
-            )
-
-            def colora_riga_ruolo(
-                riga
+            if st.button(
+                "🖨️ STAMPA ROSA E MODULI",
+                use_container_width=True,
+                disabled=(
+                    numero_rosa == 0
+                ),
+                key="btn_genera_pdf_rosa_moduli"
             ):
 
-                numero = int(
-                    riga[
-                        "Giocatori"
-                    ]
+                with st.spinner(
+                    "Creazione PDF..."
+                ):
+
+                    try:
+
+                        st.session_state[
+                            "pdf_rosa_moduli"
+                        ] = (
+                            genera_pdf_rosa_e_moduli(
+                                df_rosa_globale,
+                                valore_attivi,
+                                costi_svincoli,
+                                valore_acquisti,
+                                spesa_effettiva
+                            )
+                        )
+
+                    except Exception as errore:
+
+                        st.session_state[
+                            "pdf_rosa_moduli"
+                        ] = None
+
+                        st.error(
+                            f"Errore durante la creazione del PDF: {errore}"
+                        )
+
+        with stampa_col2:
+
+            if st.session_state.get(
+                "pdf_rosa_moduli"
+            ):
+
+                st.download_button(
+                    "⬇️ SCARICA PDF ROSA E MODULI",
+                    data=(
+                        st.session_state[
+                            "pdf_rosa_moduli"
+                        ]
+                    ),
+                    file_name=(
+                        "FANTAELEGANZA_26-27_ROSA_E_MODULI.pdf"
+                    ),
+                    mime=(
+                        "application/pdf"
+                    ),
+                    use_container_width=True,
+                    key="download_pdf_rosa_moduli"
                 )
 
-                # 0-1: rosso
-                if numero < 2:
+            elif numero_rosa > 0:
 
-                    colore = (
-                        "background-color: #fee2e2; "
-                        "color: #991b1b; "
-                        "font-weight: 700;"
-                    )
-
-                # 3: giallo
-                elif numero == 3:
-
-                    colore = (
-                        "background-color: #fef3c7; "
-                        "color: #92400e; "
-                        "font-weight: 700;"
-                    )
-
-                # 4 o più: verde
-                elif numero >= 4:
-
-                    colore = (
-                        "background-color: #dcfce7; "
-                        "color: #166534; "
-                        "font-weight: 700;"
-                    )
-
-                # Esattamente 2: neutro
-                else:
-
-                    colore = ""
-
-                return [
-                    colore
-                    for _ in riga.index
-                ]
-
-            st.dataframe(
-                df_distribuzione.style.apply(
-                    colora_riga_ruolo,
-                    axis=1
-                ),
-                use_container_width=True,
-                hide_index=True
-            )
-
-        with dright:
-
-            st.markdown(
-                "#### ⭐ Modulo consigliato"
-            )
-
-            classifica = (
-                classifica_moduli(
-                    df_rosa_globale
+                st.caption(
+                    "Premi STAMPA ROSA E MODULI per preparare il PDF scaricabile."
                 )
+
+        if numero_rosa == 0:
+
+            st.info(
+                "La rosa è ancora vuota. "
+                "Vai nella sezione ASTA "
+                "per iniziare ad acquistare."
             )
 
-            if classifica:
+        else:
 
-                migliore = (
-                    classifica[0]
-                )
+            if (
+                numero_rosa
+                == MAX_GIOCATORI
+                and numero_portieri
+                >= MIN_PORTIERI
+            ):
 
                 st.success(
-                    f"**{migliore['Modulo']}** "
-                    f"— punteggio strategico "
-                    f"**{migliore['Punteggio']}/100** "
-                    f"— copertura media "
-                    f"**{migliore['Copertura media']}%** "
-                    f"— slot scoperti "
-                    f"**{migliore['Scoperti']}** "
-                    f"— slot deboli "
-                    f"**{migliore['Deboli']}**"
-                    + (
-                        f" ({migliore['Ruoli deboli']})"
-                        if migliore[
-                            "Ruoli deboli"
-                        ]
-                        else ""
+                    "✅ Rosa completa e conforme."
+                )
+
+            elif (
+                numero_portieri
+                < MIN_PORTIERI
+            ):
+
+                mancanti = (
+                    MIN_PORTIERI
+                    - numero_portieri
+                )
+
+                st.warning(
+                    f"⚠️ Mancano ancora "
+                    f"{mancanti} portieri."
+                )
+
+            dleft, dright = st.columns(
+                [
+                    1,
+                    1
+                ]
+            )
+
+            with dleft:
+
+                st.markdown(
+                    "#### Distribuzione rosa"
+                )
+
+                distribuzione = (
+                    df_rosa_globale.copy()
+                )
+
+                distribuzione[
+                    "Primo ruolo"
+                ] = (
+                    distribuzione["RM"]
+                    .apply(
+                        primo_ruolo
                     )
                 )
 
-                tabella_classifica = (
-                    pd.DataFrame(
-                        classifica
-                    )[
-                        [
-                            "Posizione",
-                            "Modulo",
-                            "Punteggio",
-                            "Copertura media",
-                            "Scoperti",
-                            "Deboli",
-                            "Al 100%"
+                righe = []
+
+                for ruolo in ELENCO_RUOLI:
+
+                    gruppo = (
+                        distribuzione[
+                            distribuzione[
+                                "Primo ruolo"
+                            ]
+                            .str.upper()
+                            == ruolo.upper()
                         ]
-                    ]
+                    )
+
+                    numero_giocatori = len(
+                        gruppo
+                    )
+
+                    righe.append({
+                        "Ruolo":
+                            ruolo,
+
+                        "Giocatori":
+                            numero_giocatori,
+
+                        "Valore":
+                            formatta_crediti(
+                                gruppo[
+                                    "Prezzo"
+                                ]
+                                .fillna(0)
+                                .sum()
+                            )
+                            if not gruppo.empty
+                            else "0,00"
+                    })
+
+                df_distribuzione = (
+                    pd.DataFrame(
+                        righe
+                    )
                 )
 
+                def colora_riga_ruolo(
+                    riga
+                ):
+
+                    numero = int(
+                        riga[
+                            "Giocatori"
+                        ]
+                    )
+
+                    # 0-1: rosso
+                    if numero < 2:
+
+                        colore = (
+                            "background-color: #fee2e2; "
+                            "color: #991b1b; "
+                            "font-weight: 700;"
+                        )
+
+                    # 3: giallo
+                    elif numero == 3:
+
+                        colore = (
+                            "background-color: #fef3c7; "
+                            "color: #92400e; "
+                            "font-weight: 700;"
+                        )
+
+                    # 4 o più: verde
+                    elif numero >= 4:
+
+                        colore = (
+                            "background-color: #dcfce7; "
+                            "color: #166534; "
+                            "font-weight: 700;"
+                        )
+
+                    # Esattamente 2: neutro
+                    else:
+
+                        colore = ""
+
+                    return [
+                        colore
+                        for _ in riga.index
+                    ]
+
                 st.dataframe(
-                    tabella_classifica,
+                    df_distribuzione.style.apply(
+                        colora_riga_ruolo,
+                        axis=1
+                    ),
                     use_container_width=True,
                     hide_index=True
                 )
 
+            with dright:
 
-# ============================================================
-# LISTONE
-# ============================================================
-
-elif sezione == "LISTONE":
-
-    st.subheader(
-        "☷ Listone giocatori"
-    )
-
-    file_caricato = st.file_uploader(
-        "Carica il listone Fantacalcio.it",
-        type=[
-            "xlsx",
-            "xlsm"
-        ]
-    )
-
-    if file_caricato is not None:
-
-        try:
-
-            contenuto = (
-                file_caricato
-                .getvalue()
-            )
-
-            excel = pd.ExcelFile(
-                io.BytesIO(
-                    contenuto
-                ),
-                engine="openpyxl"
-            )
-
-            foglio_tutti = None
-
-            for nome_foglio in (
-                excel.sheet_names
-            ):
-
-                if (
-                    nome_foglio
-                    .strip()
-                    .upper()
-                    == "TUTTI"
-                ):
-
-                    foglio_tutti = (
-                        nome_foglio
-                    )
-
-                    break
-
-            if foglio_tutti is None:
-
-                st.error(
-                    "Non trovo il foglio Tutti."
+                st.markdown(
+                    "#### ⭐ Modulo consigliato"
                 )
 
-            else:
+                classifica = (
+                    classifica_moduli(
+                        df_rosa_globale
+                    )
+                )
 
-                df_excel = pd.read_excel(
+                if classifica:
+
+                    migliore = (
+                        classifica[0]
+                    )
+
+                    st.success(
+                        f"**{migliore['Modulo']}** "
+                        f"— punteggio strategico "
+                        f"**{migliore['Punteggio']}/100** "
+                        f"— copertura media "
+                        f"**{migliore['Copertura media']}%** "
+                        f"— slot scoperti "
+                        f"**{migliore['Scoperti']}** "
+                        f"— slot deboli "
+                        f"**{migliore['Deboli']}**"
+                        + (
+                            f" ({migliore['Ruoli deboli']})"
+                            if migliore[
+                                "Ruoli deboli"
+                            ]
+                            else ""
+                        )
+                    )
+
+                    tabella_classifica = (
+                        pd.DataFrame(
+                            classifica
+                        )[
+                            [
+                                "Posizione",
+                                "Modulo",
+                                "Punteggio",
+                                "Copertura media",
+                                "Scoperti",
+                                "Deboli",
+                                "Al 100%"
+                            ]
+                        ]
+                    )
+
+                    st.dataframe(
+                        tabella_classifica,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+
+    # ============================================================
+    # LISTONE
+    # ============================================================
+
+    elif sezione == "LISTONE":
+
+        st.subheader(
+            "☷ Listone giocatori"
+        )
+
+        file_caricato = st.file_uploader(
+            "Carica il listone Fantacalcio.it",
+            type=[
+                "xlsx",
+                "xlsm"
+            ]
+        )
+
+        if file_caricato is not None:
+
+            try:
+
+                contenuto = (
+                    file_caricato
+                    .getvalue()
+                )
+
+                excel = pd.ExcelFile(
                     io.BytesIO(
                         contenuto
                     ),
-                    sheet_name=(
-                        foglio_tutti
-                    ),
-                    engine="openpyxl",
-                    header=1
+                    engine="openpyxl"
                 )
 
-                df_excel = (
-                    df_excel
-                    .dropna(
-                        axis=1,
-                        how="all"
-                    )
-                    .dropna(
-                        axis=0,
-                        how="all"
-                    )
-                )
+                foglio_tutti = None
 
-                df_excel.columns = [
-                    str(c).strip()
-                    for c
-                    in df_excel.columns
-                ]
+                for nome_foglio in (
+                    excel.sheet_names
+                ):
 
-                obbligatorie = {
-                    "Id",
-                    "R",
-                    "RM",
-                    "Nome",
-                    "Squadra"
-                }
+                    if (
+                        nome_foglio
+                        .strip()
+                        .upper()
+                        == "TUTTI"
+                    ):
 
-                mancanti = (
-                    obbligatorie
-                    - set(
-                        df_excel.columns
-                    )
-                )
+                        foglio_tutti = (
+                            nome_foglio
+                        )
 
-                if mancanti:
+                        break
+
+                if foglio_tutti is None:
 
                     st.error(
-                        "Formato non valido. "
-                        "Colonne mancanti: "
-                        + ", ".join(
-                            sorted(
-                                mancanti
-                            )
-                        )
+                        "Non trovo il foglio Tutti."
                     )
 
                 else:
 
-                    nuovi, aggiornati = (
-                        importa_listone_nel_database(
-                            df_excel
+                    df_excel = pd.read_excel(
+                        io.BytesIO(
+                            contenuto
+                        ),
+                        sheet_name=(
+                            foglio_tutti
+                        ),
+                        engine="openpyxl",
+                        header=1
+                    )
+
+                    df_excel = (
+                        df_excel
+                        .dropna(
+                            axis=1,
+                            how="all"
+                        )
+                        .dropna(
+                            axis=0,
+                            how="all"
                         )
                     )
 
-                    st.success(
-                        "✅ Listone importato con successo — "
-                        f"{st.session_state.get('ultimo_upload_listone', '')}. "
-                        f"Nuovi: {nuovi} — "
-                        f"Aggiornati: {aggiornati}. "
-                        "I giocatori invariati non sono stati riscritti."
-                    )
-
-        except Exception as errore:
-
-            st.error(
-                f"Errore: {errore}"
-            )
-
-    df = (
-        df_completo.copy()
-    )
-
-    if df.empty:
-
-        st.info(
-            "Il database è vuoto."
-        )
-
-    else:
-
-        f1, f2, f3 = st.columns(3)
-
-        with f1:
-
-            filtro_stato = (
-                st.selectbox(
-                    "Stato",
-                    [
-                        "TUTTI",
-                        "DISPONIBILE",
-                        "MIO",
-                        "AVVERSARIO"
+                    df_excel.columns = [
+                        str(c).strip()
+                        for c
+                        in df_excel.columns
                     ]
-                )
-            )
 
-        with f2:
-
-            filtro_ruolo = (
-                st.selectbox(
-                    "Primo ruolo",
-                    [
-                        "TUTTI"
-                    ]
-                    + ELENCO_RUOLI
-                )
-            )
-
-        squadre = sorted(
-            df[
-                "Squadra"
-            ]
-            .dropna()
-            .astype(str)
-            .unique()
-            .tolist()
-        )
-
-        with f3:
-
-            filtro_squadra = (
-                st.selectbox(
-                    "Squadra",
-                    [
-                        "TUTTE"
-                    ]
-                    + squadre
-                )
-            )
-
-        ricerca = st.text_input(
-            "🔎 Cerca giocatore"
-        )
-
-        filtrato = (
-            df.copy()
-        )
-
-        if (
-            filtro_stato
-            != "TUTTI"
-        ):
-
-            filtrato = (
-                filtrato[
-                    filtrato[
-                        "Stato"
-                    ]
-                    == filtro_stato
-                ]
-            )
-
-        if (
-            filtro_ruolo
-            != "TUTTI"
-        ):
-
-            filtrato = (
-                filtrato[
-                    filtrato[
-                        "RM"
-                    ]
-                    .apply(
-                        primo_ruolo
-                    )
-                    .str.upper()
-                    == filtro_ruolo.upper()
-                ]
-            )
-
-        if (
-            filtro_squadra
-            != "TUTTE"
-        ):
-
-            filtrato = (
-                filtrato[
-                    filtrato[
+                    obbligatorie = {
+                        "Id",
+                        "R",
+                        "RM",
+                        "Nome",
                         "Squadra"
-                    ]
-                    == filtro_squadra
-                ]
-            )
+                    }
 
-        if ricerca:
-
-            testo = (
-                ricerca
-                .lower()
-                .strip()
-            )
-
-            filtrato = (
-                filtrato[
-                    filtrato[
-                        "Nome"
-                    ]
-                    .astype(str)
-                    .str.lower()
-                    .str.contains(
-                        testo,
-                        na=False
+                    mancanti = (
+                        obbligatorie
+                        - set(
+                            df_excel.columns
+                        )
                     )
-                ]
-            )
 
-        filtrato[
-            "Priorita"
-        ] = (
-            filtrato[
-                "RM"
-            ]
-            .apply(
-                priorita_ruolo
-            )
+                    if mancanti:
+
+                        st.error(
+                            "Formato non valido. "
+                            "Colonne mancanti: "
+                            + ", ".join(
+                                sorted(
+                                    mancanti
+                                )
+                            )
+                        )
+
+                    else:
+
+                        nuovi, aggiornati = (
+                            importa_listone_nel_database(
+                                df_excel
+                            )
+                        )
+
+                        st.success(
+                            "✅ Listone importato con successo — "
+                            f"{st.session_state.get('ultimo_upload_listone', '')}. "
+                            f"Nuovi: {nuovi} — "
+                            f"Aggiornati: {aggiornati}. "
+                            "I giocatori invariati non sono stati riscritti."
+                        )
+
+            except Exception as errore:
+
+                st.error(
+                    f"Errore: {errore}"
+                )
+
+        df = (
+            df_completo.copy()
         )
 
-        filtrato = (
-            filtrato
-            .sort_values(
-                by=[
-                    "Priorita",
-                    "FVM",
-                    "Nome"
-                ],
-                ascending=[
-                    True,
-                    False,
-                    True
-                ],
-                na_position="last"
-            )
-        )
-
-        vista = (
-            filtrato[
-                [
-                    "Id",
-                    "R",
-                    "RM",
-                    "Nome",
-                    "Squadra",
-                    "Qt.A",
-                    "Qt.I",
-                    "Diff.",
-                    "FVM",
-                    "Stato",
-                    "Prezzo"
-                ]
-            ]
-            .copy()
-        )
-
-        vista[
-            "Prezzo"
-        ] = (
-            vista[
-                "Prezzo"
-            ]
-            .apply(
-                formatta_crediti
-            )
-        )
-
-        st.dataframe(
-            vista,
-            use_container_width=True,
-            hide_index=True,
-            height=620
-        )
-
-
-# ============================================================
-# ASTA
-# ============================================================
-
-elif sezione == "ASTA":
-
-    st.markdown(
-        """
-        <style>
-        /* VERSIONE B - CONSOLE ASTA COMPATTA */
-        section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
-            font-size:1.22rem !important;
-            font-weight:800 !important;
-            text-align:center !important;
-            min-height:58px !important;
-            border:2px solid #94a3b8 !important;
-            border-radius:10px !important;
-            background:#ffffff !important;
-        }
-
-        section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
-            border:2px solid #94a3b8 !important;
-            border-radius:10px !important;
-            background:#ffffff !important;
-            min-height:50px !important;
-        }
-
-        section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within > div,
-        section[data-testid="stMain"] div[data-testid="stNumberInput"]:focus-within input {
-            border-color:#071a2f !important;
-            box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
-        }
-
-        /* DISPONIBILITÀ: croce rossa compatta e ben visibile */
-        div[class*="st-key-btn_infortunio_"] .stButton > button {
-            border:none !important;
-            background:transparent !important;
-            box-shadow:none !important;
-            padding:0 !important;
-            min-height:42px !important;
-            height:42px !important;
-            font-size:1.55rem !important;
-            line-height:1 !important;
-        }
-
-        /* STRISCIA OPERATIVA ASTA: stessa altezza reale per tutti i blocchi */
-        div[class*="st-key-btn_acquista_"] .stButton,
-        div[class*="st-key-btn_avversario_"] .stButton {
-            height:76px !important;
-        }
-
-        div[class*="st-key-btn_acquista_"] .stButton > button,
-        div[class*="st-key-btn_avversario_"] .stButton > button {
-            min-height:76px !important;
-            height:76px !important;
-            width:100% !important;
-            font-weight:900 !important;
-            font-size:1rem !important;
-            border-radius:8px !important;
-            padding-top:0 !important;
-            padding-bottom:0 !important;
-        }
-
-        /* OFFERTA: alza l'intero controllo, compresi +/- */
-        section[data-testid="stMain"] div[data-testid="stNumberInput"] > div,
-        section[data-testid="stMain"] div[data-testid="stNumberInput"] [data-baseweb="input"],
-        section[data-testid="stMain"] div[data-testid="stNumberInput"] [data-baseweb="base-input"] {
-            min-height:76px !important;
-            height:76px !important;
-        }
-
-        section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
-            min-height:76px !important;
-            height:76px !important;
-            font-size:1.22rem !important;
-            font-weight:800 !important;
-            text-align:center !important;
-            border-radius:8px 0 0 8px !important;
-            padding-top:0 !important;
-            padding-bottom:0 !important;
-        }
-
-        section[data-testid="stMain"] div[data-testid="stNumberInput"] button {
-            height:38px !important;
-            min-height:38px !important;
-        }
-
-        /* Metriche: riferimento visivo per l'altezza della riga */
-        section[data-testid="stMain"] div[data-testid="stMetric"] {
-            min-height:76px !important;
-            height:76px !important;
-            padding:8px 12px !important;
-            display:flex !important;
-            flex-direction:column !important;
-            justify-content:center !important;
-            box-sizing:border-box !important;
-        }
-
-        @media (max-width:768px) {
-            section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
-                font-size:1.08rem !important;
-                min-height:52px !important;
-            }
-
-            section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
-                min-height:46px !important;
-            }
-
-            div[class*="st-key-btn_acquista_"] .stButton > button,
-            div[class*="st-key-btn_avversario_"] .stButton > button {
-                min-height:68px !important;
-                height:68px !important;
-            }
-        }
-        
-/* ==========================================================
-   V74 - POPUP DETTAGLIO IQR
-   ========================================================== */
-
-/* Titolo interno IQR nel popup */
-div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-star,
-div[role="dialog"] .iqr-gauge-card .iqr-v73-star {
-    color: #ffc21c !important;
-    font-size: 26px !important;
-    line-height: 1 !important;
-    font-weight: 950 !important;
-}
-
-div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-title,
-div[role="dialog"] .iqr-gauge-card .iqr-v73-title {
-    color: #111827 !important;
-    font-size: 24px !important;
-    line-height: 1 !important;
-    font-weight: 900 !important;
-}
-
-div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-percent,
-div[role="dialog"] .iqr-gauge-card .iqr-v73-percent {
-    color: #ffc21c !important;
-    font-size: 24px !important;
-    line-height: 1 !important;
-    font-weight: 950 !important;
-}
-
-/* Stato qualitativo nel popup */
-div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-status,
-div[role="dialog"] .iqr-gauge-card .iqr-v73-status {
-    color: #ffffff !important;
-    font-size: 22px !important;
-    line-height: 1.15 !important;
-    font-weight: 900 !important;
-    padding: 10px 22px !important;
-}
-
-/* Mantiene ben leggibile e centrata l'intestazione */
-div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-top,
-div[role="dialog"] .iqr-gauge-card .iqr-v73-top {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 10px !important;
-}
-
-/* Compatibilità con eventuale markup IQR precedente usato nel dettaglio */
-div[data-testid="stDialog"] .iqr-v71-star,
-div[role="dialog"] .iqr-v71-star {
-    color: #ffc21c !important;
-    font-size: 26px !important;
-    font-weight: 950 !important;
-}
-
-div[data-testid="stDialog"] .iqr-v71-title,
-div[role="dialog"] .iqr-v71-title {
-    color: #111827 !important;
-    font-size: 24px !important;
-    font-weight: 900 !important;
-}
-
-div[data-testid="stDialog"] .iqr-v71-percent,
-div[role="dialog"] .iqr-v71-percent {
-    color: #ffc21c !important;
-    font-size: 24px !important;
-    font-weight: 950 !important;
-}
-
-div[data-testid="stDialog"] .iqr-v71-status,
-div[role="dialog"] .iqr-v71-status {
-    color: #ffffff !important;
-    font-size: 22px !important;
-    line-height: 1.15 !important;
-    font-weight: 900 !important;
-}
-</style>
-        """,
-        unsafe_allow_html=True
-    )
-
-    df = df_completo.copy()
-
-    if df.empty:
-        st.info("Prima devi caricare il listone.")
-
-    else:
-        disponibili = (
-            df[
-                df["Stato"] == "DISPONIBILE"
-            ]
-            .copy()
-            .sort_values("Nome")
-            .reset_index(drop=True)
-        )
-
-        if disponibili.empty:
+        if df.empty:
 
             st.info(
-                "Nessun giocatore disponibile."
+                "Il database è vuoto."
             )
 
         else:
 
-            opzioni_asta = (
-                disponibili
-                .apply(
-                    lambda r:
-                    f"{r['Nome']} — "
-                    f"{r['Squadra']} — "
-                    f"{r['RM']}",
-                    axis=1
-                )
-                .tolist()
-            )
+            f1, f2, f3 = st.columns(3)
 
-            scelta = st.selectbox(
-                "🔎 CERCA GIOCATORE / SQUADRA / RUOLO",
-                options=opzioni_asta,
-                index=None,
-                placeholder=(
-                    "Scrivi nome, squadra o ruolo…"
-                ),
-                key="search_select_asta"
-            )
+            with f1:
 
-            if scelta is None:
-
-                st.info(
-                    "⌨️ Scrivi poche lettere: il giocatore viene proposto "
-                    "subito. Puoi cercare anche per squadra o ruolo."
-                )
-
-            else:
-
-                giocatore = (
-                    disponibili.iloc[
-                        opzioni_asta.index(
-                            scelta
-                        )
-                    ]
-                )
-
-                colore_nome_asta = (
-                    colore_fvm_mantra(
-                        giocatore.get(
-                            "RM",
-                            ""
-                        ),
-                        giocatore.get(
-                            "FVM M"
-                        )
-                    )
-                )
-
-                priorita_acquisto = (
-                    valuta_priorita_acquisto(
-                        giocatore,
-                        df_rosa_globale,
-                        df_completo
-                    )
-                )
-
-                (
-                    bg_priorita,
-                    fg_priorita,
-                    bordo_priorita
-                ) = stile_priorita_acquisto(
-                    priorita_acquisto[
-                        "Etichetta"
-                    ]
-                )
-
-                consiglio_budget = (
-                    calcola_budget_massimo_consigliato(
-                        giocatore,
-                        priorita_acquisto,
-                        budget_asta,
-                        budget_rimanente,
-                        numero_rosa
-                    )
-                )
-
-                g1, g2, g3, g4, g5, g6, g7, g8 = (
-                    st.columns(
+                filtro_stato = (
+                    st.selectbox(
+                        "Stato",
                         [
-                            1.06,
-                            0.72,
-                            0.68,
-                            0.58,
-                            0.72,
-                            0.52,
-                            1.12,
-                            0.88
+                            "TUTTI",
+                            "DISPONIBILE",
+                            "MIO",
+                            "AVVERSARIO"
                         ]
                     )
                 )
 
-                with g1:
+            with f2:
 
-                    st.markdown(
-                        f"""
-                        <div class="asta-player-mobile-fix">
-                            <div style="
-                                font-size:0.875rem;
-                                color:rgba(49,51,63,0.65);
-                                margin-bottom:0.15rem;
-                            ">
-                                Giocatore
-                            </div>
-                            <div style="
-                                font-size:1.35rem;
-                                line-height:1.15;
-                                font-weight:700;
-                                color:{colore_nome_asta};
-                                white-space:normal;
-                                overflow-wrap:anywhere;
-                            ">
-                                {html.escape(str(giocatore["Nome"]))}
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-
-                g2.metric(
-                    "Squadra",
-                    giocatore["Squadra"]
-                )
-
-                g3.metric(
-                    "Ruolo",
-                    giocatore["RM"]
-                )
-
-                sigle_specialista = (
-                    sigle_specialista_giocatore(
-                        giocatore["Nome"],
-                        giocatore["Squadra"]
+                filtro_ruolo = (
+                    st.selectbox(
+                        "Primo ruolo",
+                        [
+                            "TUTTI"
+                        ]
+                        + ELENCO_RUOLI
                     )
                 )
 
-                g4.metric(
-                    "R / CP",
-                    sigle_specialista
-                    if sigle_specialista
-                    else "—"
+            squadre = sorted(
+                df[
+                    "Squadra"
+                ]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+
+            with f3:
+
+                filtro_squadra = (
+                    st.selectbox(
+                        "Squadra",
+                        [
+                            "TUTTE"
+                        ]
+                        + squadre
+                    )
                 )
 
-                info_disp = info_disponibilita_giocatore(
-                    giocatore["Nome"],
-                    giocatore["Squadra"]
+            ricerca = st.text_input(
+                "🔎 Cerca giocatore"
+            )
+
+            filtrato = (
+                df.copy()
+            )
+
+            if (
+                filtro_stato
+                != "TUTTI"
+            ):
+
+                filtrato = (
+                    filtrato[
+                        filtrato[
+                            "Stato"
+                        ]
+                        == filtro_stato
+                    ]
                 )
 
-                with g5:
-                    st.caption("Disponibilità")
-                    if info_disp["disponibile"]:
-                        st.markdown(
-                            '<div style="font-size:1.65rem;line-height:1.55;'
-                            'font-weight:900;color:#16a34a;">✓</div>',
-                            unsafe_allow_html=True
+            if (
+                filtro_ruolo
+                != "TUTTI"
+            ):
+
+                filtrato = (
+                    filtrato[
+                        filtrato[
+                            "RM"
+                        ]
+                        .apply(
+                            primo_ruolo
                         )
-                    else:
-                        if st.button(
-                            "❌",
-                            key=f"btn_infortunio_{int(giocatore['Id'])}",
-                            help="Clicca per vedere infortunio e tempi di recupero"
-                        ):
-                            mostra_dettaglio_infortunio(
-                                giocatore["Nome"],
-                                giocatore["Squadra"],
-                                info_disp["dettaglio"]
+                        .str.upper()
+                        == filtro_ruolo.upper()
+                    ]
+                )
+
+            if (
+                filtro_squadra
+                != "TUTTE"
+            ):
+
+                filtrato = (
+                    filtrato[
+                        filtrato[
+                            "Squadra"
+                        ]
+                        == filtro_squadra
+                    ]
+                )
+
+            if ricerca:
+
+                testo = (
+                    ricerca
+                    .lower()
+                    .strip()
+                )
+
+                filtrato = (
+                    filtrato[
+                        filtrato[
+                            "Nome"
+                        ]
+                        .astype(str)
+                        .str.lower()
+                        .str.contains(
+                            testo,
+                            na=False
+                        )
+                    ]
+                )
+
+            filtrato[
+                "Priorita"
+            ] = (
+                filtrato[
+                    "RM"
+                ]
+                .apply(
+                    priorita_ruolo
+                )
+            )
+
+            filtrato = (
+                filtrato
+                .sort_values(
+                    by=[
+                        "Priorita",
+                        "FVM",
+                        "Nome"
+                    ],
+                    ascending=[
+                        True,
+                        False,
+                        True
+                    ],
+                    na_position="last"
+                )
+            )
+
+            vista = (
+                filtrato[
+                    [
+                        "Id",
+                        "R",
+                        "RM",
+                        "Nome",
+                        "Squadra",
+                        "Qt.A",
+                        "Qt.I",
+                        "Diff.",
+                        "FVM",
+                        "Stato",
+                        "Prezzo"
+                    ]
+                ]
+                .copy()
+            )
+
+            vista[
+                "Prezzo"
+            ] = (
+                vista[
+                    "Prezzo"
+                ]
+                .apply(
+                    formatta_crediti
+                )
+            )
+
+            st.dataframe(
+                vista,
+                use_container_width=True,
+                hide_index=True,
+                height=620
+            )
+
+
+    # ============================================================
+    # ASTA
+    # ============================================================
+
+    elif sezione == "ASTA":
+
+        st.markdown(
+            """
+            <style>
+            /* VERSIONE B - CONSOLE ASTA COMPATTA */
+            section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
+                font-size:1.22rem !important;
+                font-weight:800 !important;
+                text-align:center !important;
+                min-height:58px !important;
+                border:2px solid #94a3b8 !important;
+                border-radius:10px !important;
+                background:#ffffff !important;
+            }
+
+            section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+                border:2px solid #94a3b8 !important;
+                border-radius:10px !important;
+                background:#ffffff !important;
+                min-height:50px !important;
+            }
+
+            section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within > div,
+            section[data-testid="stMain"] div[data-testid="stNumberInput"]:focus-within input {
+                border-color:#071a2f !important;
+                box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
+            }
+
+            /* DISPONIBILITÀ: croce rossa compatta e ben visibile */
+            div[class*="st-key-btn_infortunio_"] .stButton > button {
+                border:none !important;
+                background:transparent !important;
+                box-shadow:none !important;
+                padding:0 !important;
+                min-height:42px !important;
+                height:42px !important;
+                font-size:1.55rem !important;
+                line-height:1 !important;
+            }
+
+            /* STRISCIA OPERATIVA ASTA: stessa altezza reale per tutti i blocchi */
+            div[class*="st-key-btn_acquista_"] .stButton,
+            div[class*="st-key-btn_avversario_"] .stButton {
+                height:76px !important;
+            }
+
+            div[class*="st-key-btn_acquista_"] .stButton > button,
+            div[class*="st-key-btn_avversario_"] .stButton > button {
+                min-height:76px !important;
+                height:76px !important;
+                width:100% !important;
+                font-weight:900 !important;
+                font-size:1rem !important;
+                border-radius:8px !important;
+                padding-top:0 !important;
+                padding-bottom:0 !important;
+            }
+
+            /* OFFERTA: alza l'intero controllo, compresi +/- */
+            section[data-testid="stMain"] div[data-testid="stNumberInput"] > div,
+            section[data-testid="stMain"] div[data-testid="stNumberInput"] [data-baseweb="input"],
+            section[data-testid="stMain"] div[data-testid="stNumberInput"] [data-baseweb="base-input"] {
+                min-height:76px !important;
+                height:76px !important;
+            }
+
+            section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
+                min-height:76px !important;
+                height:76px !important;
+                font-size:1.22rem !important;
+                font-weight:800 !important;
+                text-align:center !important;
+                border-radius:8px 0 0 8px !important;
+                padding-top:0 !important;
+                padding-bottom:0 !important;
+            }
+
+            section[data-testid="stMain"] div[data-testid="stNumberInput"] button {
+                height:38px !important;
+                min-height:38px !important;
+            }
+
+            /* Metriche: riferimento visivo per l'altezza della riga */
+            section[data-testid="stMain"] div[data-testid="stMetric"] {
+                min-height:76px !important;
+                height:76px !important;
+                padding:8px 12px !important;
+                display:flex !important;
+                flex-direction:column !important;
+                justify-content:center !important;
+                box-sizing:border-box !important;
+            }
+
+            @media (max-width:768px) {
+                section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
+                    font-size:1.08rem !important;
+                    min-height:52px !important;
+                }
+
+                section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+                    min-height:46px !important;
+                }
+
+                div[class*="st-key-btn_acquista_"] .stButton > button,
+                div[class*="st-key-btn_avversario_"] .stButton > button {
+                    min-height:68px !important;
+                    height:68px !important;
+                }
+            }
+
+    /* ==========================================================
+       V74 - POPUP DETTAGLIO IQR
+       ========================================================== */
+
+    /* Titolo interno IQR nel popup */
+    div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-star,
+    div[role="dialog"] .iqr-gauge-card .iqr-v73-star {
+        color: #ffc21c !important;
+        font-size: 26px !important;
+        line-height: 1 !important;
+        font-weight: 950 !important;
+    }
+
+    div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-title,
+    div[role="dialog"] .iqr-gauge-card .iqr-v73-title {
+        color: #111827 !important;
+        font-size: 24px !important;
+        line-height: 1 !important;
+        font-weight: 900 !important;
+    }
+
+    div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-percent,
+    div[role="dialog"] .iqr-gauge-card .iqr-v73-percent {
+        color: #ffc21c !important;
+        font-size: 24px !important;
+        line-height: 1 !important;
+        font-weight: 950 !important;
+    }
+
+    /* Stato qualitativo nel popup */
+    div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-status,
+    div[role="dialog"] .iqr-gauge-card .iqr-v73-status {
+        color: #ffffff !important;
+        font-size: 22px !important;
+        line-height: 1.15 !important;
+        font-weight: 900 !important;
+        padding: 10px 22px !important;
+    }
+
+    /* Mantiene ben leggibile e centrata l'intestazione */
+    div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-top,
+    div[role="dialog"] .iqr-gauge-card .iqr-v73-top {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 10px !important;
+    }
+
+    /* Compatibilità con eventuale markup IQR precedente usato nel dettaglio */
+    div[data-testid="stDialog"] .iqr-v71-star,
+    div[role="dialog"] .iqr-v71-star {
+        color: #ffc21c !important;
+        font-size: 26px !important;
+        font-weight: 950 !important;
+    }
+
+    div[data-testid="stDialog"] .iqr-v71-title,
+    div[role="dialog"] .iqr-v71-title {
+        color: #111827 !important;
+        font-size: 24px !important;
+        font-weight: 900 !important;
+    }
+
+    div[data-testid="stDialog"] .iqr-v71-percent,
+    div[role="dialog"] .iqr-v71-percent {
+        color: #ffc21c !important;
+        font-size: 24px !important;
+        font-weight: 950 !important;
+    }
+
+    div[data-testid="stDialog"] .iqr-v71-status,
+    div[role="dialog"] .iqr-v71-status {
+        color: #ffffff !important;
+        font-size: 22px !important;
+        line-height: 1.15 !important;
+        font-weight: 900 !important;
+    }
+    </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+        df = df_completo.copy()
+
+        if df.empty:
+            st.info("Prima devi caricare il listone.")
+
+        else:
+            disponibili = (
+                df[
+                    df["Stato"] == "DISPONIBILE"
+                ]
+                .copy()
+                .sort_values("Nome")
+                .reset_index(drop=True)
+            )
+
+            if disponibili.empty:
+
+                st.info(
+                    "Nessun giocatore disponibile."
+                )
+
+            else:
+
+                opzioni_asta = (
+                    disponibili
+                    .apply(
+                        lambda r:
+                        f"{r['Nome']} — "
+                        f"{r['Squadra']} — "
+                        f"{r['RM']}",
+                        axis=1
+                    )
+                    .tolist()
+                )
+
+                scelta = st.selectbox(
+                    "🔎 CERCA GIOCATORE / SQUADRA / RUOLO",
+                    options=opzioni_asta,
+                    index=None,
+                    placeholder=(
+                        "Scrivi nome, squadra o ruolo…"
+                    ),
+                    key="search_select_asta"
+                )
+
+                if scelta is None:
+
+                    st.info(
+                        "⌨️ Scrivi poche lettere: il giocatore viene proposto "
+                        "subito. Puoi cercare anche per squadra o ruolo."
+                    )
+
+                else:
+
+                    giocatore = (
+                        disponibili.iloc[
+                            opzioni_asta.index(
+                                scelta
                             )
-
-                g6.metric(
-                    "FVM",
-                    giocatore["FVM"]
-                )
-
-                with g7:
-
-                    dettaglio_priorita = (
-                        f"Ruolo {priorita_acquisto['Ruolo']} · "
-                        f"fascia {priorita_acquisto['Fascia candidato'].title()} · "
-                        f"in rosa {priorita_acquisto['Copertura']} · "
-                        f"rimasti {priorita_acquisto['Disponibili']}"
+                        ]
                     )
 
-                    with st.container(
-                        key=(
-                            "priorita_click_"
-                            f"{int(giocatore['Id'])}"
+                    colore_nome_asta = (
+                        colore_fvm_mantra(
+                            giocatore.get(
+                                "RM",
+                                ""
+                            ),
+                            giocatore.get(
+                                "FVM M"
+                            )
                         )
-                    ):
+                    )
+
+                    priorita_acquisto = (
+                        valuta_priorita_acquisto(
+                            giocatore,
+                            df_rosa_globale,
+                            df_completo
+                        )
+                    )
+
+                    (
+                        bg_priorita,
+                        fg_priorita,
+                        bordo_priorita
+                    ) = stile_priorita_acquisto(
+                        priorita_acquisto[
+                            "Etichetta"
+                        ]
+                    )
+
+                    consiglio_budget = (
+                        calcola_budget_massimo_consigliato(
+                            giocatore,
+                            priorita_acquisto,
+                            budget_asta,
+                            budget_rimanente,
+                            numero_rosa
+                        )
+                    )
+
+                    g1, g2, g3, g4, g5, g6, g7, g8 = (
+                        st.columns(
+                            [
+                                1.06,
+                                0.72,
+                                0.68,
+                                0.58,
+                                0.72,
+                                0.52,
+                                1.12,
+                                0.88
+                            ]
+                        )
+                    )
+
+                    with g1:
 
                         st.markdown(
                             f"""
-                            <div style="
-                                min-height:72px;
-                                border:2px solid {bordo_priorita};
-                                border-radius:10px;
-                                background:{bg_priorita};
-                                padding:9px 10px;
-                                display:flex;
-                                flex-direction:column;
-                                justify-content:center;
-                                box-sizing:border-box;
-                                cursor:pointer;
-                            ">
+                            <div class="asta-player-mobile-fix">
                                 <div style="
-                                    font-size:0.78rem;
-                                    color:#475569;
-                                    margin-bottom:4px;
-                                    font-weight:600;
+                                    font-size:0.875rem;
+                                    color:rgba(49,51,63,0.65);
+                                    margin-bottom:0.15rem;
                                 ">
-                                    Priorità acquisto
+                                    Giocatore
                                 </div>
                                 <div style="
-                                    font-size:1.00rem;
-                                    line-height:1.10;
-                                    font-weight:800;
-                                    color:{fg_priorita};
-                                ">
-                                    {html.escape(
-                                        priorita_acquisto[
-                                            "Etichetta"
-                                        ]
-                                    )}
-                                </div>
-                                <div style="
-                                    font-size:0.66rem;
+                                    font-size:1.35rem;
                                     line-height:1.15;
-                                    color:#64748b;
-                                    margin-top:4px;
+                                    font-weight:700;
+                                    color:{colore_nome_asta};
+                                    white-space:normal;
+                                    overflow-wrap:anywhere;
                                 ">
-                                    {html.escape(
-                                        dettaglio_priorita
-                                    )}
-                                </div>
-                                <div style="
-                                    font-size:0.62rem;
-                                    line-height:1.1;
-                                    color:#64748b;
-                                    margin-top:5px;
-                                    font-weight:600;
-                                ">
-                                    Giocatori disponibili
+                                    {html.escape(str(giocatore["Nome"]))}
                                 </div>
                             </div>
                             """,
                             unsafe_allow_html=True
                         )
 
-                        if st.button(
-                            "Giocatori disponibili",
-                            key=(
-                                "btn_priorita_"
-                                f"{int(giocatore['Id'])}"
-                            ),
-                        ):
-
-                            mostra_dettaglio_priorita_acquisto(
-                                giocatore,
-                                priorita_acquisto,
-                                df_completo
-                            )
-
-                with g8:
-
-                    st.markdown(
-                        f"""
-                        <div style="
-                            min-height:72px;
-                            border:2px solid #f5b51b;
-                            border-radius:10px;
-                            background:#fff8e6;
-                            padding:9px 10px;
-                            display:flex;
-                            flex-direction:column;
-                            justify-content:center;
-                            box-sizing:border-box;
-                        ">
-                            <div style="
-                                font-size:0.76rem;
-                                color:#475569;
-                                margin-bottom:4px;
-                                font-weight:700;
-                            ">
-                                Budget max consigliato
-                            </div>
-                            <div style="
-                                font-size:1.32rem;
-                                line-height:1.05;
-                                font-weight:900;
-                                color:#071a2f;
-                            ">
-                                {consiglio_budget["Massimo"]} €
-                            </div>
-                            <div style="
-                                font-size:0.62rem;
-                                line-height:1.15;
-                                color:#64748b;
-                                margin-top:5px;
-                            ">
-                                FVM + priorità + budget residuo
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
+                    g2.metric(
+                        "Squadra",
+                        giocatore["Squadra"]
                     )
 
-                chiave_prezzo = (
-                    "offerta_asta_"
-                    f"{int(giocatore['Id'])}"
-                )
-
-                if chiave_prezzo not in st.session_state:
-                    st.session_state[
-                        chiave_prezzo
-                    ] = 1.00
-
-                c1, c2, c3, c4, c5 = (
-                    st.columns(
-                        [
-                            1.15,
-                            1.20,
-                            1.20,
-                            0.85,
-                            0.85
-                        ],
-                        vertical_alignment="bottom"
-                    )
-                )
-
-                with c1:
-
-                    prezzo = st.number_input(
-                        "Offerta",
-                        min_value=0.10,
-                        max_value=5000.00,
-                        step=0.10,
-                        format="%.2f",
-                        key=chiave_prezzo,
-                        label_visibility="collapsed"
-                    )
-
-                prezzo = round(
-                    float(prezzo),
-                    2
-                )
-
-                nuovo_valore = round(
-                    valore_acquisti + prezzo,
-                    2
-                )
-
-                nuova_spesa = (
-                    calcola_spesa_effettiva(
-                        nuovo_valore
-                    )
-                )
-
-                incremento = round(
-                    nuova_spesa
-                    - spesa_effettiva,
-                    2
-                )
-
-                valido, motivo = (
-                    verifica_acquisto_regole(
-                        df_rosa_globale,
+                    g3.metric(
+                        "Ruolo",
                         giocatore["RM"]
                     )
-                )
 
-                with c2:
-
-                    if st.button(
-                        "✅ ACQUISTA",
-                        use_container_width=True,
-                        type="primary",
-                        disabled=(not valido),
-                        key=(
-                            "btn_acquista_"
-                            f"{int(giocatore['Id'])}"
-                        )
-                    ):
-
-                        esegui_operazione(
-                            int(giocatore["Id"]),
-                            "ACQUISTO",
-                            "MIO",
-                            prezzo,
-                            0
-                        )
-
-                        st.rerun()
-
-                with c3:
-
-                    if st.button(
-                        "🔴 VENDUTO AD AVVERSARIO",
-                        use_container_width=True,
-                        key=(
-                            "btn_avversario_"
-                            f"{int(giocatore['Id'])}"
-                        )
-                    ):
-
-                        esegui_operazione(
-                            int(giocatore["Id"]),
-                            "VENDUTO AVVERSARIO",
-                            "AVVERSARIO",
-                            None,
-                            0
-                        )
-
-                        st.rerun()
-
-                with c4:
-
-                    st.metric(
-                        "Impatto effettivo",
-                        f"{formatta_crediti(incremento)} €"
-                    )
-
-                with c5:
-
-                    st.metric(
-                        "Nuova spesa",
-                        f"{formatta_crediti(nuova_spesa)} €"
-                    )
-
-                if not valido:
-
-                    st.error(
-                        "⛔ " + motivo
-                    )
-
-
-
-# ============================================================
-# VENDUTI AD AVVERSARI
-# ============================================================
-
-elif sezione == "VENDUTI AD AVVERSARI":
-
-    st.subheader("🔴 Venduti ad avversari")
-
-    if "messaggio_reset_avversari" in st.session_state:
-
-        st.success(
-            st.session_state.pop(
-                "messaggio_reset_avversari"
-            )
-        )
-
-    avversari = (
-        df_completo[
-            df_completo["Stato"] == "AVVERSARIO"
-        ]
-        .copy()
-        .sort_values("Nome")
-        .reset_index(drop=True)
-    )
-
-    if avversari.empty:
-
-        st.info("Nessun giocatore venduto agli avversari.")
-
-    else:
-
-        reset_col1, reset_col2 = st.columns(
-            [
-                1.8,
-                4.2
-            ]
-        )
-
-        with reset_col1:
-
-            if st.button(
-                "↩️ RIPRISTINA TUTTI",
-                use_container_width=True,
-                key="btn_reset_tutti_avversari"
-            ):
-
-                conferma_ripristina_tutti_avversari()
-
-        with reset_col2:
-
-            st.caption(
-                "Rende nuovamente disponibili tutti i giocatori "
-                "assegnati agli avversari."
-            )
-
-        st.caption(
-            f"Giocatori venduti agli avversari: {len(avversari)}"
-        )
-
-        intestazione = st.columns(
-            [4, 2, 2, 1, 0.8]
-        )
-
-        for col, titolo in zip(
-            intestazione,
-            ["Giocatore", "Squadra", "Ruolo", "FVM", "Ripristina"]
-        ):
-            col.markdown(f"**{titolo}**")
-
-        for _, riga in avversari.iterrows():
-
-            cols = st.columns(
-                [4, 2, 2, 1, 0.8],
-                vertical_alignment="center"
-            )
-
-            colore_nome = colore_fvm_mantra(
-                riga.get("RM", ""),
-                riga.get("FVM M")
-            )
-
-            cols[0].markdown(
-                f"<span style='color:{colore_nome};font-weight:800;'>"
-                f"{html.escape(str(riga['Nome']))}</span>",
-                unsafe_allow_html=True
-            )
-            cols[1].write(riga["Squadra"])
-            cols[2].write(riga["RM"])
-            cols[3].write(riga["FVM"])
-
-            with cols[4]:
-                if st.button(
-                    "↩️",
-                    key=f"ripristina_{int(riga['Id'])}",
-                    help="Rendi nuovamente disponibile",
-                    use_container_width=True
-                ):
-                    conferma_ripristino_avversario(
-                        int(riga["Id"]),
-                        riga["Nome"]
-                    )
-
-
-# ============================================================
-# ROSA
-# ============================================================
-
-elif sezione == "ROSA":
-
-    st.subheader(
-        "👕 La mia rosa"
-    )
-
-    if "messaggio_reset_rosa" in st.session_state:
-        st.success(
-            st.session_state.pop(
-                "messaggio_reset_rosa"
-            )
-        )
-
-    df_rosa = (
-        df_rosa_globale.copy()
-    )
-
-    # MULTILEGA 0.4:
-    # nessun accesso alle Formazioni Tipo se la rosa è vuota.
-    # Se la rosa contiene giocatori, la mappa viene recuperata dalla
-    # cache RAM e ricostruita solo al primo accesso/aggiornamento.
-    mappa_titolarita_rosa = {}
-
-    if not df_rosa.empty:
-
-        mappa_titolarita_rosa = (
-            costruisci_mappa_titolarita()
-        )
-        if st.button(
-            "🗑️ ELIMINA TUTTA LA ROSA",
-            key="btn_reset_tutta_rosa"
-        ):
-            conferma_elimina_tutta_rosa()
-
-    if df_rosa.empty:
-
-        empty_html = (
-            '<div class="empty-card">'
-            '<div class="empty-icon">👕</div>'
-            '<div class="empty-title">'
-            'La rosa è ancora vuota'
-            '</div>'
-            '<div class="empty-text">'
-            'Vai nella sezione ASTA '
-            'per acquistare i primi giocatori.'
-            '</div>'
-            '</div>'
-        )
-
-        st.markdown(
-            empty_html,
-            unsafe_allow_html=True
-        )
-
-    else:
-
-        df_rosa[
-            "Priorita"
-        ] = (
-            df_rosa["RM"]
-            .apply(
-                priorita_ruolo
-            )
-        )
-
-        df_rosa = (
-            df_rosa
-            .sort_values(
-                [
-                    "Priorita",
-                    "Nome"
-                ]
-            )
-            .reset_index(
-                drop=True
-            )
-        )
-
-        # ----------------------------------------------------
-        # VISTA MOBILE - tabella semplice
-        # ----------------------------------------------------
-        with st.container(
-            key="rosa_mobile_view"
-        ):
-
-            # Header compatto mobile
-            h1, h2, h3, h4, h5, h6 = st.columns(
-                [2.0, 0.8, 1.4, 0.7, 0.9, 0.5]
-            )
-
-            h1.markdown("**NOME GIOCATORE**")
-            h2.markdown("**RUOLO**")
-            h3.markdown("**TITOLARITÀ**")
-            h4.markdown("**R/CP**")
-            h5.markdown("**PREZZO**")
-            h6.markdown("**OK**")
-
-            for _, giocatore in df_rosa.iterrows():
-
-                giocatore_id = int(
-                    giocatore["Id"]
-                )
-
-                prezzo_attuale = float(
-                    giocatore["Prezzo"]
-                    or 0
-                )
-
-                chiave_prezzo = (
-                    f"prezzo_rosa_mobile_{giocatore_id}"
-                )
-
-                if chiave_prezzo not in st.session_state:
-
-                    st.session_state[
-                        chiave_prezzo
-                    ] = prezzo_attuale
-
-                r1, r2, r3, r4, r5, r6 = st.columns(
-                    [2.0, 0.8, 1.4, 0.7, 0.9, 0.5],
-                    vertical_alignment="center"
-                )
-
-                colore_nome = (
-                    colore_fvm_mantra(
-                        giocatore.get(
-                            "RM",
-                            ""
-                        ),
-                        giocatore.get(
-                            "FVM M"
+                    sigle_specialista = (
+                        sigle_specialista_giocatore(
+                            giocatore["Nome"],
+                            giocatore["Squadra"]
                         )
                     )
-                )
 
-                r1.markdown(
-                    f"<span style='color:{colore_nome};"
-                    f"font-weight:800;'>"
-                    f"{html.escape(str(giocatore['Nome']))}"
-                    f"</span>",
-                    unsafe_allow_html=True
-                )
+                    g4.metric(
+                        "R / CP",
+                        sigle_specialista
+                        if sigle_specialista
+                        else "—"
+                    )
 
-                r2.write(
-                    giocatore["RM"]
-                )
-
-                r3.markdown(
-                    html_titolarita_rosa(
-                        giocatore["Nome"],
-                        giocatore["Squadra"],
-                        mappa_titolarita_rosa
-                    ),
-                    unsafe_allow_html=True
-                )
-
-                r4.write(
-                    sigle_specialista_giocatore(
+                    info_disp = info_disponibilita_giocatore(
                         giocatore["Nome"],
                         giocatore["Squadra"]
                     )
-                    or "—"
-                )
 
-                with r5:
+                    with g5:
+                        st.caption("Disponibilità")
+                        if info_disp["disponibile"]:
+                            st.markdown(
+                                '<div style="font-size:1.65rem;line-height:1.55;'
+                                'font-weight:900;color:#16a34a;">✓</div>',
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            if st.button(
+                                "❌",
+                                key=f"btn_infortunio_{int(giocatore['Id'])}",
+                                help="Clicca per vedere infortunio e tempi di recupero"
+                            ):
+                                mostra_dettaglio_infortunio(
+                                    giocatore["Nome"],
+                                    giocatore["Squadra"],
+                                    info_disp["dettaglio"]
+                                )
 
-                    nuovo_prezzo = st.number_input(
-                        "Prezzo",
-                        min_value=0.0,
-                        max_value=5000.0,
-                        step=0.10,
-                        format="%.2f",
-                        key=chiave_prezzo,
-                        label_visibility="collapsed"
+                    g6.metric(
+                        "FVM",
+                        giocatore["FVM"]
                     )
 
-                with r6:
+                    with g7:
 
-                    modificato = (
-                        round(
-                            float(
-                                nuovo_prezzo
-                            ),
-                            2
+                        dettaglio_priorita = (
+                            f"Ruolo {priorita_acquisto['Ruolo']} · "
+                            f"fascia {priorita_acquisto['Fascia candidato'].title()} · "
+                            f"in rosa {priorita_acquisto['Copertura']} · "
+                            f"rimasti {priorita_acquisto['Disponibili']}"
                         )
-                        != round(
-                            prezzo_attuale,
-                            2
+
+                        with st.container(
+                            key=(
+                                "priorita_click_"
+                                f"{int(giocatore['Id'])}"
+                            )
+                        ):
+
+                            st.markdown(
+                                f"""
+                                <div style="
+                                    min-height:72px;
+                                    border:2px solid {bordo_priorita};
+                                    border-radius:10px;
+                                    background:{bg_priorita};
+                                    padding:9px 10px;
+                                    display:flex;
+                                    flex-direction:column;
+                                    justify-content:center;
+                                    box-sizing:border-box;
+                                    cursor:pointer;
+                                ">
+                                    <div style="
+                                        font-size:0.78rem;
+                                        color:#475569;
+                                        margin-bottom:4px;
+                                        font-weight:600;
+                                    ">
+                                        Priorità acquisto
+                                    </div>
+                                    <div style="
+                                        font-size:1.00rem;
+                                        line-height:1.10;
+                                        font-weight:800;
+                                        color:{fg_priorita};
+                                    ">
+                                        {html.escape(
+                                            priorita_acquisto[
+                                                "Etichetta"
+                                            ]
+                                        )}
+                                    </div>
+                                    <div style="
+                                        font-size:0.66rem;
+                                        line-height:1.15;
+                                        color:#64748b;
+                                        margin-top:4px;
+                                    ">
+                                        {html.escape(
+                                            dettaglio_priorita
+                                        )}
+                                    </div>
+                                    <div style="
+                                        font-size:0.62rem;
+                                        line-height:1.1;
+                                        color:#64748b;
+                                        margin-top:5px;
+                                        font-weight:600;
+                                    ">
+                                        Giocatori disponibili
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+
+                            if st.button(
+                                "Giocatori disponibili",
+                                key=(
+                                    "btn_priorita_"
+                                    f"{int(giocatore['Id'])}"
+                                ),
+                            ):
+
+                                mostra_dettaglio_priorita_acquisto(
+                                    giocatore,
+                                    priorita_acquisto,
+                                    df_completo
+                                )
+
+                    with g8:
+
+                        st.markdown(
+                            f"""
+                            <div style="
+                                min-height:72px;
+                                border:2px solid #f5b51b;
+                                border-radius:10px;
+                                background:#fff8e6;
+                                padding:9px 10px;
+                                display:flex;
+                                flex-direction:column;
+                                justify-content:center;
+                                box-sizing:border-box;
+                            ">
+                                <div style="
+                                    font-size:0.76rem;
+                                    color:#475569;
+                                    margin-bottom:4px;
+                                    font-weight:700;
+                                ">
+                                    Budget max consigliato
+                                </div>
+                                <div style="
+                                    font-size:1.32rem;
+                                    line-height:1.05;
+                                    font-weight:900;
+                                    color:#071a2f;
+                                ">
+                                    {consiglio_budget["Massimo"]} €
+                                </div>
+                                <div style="
+                                    font-size:0.62rem;
+                                    line-height:1.15;
+                                    color:#64748b;
+                                    margin-top:5px;
+                                ">
+                                    FVM + priorità + budget residuo
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+
+                    chiave_prezzo = (
+                        "offerta_asta_"
+                        f"{int(giocatore['Id'])}"
+                    )
+
+                    if chiave_prezzo not in st.session_state:
+                        st.session_state[
+                            chiave_prezzo
+                        ] = 1.00
+
+                    c1, c2, c3, c4, c5 = (
+                        st.columns(
+                            [
+                                1.15,
+                                1.20,
+                                1.20,
+                                0.85,
+                                0.85
+                            ],
+                            vertical_alignment="bottom"
                         )
                     )
 
-                    if st.button(
-                        "✓",
-                        key=f"salva_prezzo_mobile_{giocatore_id}",
-                        help="Conferma modifica prezzo",
-                        disabled=not modificato,
-                        use_container_width=True
-                    ):
+                    with c1:
 
-                        conferma_modifica_prezzo(
-                            giocatore_id,
-                            giocatore["Nome"],
-                            prezzo_attuale,
-                            nuovo_prezzo
+                        prezzo = st.number_input(
+                            "Offerta",
+                            min_value=0.10,
+                            max_value=5000.00,
+                            step=0.10,
+                            format="%.2f",
+                            key=chiave_prezzo,
+                            label_visibility="collapsed"
+                        )
+
+                    prezzo = round(
+                        float(prezzo),
+                        2
+                    )
+
+                    nuovo_valore = round(
+                        valore_acquisti + prezzo,
+                        2
+                    )
+
+                    nuova_spesa = (
+                        calcola_spesa_effettiva(
+                            nuovo_valore
+                        )
+                    )
+
+                    incremento = round(
+                        nuova_spesa
+                        - spesa_effettiva,
+                        2
+                    )
+
+                    valido, motivo = (
+                        verifica_acquisto_regole(
+                            df_rosa_globale,
+                            giocatore["RM"]
+                        )
+                    )
+
+                    with c2:
+
+                        if st.button(
+                            "✅ ACQUISTA",
+                            use_container_width=True,
+                            type="primary",
+                            disabled=(not valido),
+                            key=(
+                                "btn_acquista_"
+                                f"{int(giocatore['Id'])}"
+                            )
+                        ):
+
+                            esegui_operazione(
+                                int(giocatore["Id"]),
+                                "ACQUISTO",
+                                "MIO",
+                                prezzo,
+                                0
+                            )
+
+                            st.rerun()
+
+                    with c3:
+
+                        if st.button(
+                            "🔴 VENDUTO AD AVVERSARIO",
+                            use_container_width=True,
+                            key=(
+                                "btn_avversario_"
+                                f"{int(giocatore['Id'])}"
+                            )
+                        ):
+
+                            esegui_operazione(
+                                int(giocatore["Id"]),
+                                "VENDUTO AVVERSARIO",
+                                "AVVERSARIO",
+                                None,
+                                0
+                            )
+
+                            st.rerun()
+
+                    with c4:
+
+                        st.metric(
+                            "Impatto effettivo",
+                            f"{formatta_crediti(incremento)} €"
+                        )
+
+                    with c5:
+
+                        st.metric(
+                            "Nuova spesa",
+                            f"{formatta_crediti(nuova_spesa)} €"
+                        )
+
+                    if not valido:
+
+                        st.error(
+                            "⛔ " + motivo
                         )
 
 
-        # ----------------------------------------------------
-        # VISTA DESKTOP - invariata
-        # ----------------------------------------------------
-        with st.container(
-            key="rosa_desktop_view"
-        ):
 
-            intestazione = (
-                st.columns(
-                    [
-                        4,
-                        2,
-                        2,
-                        1.8,
-                        1.2,
-                        1.2,
-                        1.9,
-                        0.7,
-                        0.7
-                    ]
+    # ============================================================
+    # VENDUTI AD AVVERSARI
+    # ============================================================
+
+    elif sezione == "VENDUTI AD AVVERSARI":
+
+        st.subheader("🔴 Venduti ad avversari")
+
+        if "messaggio_reset_avversari" in st.session_state:
+
+            st.success(
+                st.session_state.pop(
+                    "messaggio_reset_avversari"
                 )
             )
 
-            titoli = [
-                "Nome",
-                "Squadra",
-                "Ruolo",
-                "Titolarità",
-                "R / CP",
-                "FVM",
-                "Prezzo acquisto",
-                "🗑️",
-                "🔓"
+        avversari = (
+            df_completo[
+                df_completo["Stato"] == "AVVERSARIO"
             ]
+            .copy()
+            .sort_values("Nome")
+            .reset_index(drop=True)
+        )
+
+        if avversari.empty:
+
+            st.info("Nessun giocatore venduto agli avversari.")
+
+        else:
+
+            reset_col1, reset_col2 = st.columns(
+                [
+                    1.8,
+                    4.2
+                ]
+            )
+
+            with reset_col1:
+
+                if st.button(
+                    "↩️ RIPRISTINA TUTTI",
+                    use_container_width=True,
+                    key="btn_reset_tutti_avversari"
+                ):
+
+                    conferma_ripristina_tutti_avversari()
+
+            with reset_col2:
+
+                st.caption(
+                    "Rende nuovamente disponibili tutti i giocatori "
+                    "assegnati agli avversari."
+                )
+
+            st.caption(
+                f"Giocatori venduti agli avversari: {len(avversari)}"
+            )
+
+            intestazione = st.columns(
+                [4, 2, 2, 1, 0.8]
+            )
 
             for col, titolo in zip(
                 intestazione,
-                titoli
+                ["Giocatore", "Squadra", "Ruolo", "FVM", "Ripristina"]
             ):
-                col.markdown(
-                    f"**{titolo}**"
+                col.markdown(f"**{titolo}**")
+
+            for _, riga in avversari.iterrows():
+
+                cols = st.columns(
+                    [4, 2, 2, 1, 0.8],
+                    vertical_alignment="center"
                 )
 
-            for _, giocatore in df_rosa.iterrows():
-
-                cols = (
-                    st.columns(
-                        [
-                            4,
-                            2,
-                            2,
-                            1.8,
-                            1.2,
-                            1.2,
-                            1.9,
-                            0.7,
-                            0.7
-                        ],
-                        vertical_alignment="center"
-                    )
+                colore_nome = colore_fvm_mantra(
+                    riga.get("RM", ""),
+                    riga.get("FVM M")
                 )
 
-                cols[0].write(
-                    giocatore["Nome"]
-                )
-                cols[1].write(
-                    giocatore["Squadra"]
-                )
-                cols[2].write(
-                    giocatore["RM"]
-                )
-
-                cols[3].markdown(
-                    html_titolarita_rosa(
-                        giocatore["Nome"],
-                        giocatore["Squadra"],
-                        mappa_titolarita_rosa
-                    ),
+                cols[0].markdown(
+                    f"<span style='color:{colore_nome};font-weight:800;'>"
+                    f"{html.escape(str(riga['Nome']))}</span>",
                     unsafe_allow_html=True
                 )
+                cols[1].write(riga["Squadra"])
+                cols[2].write(riga["RM"])
+                cols[3].write(riga["FVM"])
 
-                cols[4].write(
-                    sigle_specialista_giocatore(
-                        giocatore["Nome"],
-                        giocatore["Squadra"]
+                with cols[4]:
+                    if st.button(
+                        "↩️",
+                        key=f"ripristina_{int(riga['Id'])}",
+                        help="Rendi nuovamente disponibile",
+                        use_container_width=True
+                    ):
+                        conferma_ripristino_avversario(
+                            int(riga["Id"]),
+                            riga["Nome"]
+                        )
+
+
+    # ============================================================
+    # ROSA
+    # ============================================================
+
+    elif sezione == "ROSA":
+
+        st.subheader(
+            "👕 La mia rosa"
+        )
+
+        if "messaggio_reset_rosa" in st.session_state:
+            st.success(
+                st.session_state.pop(
+                    "messaggio_reset_rosa"
+                )
+            )
+
+        df_rosa = (
+            df_rosa_globale.copy()
+        )
+
+        # MULTILEGA 0.4:
+        # nessun accesso alle Formazioni Tipo se la rosa è vuota.
+        # Se la rosa contiene giocatori, la mappa viene recuperata dalla
+        # cache RAM e ricostruita solo al primo accesso/aggiornamento.
+        mappa_titolarita_rosa = {}
+
+        if not df_rosa.empty:
+
+            mappa_titolarita_rosa = (
+                costruisci_mappa_titolarita()
+            )
+            if st.button(
+                "🗑️ ELIMINA TUTTA LA ROSA",
+                key="btn_reset_tutta_rosa"
+            ):
+                conferma_elimina_tutta_rosa()
+
+        if df_rosa.empty:
+
+            empty_html = (
+                '<div class="empty-card">'
+                '<div class="empty-icon">👕</div>'
+                '<div class="empty-title">'
+                'La rosa è ancora vuota'
+                '</div>'
+                '<div class="empty-text">'
+                'Vai nella sezione ASTA '
+                'per acquistare i primi giocatori.'
+                '</div>'
+                '</div>'
+            )
+
+            st.markdown(
+                empty_html,
+                unsafe_allow_html=True
+            )
+
+        else:
+
+            df_rosa[
+                "Priorita"
+            ] = (
+                df_rosa["RM"]
+                .apply(
+                    priorita_ruolo
+                )
+            )
+
+            df_rosa = (
+                df_rosa
+                .sort_values(
+                    [
+                        "Priorita",
+                        "Nome"
+                    ]
+                )
+                .reset_index(
+                    drop=True
+                )
+            )
+
+            # ----------------------------------------------------
+            # VISTA MOBILE - tabella semplice
+            # ----------------------------------------------------
+            with st.container(
+                key="rosa_mobile_view"
+            ):
+
+                # Header compatto mobile
+                h1, h2, h3, h4, h5, h6 = st.columns(
+                    [2.0, 0.8, 1.4, 0.7, 0.9, 0.5]
+                )
+
+                h1.markdown("**NOME GIOCATORE**")
+                h2.markdown("**RUOLO**")
+                h3.markdown("**TITOLARITÀ**")
+                h4.markdown("**R/CP**")
+                h5.markdown("**PREZZO**")
+                h6.markdown("**OK**")
+
+                for _, giocatore in df_rosa.iterrows():
+
+                    giocatore_id = int(
+                        giocatore["Id"]
                     )
-                    or "—"
-                )
 
-                cols[5].write(
-                    giocatore["FVM"]
-                )
-                giocatore_id = int(
-                    giocatore["Id"]
-                )
+                    prezzo_attuale = float(
+                        giocatore["Prezzo"]
+                        or 0
+                    )
 
-                prezzo_attuale = float(
-                    giocatore["Prezzo"]
-                    or 0
-                )
+                    chiave_prezzo = (
+                        f"prezzo_rosa_mobile_{giocatore_id}"
+                    )
 
-                chiave_prezzo = (
-                    f"prezzo_rosa_desktop_{giocatore_id}"
-                )
+                    if chiave_prezzo not in st.session_state:
 
-                if chiave_prezzo not in st.session_state:
+                        st.session_state[
+                            chiave_prezzo
+                        ] = prezzo_attuale
 
-                    st.session_state[
-                        chiave_prezzo
-                    ] = prezzo_attuale
-
-                with cols[6]:
-
-                    prezzo_col1, prezzo_col2 = st.columns(
-                        [3.2, 0.8],
+                    r1, r2, r3, r4, r5, r6 = st.columns(
+                        [2.0, 0.8, 1.4, 0.7, 0.9, 0.5],
                         vertical_alignment="center"
                     )
 
-                    with prezzo_col1:
+                    colore_nome = (
+                        colore_fvm_mantra(
+                            giocatore.get(
+                                "RM",
+                                ""
+                            ),
+                            giocatore.get(
+                                "FVM M"
+                            )
+                        )
+                    )
+
+                    r1.markdown(
+                        f"<span style='color:{colore_nome};"
+                        f"font-weight:800;'>"
+                        f"{html.escape(str(giocatore['Nome']))}"
+                        f"</span>",
+                        unsafe_allow_html=True
+                    )
+
+                    r2.write(
+                        giocatore["RM"]
+                    )
+
+                    r3.markdown(
+                        html_titolarita_rosa(
+                            giocatore["Nome"],
+                            giocatore["Squadra"],
+                            mappa_titolarita_rosa
+                        ),
+                        unsafe_allow_html=True
+                    )
+
+                    r4.write(
+                        sigle_specialista_giocatore(
+                            giocatore["Nome"],
+                            giocatore["Squadra"]
+                        )
+                        or "—"
+                    )
+
+                    with r5:
 
                         nuovo_prezzo = st.number_input(
-                            "Prezzo acquisto",
+                            "Prezzo",
                             min_value=0.0,
                             max_value=5000.0,
                             step=0.10,
@@ -26723,7 +26567,7 @@ elif sezione == "ROSA":
                             label_visibility="collapsed"
                         )
 
-                    with prezzo_col2:
+                    with r6:
 
                         modificato = (
                             round(
@@ -26740,7 +26584,7 @@ elif sezione == "ROSA":
 
                         if st.button(
                             "✓",
-                            key=f"salva_prezzo_{giocatore_id}",
+                            key=f"salva_prezzo_mobile_{giocatore_id}",
                             help="Conferma modifica prezzo",
                             disabled=not modificato,
                             use_container_width=True
@@ -26753,544 +26597,709 @@ elif sezione == "ROSA":
                                 nuovo_prezzo
                             )
 
-                with cols[7]:
-                    if st.button(
-                        "🗑️",
-                        key=(
-                            "elimina_"
-                            f"{int(giocatore['Id'])}"
-                        ),
-                        help="Annulla acquisto"
-                    ):
-                        conferma_annullamento(
-                            int(
-                                giocatore["Id"]
-                            ),
-                            giocatore["Nome"]
-                        )
 
-                with cols[8]:
-                    if st.button(
-                        "🔓",
-                        key=(
-                            "svincola_"
-                            f"{int(giocatore['Id'])}"
-                        ),
-                        help="Svincola giocatore"
-                    ):
-                        conferma_svincolo(
-                            int(
-                                giocatore["Id"]
-                            ),
-                            giocatore["Nome"],
-                            giocatore["Prezzo"]
-                        )
+            # ----------------------------------------------------
+            # VISTA DESKTOP - invariata
+            # ----------------------------------------------------
+            with st.container(
+                key="rosa_desktop_view"
+            ):
 
-
-# ============================================================
-# PROBABILI FORMAZIONI
-# ============================================================
-
-elif sezione == "FORMAZIONI TIPO":
-
-    st.subheader(
-        "⚽ Formazioni tipo Serie A 2026/27"
-    )
-
-    dati = (
-        carica_probabili_web()
-    )
-
-    a, b = st.columns(
-        [
-            1.35,
-            4.65
-        ],
-        vertical_alignment="center"
-    )
-
-    with a:
-
-        if st.button(
-            "🌐 AGGIORNA DAL WEB",
-            type="primary",
-            use_container_width=True,
-            key="pf_update"
-        ):
-
-            try:
-
-                with st.spinner(
-                    "Aggiornamento formazioni tipo..."
-                ):
-
-                    dati = (
-                        aggiorna_probabili_web()
-                    )
-
-                    invalida_cache_titolarita()
-
-                    st.session_state[
-                        "_formazioni_tipo_fast_cache"
-                    ] = dati
-
-                st.success(
-                    f"Aggiornate "
-                    f"{len(dati.get('squadre', []))} squadre."
-                )
-
-                st.rerun()
-
-            except Exception as errore:
-
-                st.error(
-                    "Aggiornamento non riuscito. "
-                    "Gli eventuali dati già salvati "
-                    "restano disponibili."
-                )
-
-                st.caption(
-                    str(
-                        errore
+                intestazione = (
+                    st.columns(
+                        [
+                            4,
+                            2,
+                            2,
+                            1.8,
+                            1.2,
+                            1.2,
+                            1.9,
+                            0.7,
+                            0.7
+                        ]
                     )
                 )
 
-    with b:
-
-        if dati:
-
-            testo = (
-                "Ultimo download: "
-                f"**{dati.get('scaricato_il', '—')}**"
-            )
-
-            if dati.get(
-                "aggiornamento_fonte"
-            ):
-
-                testo += (
-                    " · Fonte: "
-                    f"**{dati.get('aggiornamento_fonte')}**"
-                )
-
-            st.markdown(
-                testo
-            )
-
-        else:
-
-            st.info(
-                "Nessuna formazione tipo ancora salvata. "
-                "Premi «AGGIORNA DAL WEB» per effettuare "
-                "il primo aggiornamento dalla nuova fonte."
-            )
-
-    st.caption(
-        "Fonte: Fantacalcio.it — probabili formazioni stagionali per l’asta. "
-        "I dati sono stagionali, non riferiti alla singola giornata. "
-        "Il consenso delle guide viene trasformato in "
-        "TITOLARE / BALLOTTAGGIO / RISERVA."
-    )
-
-    legenda = (
-        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px 0;">'
-        '<span style="background:#dcfce7;color:#15803d;border-radius:7px;padding:5px 9px;font-weight:900;">'
-        '● TITOLARE CONSOLIDATO</span>'
-        '<span style="background:#dbeafe;color:#1d4ed8;border-radius:7px;padding:5px 9px;font-weight:900;">'
-        '● BALLOTTAGGIO</span>'
-        '</div>'
-    )
-
-    st.markdown(
-        legenda,
-        unsafe_allow_html=True
-    )
-
-    if dati:
-
-        squadre = (
-            dati.get(
-                "squadre",
-                []
-            )
-        )
-
-        nomi = [
-            squadra.get(
-                "squadra",
-                ""
-            )
-            for squadra in squadre
-        ]
-
-        filtro = st.selectbox(
-            "Vai a una squadra",
-            [
-                "TUTTE"
-            ]
-            + nomi,
-            key="pf_filter"
-        )
-
-        visibili = (
-            squadre
-            if filtro == "TUTTE"
-            else [
-                squadra
-                for squadra in squadre
-                if squadra.get(
-                    "squadra"
-                ) == filtro
-            ]
-        )
-
-        for indice in range(
-            0,
-            len(
-                visibili
-            ),
-            2
-        ):
-
-            colonne = (
-                st.columns(
-                    2
-                )
-            )
-
-            for offset in range(
-                2
-            ):
-
-                posizione = (
-                    indice
-                    + offset
-                )
-
-                if posizione < len(
-                    visibili
-                ):
-
-                    with colonne[
-                        offset
-                    ]:
-
-                        mostra_probabile(
-                            visibili[
-                                posizione
-                            ]
-                        )
-
-
-# ============================================================
-# MODULI
-# ============================================================
-
-elif sezione == "MODULI":
-
-    df_rosa = (
-        df_rosa_globale.copy()
-    )
-
-    classifica_moduli_corrente = (
-        classifica_moduli(
-            df_rosa
-        )
-    )
-
-    modulo_consigliato = (
-        classifica_moduli_corrente[0][
-            "Modulo"
-        ]
-        if classifica_moduli_corrente
-        else list(
-            MODULI.keys()
-        )[0]
-    )
-
-    if "modulo_attivo" not in st.session_state:
-        st.session_state.modulo_attivo = (
-            modulo_consigliato
-        )
-
-    if classifica_moduli_corrente:
-
-        migliore = (
-            classifica_moduli_corrente[0]
-        )
-
-        st.success(
-            f"⭐ **Modulo consigliato: "
-            f"{migliore['Modulo']}** "
-            f"— punteggio strategico "
-            f"**{migliore['Punteggio']}/100** "
-            f"— copertura media "
-            f"**{migliore['Copertura media']}%** "
-            f"— slot scoperti "
-            f"**{migliore['Scoperti']}** "
-            f"— slot deboli "
-            f"**{migliore['Deboli']}**"
-            + (
-                f" ({migliore['Ruoli deboli']})"
-                if migliore[
-                    "Ruoli deboli"
+                titoli = [
+                    "Nome",
+                    "Squadra",
+                    "Ruolo",
+                    "Titolarità",
+                    "R / CP",
+                    "FVM",
+                    "Prezzo acquisto",
+                    "🗑️",
+                    "🔓"
                 ]
-                else ""
-            )
-        )
 
-    st.markdown(
-        '<div class="module-button-note">'
-        'Seleziona il modulo da visualizzare'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-    lista_moduli = list(
-        MODULI.keys()
-    )
-
-    # --------------------------------------------------------
-    # TASTI MODULO
-    # --------------------------------------------------------
-
-    for inizio in range(
-        0,
-        len(lista_moduli),
-        5
-    ):
-
-        gruppo_moduli = lista_moduli[
-            inizio:
-            inizio + 5
-        ]
-
-        colonne = st.columns(
-            len(gruppo_moduli),
-            gap="small"
-        )
-
-        for colonna, nome_modulo in zip(
-            colonne,
-            gruppo_moduli
-        ):
-
-            with colonna:
-
-                etichetta_modulo = (
-                    f"⭐ {nome_modulo}"
-                    if nome_modulo
-                    == modulo_consigliato
-                    else nome_modulo
-                )
-
-                if st.button(
-                    etichetta_modulo,
-                    use_container_width=True,
-                    type=(
-                        "primary"
-                        if st.session_state.modulo_attivo
-                        == nome_modulo
-                        else "secondary"
-                    ),
-                    key=(
-                        "btn_modulo_"
-                        + nome_modulo
-                        .replace("-", "_")
-                    )
+                for col, titolo in zip(
+                    intestazione,
+                    titoli
                 ):
+                    col.markdown(
+                        f"**{titolo}**"
+                    )
 
-                    st.session_state.modulo_attivo = (
-                        nome_modulo
+                for _, giocatore in df_rosa.iterrows():
+
+                    cols = (
+                        st.columns(
+                            [
+                                4,
+                                2,
+                                2,
+                                1.8,
+                                1.2,
+                                1.2,
+                                1.9,
+                                0.7,
+                                0.7
+                            ],
+                            vertical_alignment="center"
+                        )
+                    )
+
+                    cols[0].write(
+                        giocatore["Nome"]
+                    )
+                    cols[1].write(
+                        giocatore["Squadra"]
+                    )
+                    cols[2].write(
+                        giocatore["RM"]
+                    )
+
+                    cols[3].markdown(
+                        html_titolarita_rosa(
+                            giocatore["Nome"],
+                            giocatore["Squadra"],
+                            mappa_titolarita_rosa
+                        ),
+                        unsafe_allow_html=True
+                    )
+
+                    cols[4].write(
+                        sigle_specialista_giocatore(
+                            giocatore["Nome"],
+                            giocatore["Squadra"]
+                        )
+                        or "—"
+                    )
+
+                    cols[5].write(
+                        giocatore["FVM"]
+                    )
+                    giocatore_id = int(
+                        giocatore["Id"]
+                    )
+
+                    prezzo_attuale = float(
+                        giocatore["Prezzo"]
+                        or 0
+                    )
+
+                    chiave_prezzo = (
+                        f"prezzo_rosa_desktop_{giocatore_id}"
+                    )
+
+                    if chiave_prezzo not in st.session_state:
+
+                        st.session_state[
+                            chiave_prezzo
+                        ] = prezzo_attuale
+
+                    with cols[6]:
+
+                        prezzo_col1, prezzo_col2 = st.columns(
+                            [3.2, 0.8],
+                            vertical_alignment="center"
+                        )
+
+                        with prezzo_col1:
+
+                            nuovo_prezzo = st.number_input(
+                                "Prezzo acquisto",
+                                min_value=0.0,
+                                max_value=5000.0,
+                                step=0.10,
+                                format="%.2f",
+                                key=chiave_prezzo,
+                                label_visibility="collapsed"
+                            )
+
+                        with prezzo_col2:
+
+                            modificato = (
+                                round(
+                                    float(
+                                        nuovo_prezzo
+                                    ),
+                                    2
+                                )
+                                != round(
+                                    prezzo_attuale,
+                                    2
+                                )
+                            )
+
+                            if st.button(
+                                "✓",
+                                key=f"salva_prezzo_{giocatore_id}",
+                                help="Conferma modifica prezzo",
+                                disabled=not modificato,
+                                use_container_width=True
+                            ):
+
+                                conferma_modifica_prezzo(
+                                    giocatore_id,
+                                    giocatore["Nome"],
+                                    prezzo_attuale,
+                                    nuovo_prezzo
+                                )
+
+                    with cols[7]:
+                        if st.button(
+                            "🗑️",
+                            key=(
+                                "elimina_"
+                                f"{int(giocatore['Id'])}"
+                            ),
+                            help="Annulla acquisto"
+                        ):
+                            conferma_annullamento(
+                                int(
+                                    giocatore["Id"]
+                                ),
+                                giocatore["Nome"]
+                            )
+
+                    with cols[8]:
+                        if st.button(
+                            "🔓",
+                            key=(
+                                "svincola_"
+                                f"{int(giocatore['Id'])}"
+                            ),
+                            help="Svincola giocatore"
+                        ):
+                            conferma_svincolo(
+                                int(
+                                    giocatore["Id"]
+                                ),
+                                giocatore["Nome"],
+                                giocatore["Prezzo"]
+                            )
+
+
+    # ============================================================
+    # PROBABILI FORMAZIONI
+    # ============================================================
+
+    elif sezione == "FORMAZIONI TIPO":
+
+        st.subheader(
+            "⚽ Formazioni tipo Serie A 2026/27"
+        )
+
+        dati = (
+            carica_probabili_web()
+        )
+
+        a, b = st.columns(
+            [
+                1.35,
+                4.65
+            ],
+            vertical_alignment="center"
+        )
+
+        with a:
+
+            if st.button(
+                "🌐 AGGIORNA DAL WEB",
+                type="primary",
+                use_container_width=True,
+                key="pf_update"
+            ):
+
+                try:
+
+                    with st.spinner(
+                        "Aggiornamento formazioni tipo..."
+                    ):
+
+                        dati = (
+                            aggiorna_probabili_web()
+                        )
+
+                        invalida_cache_titolarita()
+
+                        st.session_state[
+                            "_formazioni_tipo_fast_cache"
+                        ] = dati
+
+                    st.success(
+                        f"Aggiornate "
+                        f"{len(dati.get('squadre', []))} squadre."
                     )
 
                     st.rerun()
 
-    modulo_scelto = (
-        st.session_state.modulo_attivo
-    )
+                except Exception as errore:
 
-    if df_rosa.empty:
+                    st.error(
+                        "Aggiornamento non riuscito. "
+                        "Gli eventuali dati già salvati "
+                        "restano disponibili."
+                    )
 
-        empty_html = (
-            '<div class="empty-card">'
-            '<div class="empty-icon">⚽</div>'
-            '<div class="empty-title">'
-            'Nessun giocatore in rosa'
-            '</div>'
-            '<div class="empty-text">'
-            'Acquista almeno un giocatore '
-            'dalla sezione ASTA.<br>'
-            'Il modulo selezionato verrà compilato '
-            'automaticamente.'
-            '</div>'
+                    st.caption(
+                        str(
+                            errore
+                        )
+                    )
+
+        with b:
+
+            if dati:
+
+                testo = (
+                    "Ultimo download: "
+                    f"**{dati.get('scaricato_il', '—')}**"
+                )
+
+                if dati.get(
+                    "aggiornamento_fonte"
+                ):
+
+                    testo += (
+                        " · Fonte: "
+                        f"**{dati.get('aggiornamento_fonte')}**"
+                    )
+
+                st.markdown(
+                    testo
+                )
+
+            else:
+
+                st.info(
+                    "Nessuna formazione tipo ancora salvata. "
+                    "Premi «AGGIORNA DAL WEB» per effettuare "
+                    "il primo aggiornamento dalla nuova fonte."
+                )
+
+        st.caption(
+            "Fonte: Fantacalcio.it — probabili formazioni stagionali per l’asta. "
+            "I dati sono stagionali, non riferiti alla singola giornata. "
+            "Il consenso delle guide viene trasformato in "
+            "TITOLARE / BALLOTTAGGIO / RISERVA."
+        )
+
+        legenda = (
+            '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px 0;">'
+            '<span style="background:#dcfce7;color:#15803d;border-radius:7px;padding:5px 9px;font-weight:900;">'
+            '● TITOLARE CONSOLIDATO</span>'
+            '<span style="background:#dbeafe;color:#1d4ed8;border-radius:7px;padding:5px 9px;font-weight:900;">'
+            '● BALLOTTAGGIO</span>'
             '</div>'
         )
 
         st.markdown(
-            empty_html,
+            legenda,
             unsafe_allow_html=True
         )
 
-    else:
+        if dati:
 
-        righe_modulo = (
-            MODULI[
-                modulo_scelto
+            squadre = (
+                dati.get(
+                    "squadre",
+                    []
+                )
+            )
+
+            nomi = [
+                squadra.get(
+                    "squadra",
+                    ""
+                )
+                for squadra in squadre
             ]
-        )
 
-        ruoli_al_100, totale_posizioni, percentuale_media = (
-            calcola_copertura_modulo(
-                df_rosa,
-                modulo_scelto
-            )
-        )
-
-        percentuale = round(
-            percentuale_media
-        )
-
-        analisi_corrente = (
-            analizza_modulo(
-                df_rosa,
-                modulo_scelto
-            )
-        )
-
-        html_campo = (
-            '<div class="module-card">'
-            '<div class="module-card-title">'
-            f'{html.escape(modulo_scelto)}'
-            '</div>'
-            '<div class="module-card-summary">'
-            f'Punteggio strategico '
-            f'{analisi_corrente["Punteggio"]}/100'
-            f' · copertura media {percentuale}%'
-            f' · ruoli con almeno 4 giocatori: '
-            f'{ruoli_al_100}/{totale_posizioni}'
-            f' · slot scoperti: '
-            f'{analisi_corrente["Scoperti"]}'
-            f' · slot deboli: '
-            f'{analisi_corrente["Deboli"]}'
-            + (
-                f' ({html.escape(analisi_corrente["Ruoli deboli"])})'
-                if analisi_corrente[
-                    "Ruoli deboli"
+            filtro = st.selectbox(
+                "Vai a una squadra",
+                [
+                    "TUTTE"
                 ]
-                else ""
-            )
-            + '</div>'
-            '<div class="pitch">'
-            '<div class="pitch-half-line"></div>'
-        )
-
-        # Attacco in alto, portiere in basso.
-        # Visualizzazione ridotta ai soli ruoli Mantra
-        # e ai nomi dei giocatori compatibili.
-        for _, posizioni in reversed(
-            righe_modulo
-        ):
-
-            html_campo += (
-                '<div class="pitch-line">'
+                + nomi,
+                key="pf_filter"
             )
 
-            for _, ruolo_slot in (
-                posizioni
+            visibili = (
+                squadre
+                if filtro == "TUTTE"
+                else [
+                    squadra
+                    for squadra in squadre
+                    if squadra.get(
+                        "squadra"
+                    ) == filtro
+                ]
+            )
+
+            for indice in range(
+                0,
+                len(
+                    visibili
+                ),
+                2
             ):
 
-                possibili = (
-                    giocatori_compatibili(
-                        df_rosa,
-                        ruolo_slot
+                colonne = (
+                    st.columns(
+                        2
                     )
                 )
 
-                numero_ruolo, percentuale_ruolo = (
-                    percentuale_copertura_ruolo(
-                        df_rosa,
-                        ruolo_slot
-                    )
-                )
+                for offset in range(
+                    2
+                ):
 
-                percentuale_ruolo_arrotondata = round(
-                    percentuale_ruolo
-                )
-
-                colore_copertura = (
-                    colore_percentuale_copertura(
-                        percentuale_ruolo
-                    )
-                )
-
-                html_campo += (
-                    '<div class="player-slot">'
-                    '<div class="slot-code">'
-                    f'<span>{html.escape(str(ruolo_slot))}</span>'
-                    '<span class="slot-coverage" '
-                    f'style="color:{colore_copertura};">'
-                    f'{percentuale_ruolo_arrotondata}%'
-                    '</span>'
-                    '</div>'
-                )
-
-                if possibili.empty:
-
-                    html_campo += (
-                        '<span class="slot-empty">'
-                        '—'
-                        '</span>'
+                    posizione = (
+                        indice
+                        + offset
                     )
 
-                else:
-
-                    for _, giocatore in (
-                        possibili.iterrows()
+                    if posizione < len(
+                        visibili
                     ):
 
-                        nome = html.escape(
-                            str(
-                                giocatore[
-                                    "Nome"
+                        with colonne[
+                            offset
+                        ]:
+
+                            mostra_probabile(
+                                visibili[
+                                    posizione
                                 ]
                             )
+
+
+    # ============================================================
+    # MODULI
+    # ============================================================
+
+    elif sezione == "MODULI":
+
+        df_rosa = (
+            df_rosa_globale.copy()
+        )
+
+        classifica_moduli_corrente = (
+            classifica_moduli(
+                df_rosa
+            )
+        )
+
+        modulo_consigliato = (
+            classifica_moduli_corrente[0][
+                "Modulo"
+            ]
+            if classifica_moduli_corrente
+            else list(
+                MODULI.keys()
+            )[0]
+        )
+
+        if "modulo_attivo" not in st.session_state:
+            st.session_state.modulo_attivo = (
+                modulo_consigliato
+            )
+
+        if classifica_moduli_corrente:
+
+            migliore = (
+                classifica_moduli_corrente[0]
+            )
+
+            st.success(
+                f"⭐ **Modulo consigliato: "
+                f"{migliore['Modulo']}** "
+                f"— punteggio strategico "
+                f"**{migliore['Punteggio']}/100** "
+                f"— copertura media "
+                f"**{migliore['Copertura media']}%** "
+                f"— slot scoperti "
+                f"**{migliore['Scoperti']}** "
+                f"— slot deboli "
+                f"**{migliore['Deboli']}**"
+                + (
+                    f" ({migliore['Ruoli deboli']})"
+                    if migliore[
+                        "Ruoli deboli"
+                    ]
+                    else ""
+                )
+            )
+
+        st.markdown(
+            '<div class="module-button-note">'
+            'Seleziona il modulo da visualizzare'
+            '</div>',
+            unsafe_allow_html=True
+        )
+
+        lista_moduli = list(
+            MODULI.keys()
+        )
+
+        # --------------------------------------------------------
+        # TASTI MODULO
+        # --------------------------------------------------------
+
+        for inizio in range(
+            0,
+            len(lista_moduli),
+            5
+        ):
+
+            gruppo_moduli = lista_moduli[
+                inizio:
+                inizio + 5
+            ]
+
+            colonne = st.columns(
+                len(gruppo_moduli),
+                gap="small"
+            )
+
+            for colonna, nome_modulo in zip(
+                colonne,
+                gruppo_moduli
+            ):
+
+                with colonna:
+
+                    etichetta_modulo = (
+                        f"⭐ {nome_modulo}"
+                        if nome_modulo
+                        == modulo_consigliato
+                        else nome_modulo
+                    )
+
+                    if st.button(
+                        etichetta_modulo,
+                        use_container_width=True,
+                        type=(
+                            "primary"
+                            if st.session_state.modulo_attivo
+                            == nome_modulo
+                            else "secondary"
+                        ),
+                        key=(
+                            "btn_modulo_"
+                            + nome_modulo
+                            .replace("-", "_")
+                        )
+                    ):
+
+                        st.session_state.modulo_attivo = (
+                            nome_modulo
                         )
 
-                        ruoli_giocatore_testo = html.escape(
-                            str(
-                                giocatore.get(
-                                    "RM",
-                                    ""
-                                )
-                            ).strip()
-                        )
+                        st.rerun()
 
-                        colore = (
-                            colore_fvm_mantra(
-                                giocatore.get(
-                                    "RM",
-                                    ""
-                                ),
-                                giocatore.get(
-                                    "FVM M"
-                                )
-                            )
-                        )
+        modulo_scelto = (
+            st.session_state.modulo_attivo
+        )
 
-                        nome_con_ruoli = (
-                            f"{nome} "
-                            f"({ruoli_giocatore_testo})"
-                            if ruoli_giocatore_testo
-                            else nome
+        if df_rosa.empty:
+
+            empty_html = (
+                '<div class="empty-card">'
+                '<div class="empty-icon">⚽</div>'
+                '<div class="empty-title">'
+                'Nessun giocatore in rosa'
+                '</div>'
+                '<div class="empty-text">'
+                'Acquista almeno un giocatore '
+                'dalla sezione ASTA.<br>'
+                'Il modulo selezionato verrà compilato '
+                'automaticamente.'
+                '</div>'
+                '</div>'
+            )
+
+            st.markdown(
+                empty_html,
+                unsafe_allow_html=True
+            )
+
+        else:
+
+            righe_modulo = (
+                MODULI[
+                    modulo_scelto
+                ]
+            )
+
+            ruoli_al_100, totale_posizioni, percentuale_media = (
+                calcola_copertura_modulo(
+                    df_rosa,
+                    modulo_scelto
+                )
+            )
+
+            percentuale = round(
+                percentuale_media
+            )
+
+            analisi_corrente = (
+                analizza_modulo(
+                    df_rosa,
+                    modulo_scelto
+                )
+            )
+
+            html_campo = (
+                '<div class="module-card">'
+                '<div class="module-card-title">'
+                f'{html.escape(modulo_scelto)}'
+                '</div>'
+                '<div class="module-card-summary">'
+                f'Punteggio strategico '
+                f'{analisi_corrente["Punteggio"]}/100'
+                f' · copertura media {percentuale}%'
+                f' · ruoli con almeno 4 giocatori: '
+                f'{ruoli_al_100}/{totale_posizioni}'
+                f' · slot scoperti: '
+                f'{analisi_corrente["Scoperti"]}'
+                f' · slot deboli: '
+                f'{analisi_corrente["Deboli"]}'
+                + (
+                    f' ({html.escape(analisi_corrente["Ruoli deboli"])})'
+                    if analisi_corrente[
+                        "Ruoli deboli"
+                    ]
+                    else ""
+                )
+                + '</div>'
+                '<div class="pitch">'
+                '<div class="pitch-half-line"></div>'
+            )
+
+            # Attacco in alto, portiere in basso.
+            # Visualizzazione ridotta ai soli ruoli Mantra
+            # e ai nomi dei giocatori compatibili.
+            for _, posizioni in reversed(
+                righe_modulo
+            ):
+
+                html_campo += (
+                    '<div class="pitch-line">'
+                )
+
+                for _, ruolo_slot in (
+                    posizioni
+                ):
+
+                    possibili = (
+                        giocatori_compatibili(
+                            df_rosa,
+                            ruolo_slot
                         )
+                    )
+
+                    numero_ruolo, percentuale_ruolo = (
+                        percentuale_copertura_ruolo(
+                            df_rosa,
+                            ruolo_slot
+                        )
+                    )
+
+                    percentuale_ruolo_arrotondata = round(
+                        percentuale_ruolo
+                    )
+
+                    colore_copertura = (
+                        colore_percentuale_copertura(
+                            percentuale_ruolo
+                        )
+                    )
+
+                    html_campo += (
+                        '<div class="player-slot">'
+                        '<div class="slot-code">'
+                        f'<span>{html.escape(str(ruolo_slot))}</span>'
+                        '<span class="slot-coverage" '
+                        f'style="color:{colore_copertura};">'
+                        f'{percentuale_ruolo_arrotondata}%'
+                        '</span>'
+                        '</div>'
+                    )
+
+                    if possibili.empty:
 
                         html_campo += (
-                            '<div class="player-name" '
-                            f'style="color:{colore};">'
-                            f'{nome_con_ruoli}'
-                            '</div>'
+                            '<span class="slot-empty">'
+                            '—'
+                            '</span>'
                         )
+
+                    else:
+
+                        for _, giocatore in (
+                            possibili.iterrows()
+                        ):
+
+                            nome = html.escape(
+                                str(
+                                    giocatore[
+                                        "Nome"
+                                    ]
+                                )
+                            )
+
+                            ruoli_giocatore_testo = html.escape(
+                                str(
+                                    giocatore.get(
+                                        "RM",
+                                        ""
+                                    )
+                                ).strip()
+                            )
+
+                            colore = (
+                                colore_fvm_mantra(
+                                    giocatore.get(
+                                        "RM",
+                                        ""
+                                    ),
+                                    giocatore.get(
+                                        "FVM M"
+                                    )
+                                )
+                            )
+
+                            nome_con_ruoli = (
+                                f"{nome} "
+                                f"({ruoli_giocatore_testo})"
+                                if ruoli_giocatore_testo
+                                else nome
+                            )
+
+                            html_campo += (
+                                '<div class="player-name" '
+                                f'style="color:{colore};">'
+                                f'{nome_con_ruoli}'
+                                '</div>'
+                            )
+
+                    html_campo += (
+                        '</div>'
+                    )
 
                 html_campo += (
                     '</div>'
@@ -27298,32 +27307,30 @@ elif sezione == "MODULI":
 
             html_campo += (
                 '</div>'
+                '</div>'
             )
 
-        html_campo += (
-            '</div>'
-            '</div>'
-        )
-
-        st.markdown(
-            html_campo,
-            unsafe_allow_html=True
-        )
+            st.markdown(
+                html_campo,
+                unsafe_allow_html=True
+            )
 
 
-# ============================================================
-# FOOTER
-# ============================================================
+    # ============================================================
+    # FOOTER
+    # ============================================================
 
-footer_html = (
-    '<div class="fanta-footer">'
-    'ⓘ &nbsp;'
-    '<b>FANTAELEGANZA 26/27</b>'
-    ' — Il tuo assistente per un\'asta perfetta.'
-    '</div>'
-)
+    footer_html = (
+        '<div class="fanta-footer">'
+        'ⓘ &nbsp;'
+        '<b>FANTAELEGANZA 26/27</b>'
+        ' — Il tuo assistente per un\'asta perfetta.'
+        '</div>'
+    )
 
-st.markdown(
-    footer_html,
-    unsafe_allow_html=True
-)
+    st.markdown(
+        footer_html,
+        unsafe_allow_html=True
+    )
+
+render_navigazione_e_pagina()
