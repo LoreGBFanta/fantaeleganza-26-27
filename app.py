@@ -12208,7 +12208,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "2.9"
+MULTILEGA_SCHEMA_VERSION = "2.9.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -24964,7 +24964,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 2.9 &nbsp;|&nbsp; V110 Listone Centralizzato Admin'
+        'MULTILEGA 2.9.1 &nbsp;|&nbsp; V111 Hotfix Listone Centrale'
         '</div>',
         unsafe_allow_html=True
     )
@@ -26888,9 +26888,10 @@ def elenco_giocatori_asta_multilega(league_id):
             FROM league_player_catalog g
             JOIN league_players lp
               ON lp.player_id=g.player_id
-             AND lp.league_id=?
+             AND lp.league_id=g.league_id
+            WHERE g.league_id=?
             ORDER BY g.nome COLLATE NOCASE
-        """,(league_id,league_id,))
+        """,(league_id,))
         return [
             {
                 "player_id":int(r[0]),
@@ -26936,8 +26937,9 @@ def riepilogo_team_asta_multilega(league_id):
               ON b.league_id=t.league_id AND b.team_id=t.id
             LEFT JOIN rosters ro
               ON ro.league_id=t.league_id AND ro.team_id=t.id
-            LEFT JOIN giocatori g
-              ON g.id=ro.player_id
+            LEFT JOIN league_player_catalog g
+              ON g.player_id=ro.player_id
+             AND g.league_id=ro.league_id
             WHERE t.league_id=? AND t.is_active=1
             GROUP BY
                 t.id,t.nome,b.budget_impostato,r.budget_iniziale,
