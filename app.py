@@ -2016,20 +2016,6 @@ def render_portale_iniziale():
                     value="Fantacalcio.it"
                 )
 
-            st.markdown("#### Calcolo punteggi")
-            st.caption("Soglia minima per ciascun gol · modificabile a scatti di 0,5 punti.")
-            fasce_creazione=[]
-            fc1,fc2,fc3,fc4,fc5=st.columns(5)
-            for idx,(col,default) in enumerate(zip(
-                [fc1,fc2,fc3,fc4,fc5],[66.0,72.0,78.0,84.0,90.0]),start=1):
-                with col:
-                    fasce_creazione.append(st.number_input(f"{idx} gol",value=default,step=0.5,format="%.1f",key=f"ml10_new_goal_{idx}"))
-            fc6,fc7,fc8,fc9,fc10=st.columns(5)
-            for idx,(col,default) in enumerate(zip(
-                [fc6,fc7,fc8,fc9,fc10],[97.0,103.0,109.0,115.0,121.0]),start=6):
-                with col:
-                    fasce_creazione.append(st.number_input(f"{idx} gol",value=default,step=0.5,format="%.1f",key=f"ml10_new_goal_{idx}"))
-
             st.markdown("#### Bonus / Malus")
             bm1,bm2,bm3=st.columns(3)
             with bm1:
@@ -2044,42 +2030,52 @@ def render_portale_iniziale():
 
             numero_panchinari=st.selectbox("Numero panchinari",list(range(6,11)),index=4)
             st.markdown("#### Modificatori")
-            st.caption(
-                "D-Factor e Fattore Rendimento sono alternativi. "
-                "Selezionandone uno compare subito la relativa configurazione."
-            )
-            scelta_dr=st.selectbox(
-                "D-Factor / Fattore Rendimento",
-                ["NESSUNO","D-FACTOR","FATTORE RENDIMENTO"],
-                key="ml12_new_dr"
-            )
-            d_factor=(scelta_dr=="D-FACTOR")
-            rendimento=(scelta_dr=="FATTORE RENDIMENTO")
 
-            mo3,mo4=st.columns(2)
+            if "ml13_new_df" not in st.session_state:
+                st.session_state["ml13_new_df"] = False
+            if "ml13_new_rend" not in st.session_state:
+                st.session_state["ml13_new_rend"] = False
+
+            def _ml13_new_df_changed():
+                if st.session_state.get("ml13_new_df"):
+                    st.session_state["ml13_new_rend"] = False
+
+            def _ml13_new_rend_changed():
+                if st.session_state.get("ml13_new_rend"):
+                    st.session_state["ml13_new_df"] = False
+
+            mo1,mo2,mo3,mo4=st.columns(4)
+
+            with mo1:
+                d_factor=st.toggle(
+                    "D-Factor",
+                    key="ml13_new_df",
+                    on_change=_ml13_new_df_changed
+                )
+
+            with mo2:
+                rendimento=st.toggle(
+                    "Fattore Rendimento",
+                    key="ml13_new_rend",
+                    on_change=_ml13_new_rend_changed
+                )
+
             with mo3:
-                fair_play=st.toggle("Fattore Fair Play",value=False,key="ml12_new_fp")
+                fair_play=st.toggle(
+                    "Fattore Fair Play",
+                    value=False,
+                    key="ml13_new_fp"
+                )
+
             with mo4:
-                capitano=st.toggle("Fattore Capitano",value=False,key="ml12_new_cap")
+                capitano=st.toggle(
+                    "Fattore Capitano",
+                    value=False,
+                    key="ml13_new_cap"
+                )
 
             rendimento_tipo="BONUS"
-            rendimento_fasce=[dict(x) for x in DEFAULT_RENDIMENTO_FASCE]
-
-            if scelta_dr!="NESSUNO":
-                st.markdown("---")
-                st.markdown(
-                    "#### ⚙️ Configurazione "
-                    + ("D-Factor" if d_factor else "Fattore Rendimento")
-                )
-                st.info(
-                    "Scegli BONUS per aggiungere i punti alla tua squadra "
-                    "oppure MALUS per sottrarli alla squadra avversaria."
-                )
-                rendimento_tipo,rendimento_fasce=render_tabella_rendimento(
-                    "ml12_new_rend",
-                    "BONUS",
-                    DEFAULT_RENDIMENTO_FASCE
-                )
+            rendimento_fasce=DEFAULT_RENDIMENTO_FASCE
 
             render_help_modificatori()
 
@@ -2262,7 +2258,7 @@ def render_portale_iniziale():
                     {
                         "moltiplicatore": int(moltiplicatore),
                         "tipo_asta": tipo_asta,
-                        "fasce": fasce_creazione,
+                        "fasce": list(DEFAULT_FASCE_GOL.values()),
                         "gol_fatto": gol_fatto,
                         "gol_subito": gol_subito,
                         "ammonizione": ammonizione,
@@ -11939,7 +11935,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "1.2"
+MULTILEGA_SCHEMA_VERSION = "1.3"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -14254,20 +14250,6 @@ def render_admin_multilega():
                                     index=max(0,min(4,int(reg_adv["numero_panchinari"])-6)),
                                     key="ml10_panch_"+str(lega["league_id"]))
 
-                            st.markdown("**Calcolo punteggi · fasce gol**")
-                            edit_fasce=[]
-                            cols=st.columns(5)
-                            for idx in range(5):
-                                with cols[idx]:
-                                    edit_fasce.append(st.number_input(f"{idx+1} gol",value=reg_adv["fasce"][idx],
-                                        step=0.5,format="%.1f",key=f"ml10_f_{lega['league_id']}_{idx+1}"))
-                            cols=st.columns(5)
-                            for j in range(5):
-                                idx=j+5
-                                with cols[j]:
-                                    edit_fasce.append(st.number_input(f"{idx+1} gol",value=reg_adv["fasce"][idx],
-                                        step=0.5,format="%.1f",key=f"ml10_f_{lega['league_id']}_{idx+1}"))
-
                             st.markdown("**Bonus / Malus**")
                             eb1,eb2,eb3=st.columns(3)
                             with eb1:
@@ -14281,53 +14263,55 @@ def render_admin_multilega():
                                 ersub=st.number_input("RIGORE SUBITO",value=reg_adv["rigore_subito"],step=0.5,format="%.2f",key="ml10_rsub_"+str(lega["league_id"]))
 
                             st.markdown("**Modificatori**")
-                            st.caption(
-                                "D-Factor e Fattore Rendimento sono alternativi. "
-                                "La configurazione appare quando ne selezioni uno."
-                            )
-                            dr_default=("D-FACTOR" if reg_adv["d_factor"] else
-                                        "FATTORE RENDIMENTO" if reg_adv["rendimento"] else "NESSUNO")
-                            edr=st.selectbox(
-                                "D-Factor / Fattore Rendimento",
-                                ["NESSUNO","D-FACTOR","FATTORE RENDIMENTO"],
-                                index=["NESSUNO","D-FACTOR","FATTORE RENDIMENTO"].index(dr_default),
-                                key="ml12_dr_"+str(lega["league_id"])
-                            )
-                            edf=(edr=="D-FACTOR")
-                            erend=(edr=="FATTORE RENDIMENTO")
 
-                            em3,em4=st.columns(2)
+                            key_df="ml13_df_"+str(lega["league_id"])
+                            key_rend="ml13_rend_"+str(lega["league_id"])
+
+                            if key_df not in st.session_state:
+                                st.session_state[key_df]=bool(reg_adv["d_factor"])
+                            if key_rend not in st.session_state:
+                                st.session_state[key_rend]=bool(reg_adv["rendimento"])
+
+                            def _ml13_edit_df_changed(k_df=key_df,k_rend=key_rend):
+                                if st.session_state.get(k_df):
+                                    st.session_state[k_rend]=False
+
+                            def _ml13_edit_rend_changed(k_df=key_df,k_rend=key_rend):
+                                if st.session_state.get(k_rend):
+                                    st.session_state[k_df]=False
+
+                            em1,em2,em3,em4=st.columns(4)
+
+                            with em1:
+                                edf=st.toggle(
+                                    "D-Factor",
+                                    key=key_df,
+                                    on_change=_ml13_edit_df_changed
+                                )
+
+                            with em2:
+                                erend=st.toggle(
+                                    "Fattore Rendimento",
+                                    key=key_rend,
+                                    on_change=_ml13_edit_rend_changed
+                                )
+
                             with em3:
                                 efp=st.toggle(
                                     "Fattore Fair Play",
                                     value=reg_adv["fair_play"],
-                                    key="ml12_fp_"+str(lega["league_id"])
+                                    key="ml13_fp_"+str(lega["league_id"])
                                 )
+
                             with em4:
                                 ecap=st.toggle(
                                     "Fattore Capitano",
                                     value=reg_adv["capitano"],
-                                    key="ml12_cap_"+str(lega["league_id"])
+                                    key="ml13_cap_"+str(lega["league_id"])
                                 )
 
                             erend_tipo=reg_adv.get("rendimento_tipo","BONUS")
                             erend_fasce=reg_adv.get("rendimento_fasce",DEFAULT_RENDIMENTO_FASCE)
-
-                            if edr!="NESSUNO":
-                                st.markdown("---")
-                                st.markdown(
-                                    "**⚙️ Configurazione "
-                                    + ("D-Factor**" if edf else "Fattore Rendimento**")
-                                )
-                                st.info(
-                                    "Scegli BONUS per aggiungere i punti alla tua squadra "
-                                    "oppure MALUS per sottrarli alla squadra avversaria."
-                                )
-                                erend_tipo,erend_fasce=render_tabella_rendimento(
-                                    "ml12_edit_rend_"+str(lega["league_id"]),
-                                    erend_tipo,
-                                    erend_fasce
-                                )
 
                             render_help_modificatori()
                             save_rules=st.button(
@@ -14339,7 +14323,7 @@ def render_admin_multilega():
                         if save_rules:
                             try:
                                 salva_regolamento_avanzato(lega["league_id"],{
-                                        "moltiplicatore":edit_mult,"tipo_asta":edit_asta,"fasce":edit_fasce,
+                                        "moltiplicatore":edit_mult,"tipo_asta":edit_asta,"fasce":reg_adv["fasce"],
                                         "gol_fatto":egf,"gol_subito":egs,"ammonizione":eam,"espulsione":eesp,
                                         "rigore_segnato":ers,"rigore_subito":ersub,"numero_panchinari":edit_panchina,
                                         "d_factor":edf,"rendimento":erend,"fair_play":efp,"capitano":ecap,
@@ -23574,7 +23558,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 1.2 &nbsp;|&nbsp; V94 Config Modificatori Visibile'
+        'MULTILEGA 1.3 &nbsp;|&nbsp; V95 Modificatori Semplificati'
         '</div>',
         unsafe_allow_html=True
     )
