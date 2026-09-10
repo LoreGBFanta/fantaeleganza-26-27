@@ -12203,7 +12203,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "1.8"
+MULTILEGA_SCHEMA_VERSION = "2.0"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -19660,7 +19660,7 @@ if (
         )
 
 SEZIONE_PRE_NAV = st.session_state.get("pagina", "DASHBOARD")
-SEZIONE_OPERATIVA = SEZIONE_PRE_NAV not in ("GESTIONE LEGA", "PROFILO")
+SEZIONE_OPERATIVA = SEZIONE_PRE_NAV not in ("GESTIONE LEGA", "PROFILO", "BANDITORE")
 
 if SEZIONE_OPERATIVA:
     if "budget_asta_corrente" not in st.session_state:
@@ -24507,7 +24507,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 1.8 &nbsp;|&nbsp; V100 Fragment Navigation'
+        'MULTILEGA 2.0 &nbsp;|&nbsp; V101 Auctioneer 1.0'
         '</div>',
         unsafe_allow_html=True
     )
@@ -24750,6 +24750,457 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
+# ============================================================
+# MULTILEGA 2.0 - AUCTIONEER 1.0
+# ============================================================
+
+def inizializza_listone_lega_asta(league_id):
+    """
+    Inizializza league_players usando il listone globale come catalogo.
+    Non tocca le tabelle operative delle singole squadre.
+    """
+    league_id=int(league_id)
+    conn=_portal_raw_connection()
+    cur=conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO league_players (
+                league_id, player_id, stato,
+                assigned_team_id, prezzo_assegnazione, updated_at
+            )
+            SELECT ?, g.id, 'DISPONIBILE', NULL, NULL, CURRENT_TIMESTAMP
+            FROM giocatori g
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM league_players lp
+                WHERE lp.league_id=?
+                  AND lp.player_id=g.id
+            )
+        """,(league_id,league_id))
+
+        cur.execute("""
+            INSERT INTO team_budgets (
+                league_id, team_id, budget_impostato,
+                valore_acquisti, spesa_effettiva, updated_at
+            )
+            SELECT
+                ?, t.id,
+                COALESCE(r.budget_iniziale,500),
+                0,0,CURRENT_TIMESTAMP
+            FROM teams t
+            LEFT JOIN league_rules r ON r.league_id=t.league_id
+            WHERE t.league_id=? AND t.is_active=1
+              AND NOT EXISTS (
+                SELECT 1 FROM team_budgets b
+                WHERE b.league_id=? AND b.team_id=t.id
+              )
+        """,(league_id,league_id,league_id))
+        conn.commit()
+    finally:
+        _portal_close(conn)
+
+
+def elenco_giocatori_asta_multilega(league_id):
+    league_id=int(league_id)
+    inizializza_listone_lega_asta(league_id)
+    conn=_portal_raw_connection()
+    cur=conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                g.id,
+                COALESCE(g.nome,''),
+                COALESCE(g.squadra,''),
+                COALESCE(g.ruolo_mantra,''),
+                COALESCE(g.fvm_mantra,g.fvm,0),
+                COALESCE(lp.stato,'DISPONIBILE'),
+                lp.assigned_team_id,
+                lp.prezzo_assegnazione
+            FROM giocatori g
+            JOIN league_players lp
+              ON lp.player_id=g.id
+             AND lp.league_id=?
+            ORDER BY g.nome COLLATE NOCASE
+        """,(league_id,))
+        return [
+            {
+                "player_id":int(r[0]),
+                "nome":str(r[1]),
+                "squadra":str(r[2]),
+                "ruolo_mantra":str(r[3]),
+                "fvm":float(r[4] or 0),
+                "stato":str(r[5] or "DISPONIBILE"),
+                "assigned_team_id":int(r[6]) if r[6] is not None else None,
+                "prezzo":float(r[7]) if r[7] is not None else None,
+            }
+            for r in (cur.fetchall() or [])
+        ]
+    finally:
+        _portal_close(conn)
+
+
+def riepilogo_team_asta_multilega(league_id):
+    league_id=int(league_id)
+    inizializza_listone_lega_asta(league_id)
+    conn=_portal_raw_connection()
+    cur=conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                t.id,
+                t.nome,
+                COALESCE(b.budget_impostato,r.budget_iniziale,500),
+                COALESCE(b.valore_acquisti,0),
+                COALESCE(b.spesa_effettiva,0),
+                COUNT(ro.id)
+            FROM teams t
+            LEFT JOIN league_rules r ON r.league_id=t.league_id
+            LEFT JOIN team_budgets b
+              ON b.league_id=t.league_id AND b.team_id=t.id
+            LEFT JOIN rosters ro
+              ON ro.league_id=t.league_id AND ro.team_id=t.id
+            WHERE t.league_id=? AND t.is_active=1
+            GROUP BY
+                t.id,t.nome,b.budget_impostato,r.budget_iniziale,
+                b.valore_acquisti,b.spesa_effettiva
+            ORDER BY t.posizione,t.id
+        """,(league_id,))
+        return [
+            {
+                "team_id":int(r[0]),
+                "nome":str(r[1]),
+                "budget":float(r[2] or 0),
+                "valore_acquisti":float(r[3] or 0),
+                "spesa_effettiva":float(r[4] or 0),
+                "giocatori":int(r[5] or 0)
+            }
+            for r in (cur.fetchall() or [])
+        ]
+    finally:
+        _portal_close(conn)
+
+
+def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
+    """
+    Assegnazione server-side autorevole:
+    - verifica ruolo Banditore/Admin
+    - verifica giocatore disponibile
+    - verifica squadra attiva e capienza rosa
+    - verifica budget effettivo
+    - aggiorna league_players, rosters, team_budgets e audit
+    - sincronizza anche il workspace operativo della squadra target
+    """
+    league_id=int(league_id)
+    player_id=int(player_id)
+    team_id=int(team_id)
+    prezzo=float(prezzo)
+
+    if prezzo < 0:
+        raise ValueError("Il prezzo non può essere negativo.")
+
+    user_id=int(st.session_state.get("auth_user_id") or 0)
+    conn=_portal_raw_connection()
+    cur=conn.cursor()
+
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=? AND user_id=? AND is_active=1
+              AND (is_auctioneer=1 OR is_admin=1)
+        """,(league_id,user_id))
+        if int(cur.fetchone()[0] or 0)==0:
+            raise PermissionError("Operazione riservata a Banditore o Admin.")
+
+        cur.execute("""
+            SELECT stato,assigned_team_id
+            FROM league_players
+            WHERE league_id=? AND player_id=?
+            LIMIT 1
+        """,(league_id,player_id))
+        rp=cur.fetchone()
+        if not rp:
+            raise ValueError("Giocatore non presente nel listone della lega.")
+        if str(rp[0] or "").upper()!="DISPONIBILE":
+            raise ValueError("Il giocatore non è più disponibile.")
+
+        cur.execute("""
+            SELECT nome FROM teams
+            WHERE league_id=? AND id=? AND is_active=1
+            LIMIT 1
+        """,(league_id,team_id))
+        rt=cur.fetchone()
+        if not rt:
+            raise ValueError("Squadra non valida.")
+        nome_team=str(rt[0])
+
+        cur.execute("""
+            SELECT
+                COALESCE(max_giocatori,30),
+                COALESCE(budget_iniziale,500),
+                COALESCE(soglia_budget,500),
+                COALESCE(moltiplicatore_oltre_soglia,1)
+            FROM league_rules
+            WHERE league_id=?
+            LIMIT 1
+        """,(league_id,))
+        rr=cur.fetchone()
+        if not rr:
+            raise ValueError("Regolamento della lega non trovato.")
+
+        max_giocatori=int(rr[0] or 30)
+        budget_default=float(rr[1] or 500)
+        soglia=float(rr[2] or budget_default)
+        moltiplicatore=max(1,float(rr[3] or 1))
+
+        cur.execute("""
+            SELECT COUNT(*),COALESCE(SUM(prezzo_acquisto),0)
+            FROM rosters
+            WHERE league_id=? AND team_id=?
+        """,(league_id,team_id))
+        roster_count,valore_attuale=cur.fetchone()
+        roster_count=int(roster_count or 0)
+        valore_attuale=float(valore_attuale or 0)
+
+        if roster_count >= max_giocatori:
+            raise ValueError("La rosa della squadra è già completa.")
+
+        cur.execute("""
+            SELECT COALESCE(budget_impostato,?)
+            FROM team_budgets
+            WHERE league_id=? AND team_id=?
+            LIMIT 1
+        """,(budget_default,league_id,team_id))
+        rb=cur.fetchone()
+        budget=float(rb[0] if rb else budget_default)
+
+        nuovo_valore=round(valore_attuale+prezzo,2)
+        if nuovo_valore <= soglia:
+            nuova_spesa=nuovo_valore
+        else:
+            nuova_spesa=round(soglia+(nuovo_valore-soglia)*moltiplicatore,2)
+
+        if nuova_spesa > budget + 1e-9:
+            raise ValueError(
+                "Budget insufficiente: la spesa effettiva diventerebbe "
+                + f"{nuova_spesa:.2f} su {budget:.2f} crediti."
+            )
+
+        cur.execute("""
+            UPDATE league_players
+            SET stato='ASSEGNATO',
+                assigned_team_id=?,
+                prezzo_assegnazione=?,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND player_id=? AND stato='DISPONIBILE'
+        """,(team_id,prezzo,league_id,player_id))
+
+        if cur.rowcount==0:
+            raise ValueError("Il giocatore è stato appena assegnato da un'altra operazione.")
+
+        cur.execute("""
+            INSERT INTO rosters (
+                league_id,team_id,player_id,prezzo_acquisto,fonte,assigned_at,updated_at
+            )
+            VALUES (?,?,?,?,'AUCTIONEER',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,team_id,player_id)
+            DO UPDATE SET
+                prezzo_acquisto=excluded.prezzo_acquisto,
+                fonte='AUCTIONEER',
+                updated_at=CURRENT_TIMESTAMP
+        """,(league_id,team_id,player_id,prezzo))
+
+        cur.execute("""
+            INSERT INTO team_budgets (
+                league_id,team_id,budget_impostato,valore_acquisti,spesa_effettiva,updated_at
+            )
+            VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,team_id)
+            DO UPDATE SET
+                valore_acquisti=excluded.valore_acquisti,
+                spesa_effettiva=excluded.spesa_effettiva,
+                updated_at=CURRENT_TIMESTAMP
+        """,(league_id,team_id,budget,nuovo_valore,nuova_spesa))
+
+        # Sincronizza il workspace fisico della squadra target.
+        tab_team="giocatori_ml_l"+str(league_id)+"_t"+str(team_id)
+        try:
+            cur.execute(
+                f"""UPDATE {tab_team}
+                    SET stato='MIO',
+                        prezzo_acquisto=?,
+                        ultimo_aggiornamento=CURRENT_TIMESTAMP
+                    WHERE id=?""",
+                (prezzo,player_id)
+            )
+        except Exception:
+            # Se il team non ha mai aperto l'app, il suo workspace può
+            # non esistere ancora: rosters resta comunque autorevole.
+            pass
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at
+            )
+            VALUES (?,?,?,'PLAYER_ASSIGNED','PLAYER',?,?,CURRENT_TIMESTAMP)
+        """,(
+            league_id,user_id,team_id,str(player_id),
+            json.dumps({
+                "prezzo":prezzo,
+                "team":nome_team,
+                "valore_acquisti":nuovo_valore,
+                "spesa_effettiva":nuova_spesa
+            },ensure_ascii=False)
+        ))
+
+        conn.commit()
+        return {
+            "team":nome_team,
+            "valore_acquisti":nuovo_valore,
+            "spesa_effettiva":nuova_spesa,
+            "budget":budget
+        }
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def render_banditore_asta():
+    if not any(r in RUOLI_ATTIVI for r in ("AUCTIONEER","ADMIN")):
+        st.error("Questa sezione è riservata a Banditore o Admin.")
+        return
+
+    league_id=int(st.session_state.get("ml_league_id"))
+    st.subheader("🔨 Banditore · Auctioneer 1.0")
+    st.caption(
+        "Assegna manualmente il giocatore vincente a una squadra. "
+        "L'operazione aggiorna listone di lega, rosa, budget e audit."
+    )
+
+    try:
+        giocatori=elenco_giocatori_asta_multilega(league_id)
+        teams=riepilogo_team_asta_multilega(league_id)
+    except Exception as errore:
+        st.error("Impossibile caricare la console Banditore: "+str(errore))
+        return
+
+    disponibili=[g for g in giocatori if g["stato"].upper()=="DISPONIBILE"]
+
+    m1,m2,m3=st.columns(3)
+    m1.metric("Disponibili",len(disponibili))
+    m2.metric("Assegnati",len(giocatori)-len(disponibili))
+    m3.metric("Squadre",len(teams))
+
+    if not disponibili:
+        st.success("Non ci sono più giocatori disponibili.")
+        return
+    if not teams:
+        st.warning("La lega non contiene squadre attive.")
+        return
+
+    ricerca=st.text_input(
+        "Cerca giocatore",
+        placeholder="Nome, squadra o ruolo...",
+        key="auctioneer_search"
+    ).strip().lower()
+
+    filtrati=disponibili
+    if ricerca:
+        filtrati=[
+            g for g in disponibili
+            if ricerca in g["nome"].lower()
+            or ricerca in g["squadra"].lower()
+            or ricerca in g["ruolo_mantra"].lower()
+        ]
+
+    if not filtrati:
+        st.info("Nessun giocatore disponibile corrisponde alla ricerca.")
+        return
+
+    etichette_giocatori={
+        f'{g["nome"]} · {g["squadra"]} · {g["ruolo_mantra"]} · FVM {g["fvm"]:g}':g
+        for g in filtrati
+    }
+    scelta_g=st.selectbox(
+        "Giocatore",
+        list(etichette_giocatori.keys()),
+        key="auctioneer_player"
+    )
+    g=etichette_giocatori[scelta_g]
+
+    etichette_team={
+        f'{t["nome"]} · {t["giocatori"]} gioc. · {t["spesa_effettiva"]:g}/{t["budget"]:g} cr.':t
+        for t in teams
+    }
+    c1,c2=st.columns([2,1])
+    with c1:
+        scelta_t=st.selectbox(
+            "Squadra vincitrice",
+            list(etichette_team.keys()),
+            key="auctioneer_team"
+        )
+    with c2:
+        prezzo=st.number_input(
+            "Prezzo finale",
+            min_value=0.0,
+            value=1.0,
+            step=1.0,
+            key="auctioneer_price"
+        )
+
+    t=etichette_team[scelta_t]
+
+    st.info(
+        f'**{g["nome"]}** ({g["ruolo_mantra"]}, {g["squadra"]}) → '
+        f'**{t["nome"]}** a **{prezzo:g} crediti**'
+    )
+
+    if st.button(
+        "✅ ASSEGNA GIOCATORE",
+        type="primary",
+        use_container_width=True,
+        key="auctioneer_assign"
+    ):
+        try:
+            risultato=assegna_giocatore_banditore(
+                league_id,g["player_id"],t["team_id"],prezzo
+            )
+            # Rimuove le cache locali se il Banditore sta anche gestendo
+            # la propria squadra.
+            invalida_cache_dati()
+            st.session_state["auctioneer_msg"]=(
+                f'{g["nome"]} assegnato a {risultato["team"]} '
+                f'a {prezzo:g} crediti.'
+            )
+            st.rerun(scope="fragment")
+        except Exception as errore:
+            st.error(str(errore))
+
+    if st.session_state.get("auctioneer_msg"):
+        st.success(st.session_state.pop("auctioneer_msg"))
+
+    st.markdown("#### Situazione squadre")
+    df_team=pd.DataFrame([
+        {
+            "Squadra":t["nome"],
+            "Giocatori":t["giocatori"],
+            "Valore acquisti":t["valore_acquisti"],
+            "Spesa effettiva":t["spesa_effettiva"],
+            "Budget":t["budget"],
+            "Residuo":round(t["budget"]-t["spesa_effettiva"],2)
+        }
+        for t in teams
+    ])
+    st.dataframe(df_team,use_container_width=True,hide_index=True)
+
+
 # ============================================================
 # MULTILEGA 1.8 - NAVIGAZIONE A FRAGMENT
 # ============================================================
@@ -24772,9 +25223,10 @@ def render_navigazione_e_pagina():
 
     PAGINE.append(("👤", "PROFILO"))
 
+    if any(r in RUOLI_ATTIVI for r in ("AUCTIONEER", "ADMIN")):
+        PAGINE.append(("🔨", "BANDITORE"))
 
     if "ADMIN" in RUOLI_ATTIVI:
-
         PAGINE.append(
             (
                 "⚙️",
@@ -24821,7 +25273,7 @@ def render_navigazione_e_pagina():
     # TOOLBAR UNDO COMPATTA
     # ============================================================
 
-    if sezione not in ("GESTIONE LEGA", "PROFILO"):
+    if sezione not in ("GESTIONE LEGA", "PROFILO", "BANDITORE"):
 
         operazioni_undo = carica_ultime_operazioni()
 
@@ -24955,6 +25407,10 @@ def render_navigazione_e_pagina():
     elif sezione == "GESTIONE LEGA":
 
         render_admin_multilega()
+
+    elif sezione == "BANDITORE":
+
+        render_banditore_asta()
 
 
     # ============================================================
