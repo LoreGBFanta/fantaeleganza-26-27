@@ -12208,7 +12208,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "2.9.1"
+MULTILEGA_SCHEMA_VERSION = "2.9.2"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -24964,7 +24964,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 2.9.1 &nbsp;|&nbsp; V111 Hotfix Listone Centrale'
+        'MULTILEGA 2.9.2 &nbsp;|&nbsp; V112 Refresh Manuale e Performance'
         '</div>',
         unsafe_allow_html=True
     )
@@ -26295,7 +26295,6 @@ def migliore_offerta_lotto_multilega(league_id, lot_id):
 
 
 
-@st.fragment(run_every="2s")
 
 def chiamata_pendente_multilega(league_id):
     league_id = int(league_id)
@@ -26549,10 +26548,10 @@ def render_console_asta_team():
 
     team_id = int(team_id)
 
-    st.subheader("📡 Console Asta · Live Refresh 1.0")
+    st.subheader("📡 Console Asta")
     st.caption(
-        "Aggiornamento automatico ogni 2 secondi. Offerte, stato del lotto "
-        "e miglior offerente vengono riletti dal server."
+        "Lo stato dell'asta viene aggiornato quando entri nella sezione "
+        "o quando premi «AGGIORNA ORA»."
     )
 
     try:
@@ -27861,18 +27860,24 @@ def render_info_modalita_asta(tipo_asta, turno=None):
 
 
 
-@st.fragment(run_every="2s")
 def render_banditore_asta():
     if not any(r in RUOLI_ATTIVI for r in ("AUCTIONEER","ADMIN")):
         st.error("Questa sezione è riservata a Banditore o Admin.")
         return
 
     league_id=int(st.session_state.get("ml_league_id"))
-    st.subheader("🔨 Banditore · Live Refresh 1.0")
+    st.subheader("🔨 Banditore")
     st.caption(
-        "Aggiornamento automatico ogni 2 secondi. Il Banditore vede solo "
-        "il giocatore corrente e lo stato autorevole delle offerte."
+        "Il Banditore vede solo il giocatore corrente. "
+        "Le offerte vengono aggiornate su richiesta."
     )
+
+    if st.button(
+        "🔄 AGGIORNA OFFERTE",
+        use_container_width=True,
+        key="auctioneer_refresh_offerte"
+    ):
+        st.rerun(scope="fragment")
 
     try:
         giocatori=elenco_giocatori_asta_multilega(league_id)
