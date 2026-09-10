@@ -12209,7 +12209,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "1.4"
+MULTILEGA_SCHEMA_VERSION = "1.5"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -13842,6 +13842,417 @@ def squadre_lega_multilega(
         )
 
 
+
+def dettagli_squadre_lega_multilega(league_id):
+    """
+    Restituisce squadre, proprietari e ruoli correnti.
+    I ruoli sono sempre letti dal DB, non dalla sessione browser.
+    """
+    league_id = int(league_id)
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                t.id,
+                t.nome,
+                t.posizione,
+                t.owner_user_id,
+                COALESCE(u.username, ''),
+                COALESCE(lm.is_admin, 0),
+                COALESCE(lm.is_auctioneer, 0),
+                COALESCE(lm.is_team_member, 1),
+                COALESCE(lm.is_active, 1)
+            FROM teams t
+            LEFT JOIN users u
+              ON u.id = t.owner_user_id
+            LEFT JOIN league_members lm
+              ON lm.league_id = t.league_id
+             AND lm.team_id = t.id
+             AND lm.user_id = t.owner_user_id
+            WHERE t.league_id = ?
+              AND t.is_active = 1
+            ORDER BY t.posizione, t.id
+        """, (league_id,))
+        return [
+            {
+                "team_id": int(r[0]),
+                "nome": str(r[1] or ""),
+                "posizione": int(r[2] or 0),
+                "owner_user_id": int(r[3]) if r[3] is not None else None,
+                "username": str(r[4] or ""),
+                "is_admin": bool(r[5]),
+                "is_auctioneer": bool(r[6]),
+                "is_team_member": bool(r[7]),
+                "is_active": bool(r[8]),
+            }
+            for r in (cur.fetchall() or [])
+        ]
+    finally:
+        _portal_close(conn)
+
+
+def aggiorna_ruoli_squadra_multilega(league_id, team_id, is_admin, is_auctioneer):
+    """
+    Modifica i ruoli ADMIN/BANDITORE della squadra.
+    TEAM resta sempre attivo per le squadre operative.
+    Non consente di eliminare l'ultimo Admin della lega.
+    """
+    league_id = int(league_id)
+    team_id = int(team_id)
+    current_admin = int(st.session_state.get("auth_user_id") or 0)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id = ?
+              AND user_id = ?
+              AND is_admin = 1
+              AND is_active = 1
+        """, (league_id, current_admin))
+        if int(cur.fetchone()[0] or 0) == 0:
+            raise PermissionError("Operazione riservata all'Admin della lega.")
+
+        cur.execute("""
+            SELECT t.owner_user_id, t.nome, COALESCE(lm.is_admin,0), COALESCE(lm.is_auctioneer,0)
+            FROM teams t
+            LEFT JOIN league_members lm
+              ON lm.league_id=t.league_id
+             AND lm.team_id=t.id
+             AND lm.user_id=t.owner_user_id
+            WHERE t.league_id=? AND t.id=? AND t.is_active=1
+            LIMIT 1
+        """, (league_id, team_id))
+        r = cur.fetchone()
+        if not r:
+            raise ValueError("Squadra non trovata.")
+
+        owner_user_id = int(r[0]) if r[0] is not None else None
+        nome = str(r[1] or "")
+        old_admin = bool(r[2])
+        old_auctioneer = bool(r[3])
+
+        if owner_user_id is None:
+            raise ValueError("La squadra non ha un account proprietario associato.")
+
+        if old_admin and not bool(is_admin):
+            cur.execute("""
+                SELECT COUNT(DISTINCT user_id)
+                FROM league_members
+                WHERE league_id=?
+                  AND is_admin=1
+                  AND is_active=1
+                  AND user_id<>?
+            """, (league_id, owner_user_id))
+            if int(cur.fetchone()[0] or 0) == 0:
+                raise ValueError(
+                    "Non puoi togliere il ruolo Admin all'unico Admin della lega. "
+                    "Assegna prima il ruolo Admin a un'altra squadra."
+                )
+
+        cur.execute("""
+            UPDATE league_members
+            SET is_admin=?,
+                is_auctioneer=?,
+                is_team_member=1,
+                is_active=1
+            WHERE league_id=?
+              AND team_id=?
+              AND user_id=?
+        """, (
+            1 if is_admin else 0,
+            1 if is_auctioneer else 0,
+            league_id,
+            team_id,
+            owner_user_id
+        ))
+
+        if cur.rowcount == 0:
+            cur.execute("""
+                INSERT INTO league_members
+                (league_id,user_id,team_id,is_admin,is_auctioneer,is_team_member,is_active,joined_at)
+                VALUES (?,?,?,?,?,1,1,CURRENT_TIMESTAMP)
+            """, (
+                league_id,
+                owner_user_id,
+                team_id,
+                1 if is_admin else 0,
+                1 if is_auctioneer else 0
+            ))
+
+        cur.execute("""
+            INSERT INTO audit_log
+            (league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at)
+            VALUES (?,?,?,'ROLES_UPDATED','TEAM',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            current_admin,
+            team_id,
+            str(team_id),
+            json.dumps({
+                "team": nome,
+                "admin_prima": old_admin,
+                "admin_dopo": bool(is_admin),
+                "banditore_prima": old_auctioneer,
+                "banditore_dopo": bool(is_auctioneer)
+            }, ensure_ascii=False)
+        ))
+
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def reset_password_squadra_multilega(league_id, team_id, nuova_password):
+    """
+    Reset amministrativo: l'Admin imposta una nuova password.
+    La password non viene mai salvata nell'audit.
+    """
+    league_id = int(league_id)
+    team_id = int(team_id)
+    nuova_password = str(nuova_password)
+
+    if len(nuova_password) < 8:
+        raise ValueError("La nuova password deve contenere almeno 8 caratteri.")
+
+    current_admin = int(st.session_state.get("auth_user_id") or 0)
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=? AND user_id=? AND is_admin=1 AND is_active=1
+        """, (league_id, current_admin))
+        if int(cur.fetchone()[0] or 0) == 0:
+            raise PermissionError("Operazione riservata all'Admin della lega.")
+
+        cur.execute("""
+            SELECT t.owner_user_id, t.nome, COALESCE(u.username,'')
+            FROM teams t
+            LEFT JOIN users u ON u.id=t.owner_user_id
+            WHERE t.league_id=? AND t.id=? AND t.is_active=1
+            LIMIT 1
+        """, (league_id, team_id))
+        r = cur.fetchone()
+        if not r or r[0] is None:
+            raise ValueError("Account della squadra non trovato.")
+
+        owner_user_id = int(r[0])
+        nome = str(r[1] or "")
+        username = str(r[2] or "")
+
+        cur.execute("""
+            UPDATE users
+            SET password_hash=?,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=? AND is_active=1
+        """, (password_hash_sicuro(nuova_password), owner_user_id))
+
+        cur.execute("""
+            INSERT INTO audit_log
+            (league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at)
+            VALUES (?,?,?,'PASSWORD_RESET','USER',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            current_admin,
+            team_id,
+            str(owner_user_id),
+            json.dumps({"team": nome, "username": username}, ensure_ascii=False)
+        ))
+        conn.commit()
+        return username
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def collega_utente_esistente_lega(
+    league_id, username, nome_squadra, is_admin=False, is_auctioneer=False
+):
+    """
+    Collega alla lega un account globale già esistente creando per esso
+    una nuova squadra. Non modifica password o dati dell'account.
+    """
+    league_id = int(league_id)
+    username = str(username).strip()
+    nome_squadra = str(nome_squadra).strip()
+
+    if not username:
+        raise ValueError("Inserisci lo username dell'account esistente.")
+    if not nome_squadra:
+        raise ValueError("Inserisci il nome della squadra.")
+
+    current_admin = int(st.session_state.get("auth_user_id") or 0)
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COUNT(*) FROM league_members
+            WHERE league_id=? AND user_id=? AND is_admin=1 AND is_active=1
+        """, (league_id, current_admin))
+        if int(cur.fetchone()[0] or 0) == 0:
+            raise PermissionError("Operazione riservata all'Admin della lega.")
+
+        cur.execute("""
+            SELECT id, username FROM users
+            WHERE LOWER(username)=LOWER(?) AND is_active=1
+            LIMIT 1
+        """, (username,))
+        r = cur.fetchone()
+        if not r:
+            raise ValueError("Account esistente non trovato.")
+        user_id = int(r[0])
+        username_db = str(r[1])
+
+        cur.execute("""
+            SELECT COUNT(*) FROM league_members
+            WHERE league_id=? AND user_id=? AND is_active=1
+        """, (league_id, user_id))
+        if int(cur.fetchone()[0] or 0) > 0:
+            raise ValueError("Questo account è già associato alla lega.")
+
+        cur.execute("""
+            SELECT COUNT(*) FROM teams
+            WHERE league_id=? AND LOWER(nome)=LOWER(?) AND is_active=1
+        """, (league_id, nome_squadra))
+        if int(cur.fetchone()[0] or 0) > 0:
+            raise ValueError("Esiste già una squadra con questo nome nella lega.")
+
+        cur.execute("""
+            SELECT COALESCE(MAX(posizione),0)+1
+            FROM teams WHERE league_id=?
+        """, (league_id,))
+        posizione = int(cur.fetchone()[0] or 1)
+
+        cur.execute("""
+            INSERT INTO teams
+            (league_id,nome,owner_user_id,posizione,is_active,created_at,updated_at)
+            VALUES (?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        """, (league_id, nome_squadra, user_id, posizione))
+        team_id = int(cur.lastrowid)
+
+        cur.execute("""
+            INSERT INTO league_members
+            (league_id,user_id,team_id,is_admin,is_auctioneer,is_team_member,is_active,joined_at)
+            VALUES (?,?,?,?,?,1,1,CURRENT_TIMESTAMP)
+        """, (
+            league_id, user_id, team_id,
+            1 if is_admin else 0,
+            1 if is_auctioneer else 0
+        ))
+
+        cur.execute("""
+            UPDATE league_rules
+            SET partecipanti=(
+                SELECT COUNT(*) FROM teams
+                WHERE league_id=? AND is_active=1
+            ),
+            updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=?
+        """, (league_id, league_id))
+
+        cur.execute("""
+            INSERT INTO audit_log
+            (league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at)
+            VALUES (?,?,?,'EXISTING_USER_LINKED','TEAM',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            current_admin,
+            team_id,
+            str(team_id),
+            json.dumps({
+                "username": username_db,
+                "team": nome_squadra,
+                "admin": bool(is_admin),
+                "auctioneer": bool(is_auctioneer)
+            }, ensure_ascii=False)
+        ))
+
+        conn.commit()
+        return team_id
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+STATI_LEGA_AMMESSI = [
+    "DRAFT",
+    "CONFIGURAZIONE",
+    "PRONTA",
+    "ASTA",
+    "CHIUSA"
+]
+
+
+def aggiorna_stato_lega_multilega(league_id, nuovo_stato):
+    league_id = int(league_id)
+    nuovo_stato = str(nuovo_stato).strip().upper()
+    if nuovo_stato not in STATI_LEGA_AMMESSI:
+        raise ValueError("Stato lega non valido.")
+
+    current_admin = int(st.session_state.get("auth_user_id") or 0)
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COUNT(*) FROM league_members
+            WHERE league_id=? AND user_id=? AND is_admin=1 AND is_active=1
+        """, (league_id, current_admin))
+        if int(cur.fetchone()[0] or 0) == 0:
+            raise PermissionError("Operazione riservata all'Admin della lega.")
+
+        cur.execute("SELECT stato FROM leagues WHERE id=? LIMIT 1", (league_id,))
+        r = cur.fetchone()
+        if not r:
+            raise ValueError("Lega non trovata.")
+        stato_prima = str(r[0] or "")
+
+        cur.execute("""
+            UPDATE leagues SET stato=?, updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+        """, (nuovo_stato, league_id))
+
+        cur.execute("""
+            INSERT INTO audit_log
+            (league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at)
+            VALUES (?,?,NULL,'LEAGUE_STATUS_UPDATED','LEAGUE',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            current_admin,
+            str(league_id),
+            json.dumps({"prima": stato_prima, "dopo": nuovo_stato}, ensure_ascii=False)
+        ))
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
 def rinomina_squadra_multilega(
     league_id,
     team_id,
@@ -14408,6 +14819,9 @@ def render_admin_multilega():
 
     with tab_esistenti:
 
+        if "ml15_admin_message" in st.session_state:
+            st.success(st.session_state.pop("ml15_admin_message"))
+
         if "ml09_team_message" in st.session_state:
             st.success(st.session_state.pop("ml09_team_message"))
 
@@ -14506,6 +14920,36 @@ def render_admin_multilega():
                     f"Listone {lega['fonte_listone']} · "
                     f"Oltre soglia ×{lega['moltiplicatore']}"
                 )
+
+                stato_corrente = str(lega.get("stato") or "DRAFT").upper()
+                if stato_corrente not in STATI_LEGA_AMMESSI:
+                    stato_corrente = "DRAFT"
+
+                s1, s2 = st.columns([3, 1], vertical_alignment="bottom")
+                with s1:
+                    nuovo_stato_lega = st.selectbox(
+                        "Stato lega",
+                        STATI_LEGA_AMMESSI,
+                        index=STATI_LEGA_AMMESSI.index(stato_corrente),
+                        key="ml15_status_"+str(lega["league_id"])
+                    )
+                with s2:
+                    if st.button(
+                        "SALVA STATO",
+                        key="ml15_status_save_"+str(lega["league_id"]),
+                        use_container_width=True
+                    ):
+                        try:
+                            aggiorna_stato_lega_multilega(
+                                lega["league_id"],
+                                nuovo_stato_lega
+                            )
+                            st.session_state["ml15_admin_message"] = (
+                                "Stato della lega aggiornato a " + nuovo_stato_lega + "."
+                            )
+                            st.rerun()
+                        except Exception as errore:
+                            st.error(str(errore))
 
                 reg_adv=carica_regolamento_avanzato(lega["league_id"])
                 if reg_adv:
@@ -14691,6 +15135,110 @@ def render_admin_multilega():
                                 )
 
                 st.markdown("---")
+                st.markdown("#### 👥 Accessi e ruoli")
+                st.caption(
+                    "Puoi modificare i ruoli di ogni squadra e reimpostare la password "
+                    "del relativo account. TEAM rimane sempre attivo."
+                )
+
+                try:
+                    dettagli_team = dettagli_squadre_lega_multilega(
+                        lega["league_id"]
+                    )
+                except Exception as errore:
+                    dettagli_team = []
+                    st.error("Impossibile leggere ruoli e account: " + str(errore))
+
+                for dt in dettagli_team:
+                    badge = []
+                    if dt["is_admin"]:
+                        badge.append("ADMIN")
+                    if dt["is_auctioneer"]:
+                        badge.append("BANDITORE")
+                    badge.append("TEAM")
+
+                    with st.expander(
+                        "👤 " + dt["nome"] + " · " + " / ".join(badge),
+                        expanded=False
+                    ):
+                        st.caption(
+                            "Username: " + (dt["username"] or "—")
+                        )
+
+                        rk_admin = "ml15_role_admin_" + str(dt["team_id"])
+                        rk_band = "ml15_role_band_" + str(dt["team_id"])
+
+                        rc1, rc2 = st.columns(2)
+                        with rc1:
+                            role_admin = st.toggle(
+                                "Admin",
+                                value=bool(dt["is_admin"]),
+                                key=rk_admin
+                            )
+                        with rc2:
+                            role_band = st.toggle(
+                                "Banditore",
+                                value=bool(dt["is_auctioneer"]),
+                                key=rk_band
+                            )
+
+                        if st.button(
+                            "SALVA RUOLI",
+                            key="ml15_roles_save_"+str(dt["team_id"]),
+                            use_container_width=True
+                        ):
+                            try:
+                                aggiorna_ruoli_squadra_multilega(
+                                    lega["league_id"],
+                                    dt["team_id"],
+                                    role_admin,
+                                    role_band
+                                )
+                                st.session_state["ml15_admin_message"] = (
+                                    "Ruoli di «" + dt["nome"] + "» aggiornati."
+                                )
+                                st.session_state.pop("ml_accesso_validato", None)
+                                st.rerun()
+                            except Exception as errore:
+                                st.error(str(errore))
+
+                        st.markdown("**Reset password**")
+                        pw1, pw2 = st.columns(2)
+                        with pw1:
+                            nuova_pw = st.text_input(
+                                "Nuova password",
+                                type="password",
+                                key="ml15_pw1_"+str(dt["team_id"])
+                            )
+                        with pw2:
+                            conferma_pw = st.text_input(
+                                "Conferma nuova password",
+                                type="password",
+                                key="ml15_pw2_"+str(dt["team_id"])
+                            )
+
+                        if st.button(
+                            "REIMPOSTA PASSWORD",
+                            key="ml15_pwreset_"+str(dt["team_id"]),
+                            use_container_width=True
+                        ):
+                            if nuova_pw != conferma_pw:
+                                st.error("Le due password non coincidono.")
+                            else:
+                                try:
+                                    reset_password_squadra_multilega(
+                                        lega["league_id"],
+                                        dt["team_id"],
+                                        nuova_pw
+                                    )
+                                    st.session_state["ml15_admin_message"] = (
+                                        "Password di «" + dt["nome"] + "» reimpostata."
+                                    )
+                                    st.rerun()
+                                except Exception as errore:
+                                    st.error(str(errore))
+
+                st.markdown("---")
                 st.markdown("#### ➕ Aggiungi squadra")
                 st.caption("Crea una nuova squadra con credenziali di primo accesso e, se necessario, assegna anche i ruoli Banditore o Admin.")
 
@@ -14711,6 +15259,54 @@ def render_admin_multilega():
                             is_admin=add_admin,is_auctioneer=add_banditore)
                         st.session_state["ml09_team_message"]="Squadra «"+str(add_username).strip()+"» aggiunta correttamente."
                         st.session_state.pop("ml_accesso_validato",None)
+                        st.rerun()
+                    except Exception as errore:
+                        st.error(str(errore))
+
+                st.markdown("##### 🔗 Collega account esistente")
+                st.caption(
+                    "Usa questa funzione se l'utente possiede già un account FANTAELEGANZA. "
+                    "La password esistente non viene modificata."
+                )
+                with st.form("ml15_link_existing_"+str(lega["league_id"])):
+                    lx1, lx2 = st.columns(2)
+                    with lx1:
+                        link_username = st.text_input(
+                            "Username esistente",
+                            key="ml15_link_user_"+str(lega["league_id"])
+                        )
+                        link_team = st.text_input(
+                            "Nome squadra",
+                            key="ml15_link_team_"+str(lega["league_id"])
+                        )
+                    with lx2:
+                        link_band = st.checkbox(
+                            "Anche Banditore",
+                            key="ml15_link_band_"+str(lega["league_id"])
+                        )
+                        link_admin = st.checkbox(
+                            "Anche Admin",
+                            key="ml15_link_admin_"+str(lega["league_id"])
+                        )
+                    link_submit = st.form_submit_button(
+                        "🔗 COLLEGA ACCOUNT",
+                        use_container_width=True
+                    )
+
+                if link_submit:
+                    try:
+                        collega_utente_esistente_lega(
+                            lega["league_id"],
+                            link_username,
+                            link_team,
+                            is_admin=link_admin,
+                            is_auctioneer=link_band
+                        )
+                        st.session_state["ml15_admin_message"] = (
+                            "Account «" + str(link_username).strip()
+                            + "» collegato alla lega."
+                        )
+                        st.session_state.pop("ml_accesso_validato", None)
                         st.rerun()
                     except Exception as errore:
                         st.error(str(errore))
@@ -14739,7 +15335,10 @@ def render_admin_multilega():
                             nome_rimosso=rimuovi_squadra_multilega(
                                 lega["league_id"],opzioni[team_da_rimuovere])
                             st.session_state["ml09_team_message"]="Squadra «"+nome_rimosso+"» rimossa dalla lega."
-                            st.session_state.pop("ml_accesso_validato",None)
+                            if int(st.session_state.get("ml_team_id") or -1) == int(opzioni[team_da_rimuovere]):
+                                azzera_contesto_multilega()
+                            else:
+                                st.session_state.pop("ml_accesso_validato",None)
                             st.rerun()
                         except Exception as errore:
                             st.error(str(errore))
@@ -23896,7 +24495,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 1.4 &nbsp;|&nbsp; V96 Isolamento Team/Lega'
+        'MULTILEGA 1.5 &nbsp;|&nbsp; V97 Partecipanti e Ruoli'
         '</div>',
         unsafe_allow_html=True
     )
