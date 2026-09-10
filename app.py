@@ -12203,7 +12203,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "2.5"
+MULTILEGA_SCHEMA_VERSION = "2.6"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -24507,7 +24507,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 2.5 &nbsp;|&nbsp; V106 Rivelazione Controllata'
+        'MULTILEGA 2.6 &nbsp;|&nbsp; V107 Stato Chiusura Asta'
         '</div>',
         unsafe_allow_html=True
     )
@@ -24802,9 +24802,28 @@ def inizializza_listone_lega_asta(league_id):
                 opened_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 closed_at TEXT,
                 assigned_team_id INTEGER,
-                final_price REAL
+                final_price REAL,
+                closing_by_user_id INTEGER,
+                closing_at TEXT
             )
         """)
+
+        # V107: migrazione compatibile dei database già esistenti.
+        try:
+            cur.execute("""
+                ALTER TABLE auction_lots
+                ADD COLUMN closing_by_user_id INTEGER
+            """)
+        except Exception:
+            pass
+
+        try:
+            cur.execute("""
+                ALTER TABLE auction_lots
+                ADD COLUMN closing_at TEXT
+            """)
+        except Exception:
+            pass
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS bids (
@@ -24890,7 +24909,8 @@ def lotto_corrente_multilega(league_id):
                 COALESCE(g.squadra,''),
                 COALESCE(g.ruolo_mantra,''),
                 COALESCE(g.fvm_mantra,g.fvm,0),
-                COALESCE(g.quotazione_attuale_mantra,g.quotazione_attuale,0)
+                COALESCE(g.quotazione_attuale_mantra,g.quotazione_attuale,0),
+                l.closing_at
             FROM auction_sessions s
             LEFT JOIN auction_lots l ON l.id=s.current_lot_id
             LEFT JOIN giocatori g ON g.id=l.player_id
@@ -24912,6 +24932,7 @@ def lotto_corrente_multilega(league_id):
             "ruolo_mantra": str(r[6] or ""),
             "fvm": float(r[7] or 0),
             "quotazione": float(r[8] or 0),
+            "closing_at": str(r[9] or ""),
         }
     finally:
         _portal_close(conn)
@@ -25018,7 +25039,12 @@ def apri_lotto_banditore(league_id, player_id):
         _portal_close(conn)
 
 
-def chiudi_lotto_banditore(league_id, lot_id, motivo="CLOSED"):
+
+def metti_lotto_in_chiusura_banditore(league_id, lot_id):
+    """
+    OPEN -> CLOSING.
+    Dal momento della transizione nessuna nuova offerta è più valida.
+    """
     league_id = int(league_id)
     lot_id = int(lot_id)
     user_id = int(st.session_state.get("auth_user_id") or 0)
@@ -25037,13 +25063,152 @@ def chiudi_lotto_banditore(league_id, lot_id, motivo="CLOSED"):
 
         cur.execute("""
             UPDATE auction_lots
+            SET stato='CLOSING',
+                closing_by_user_id=?,
+                closing_at=CURRENT_TIMESTAMP
+            WHERE id=? AND league_id=? AND stato='OPEN'
+        """, (user_id, lot_id, league_id))
+
+        if cur.rowcount == 0:
+            raise ValueError("Il lotto non è più in stato OPEN.")
+
+        cur.execute("""
+            UPDATE auction_sessions
+            SET stato='CLOSING',
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND current_lot_id=?
+        """, (league_id, lot_id))
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,azione,entita,entita_id,
+                dettagli_json,created_at
+            )
+            VALUES (?,?,'LOT_CLOSING','AUCTION_LOT',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            user_id,
+            str(lot_id),
+            json.dumps({"stato": "CLOSING"}, ensure_ascii=False)
+        ))
+
+        conn.commit()
+        return True
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def riapri_lotto_banditore(league_id, lot_id):
+    """
+    CLOSING -> OPEN.
+    Serve per correggere una chiusura prematura prima dell'assegnazione.
+    """
+    league_id = int(league_id)
+    lot_id = int(lot_id)
+    user_id = int(st.session_state.get("auth_user_id") or 0)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=? AND user_id=? AND is_active=1
+              AND (is_auctioneer=1 OR is_admin=1)
+        """, (league_id, user_id))
+        if int(cur.fetchone()[0] or 0) == 0:
+            raise PermissionError("Operazione riservata a Banditore o Admin.")
+
+        cur.execute("""
+            UPDATE auction_lots
+            SET stato='OPEN',
+                closing_by_user_id=NULL,
+                closing_at=NULL
+            WHERE id=? AND league_id=? AND stato='CLOSING'
+        """, (lot_id, league_id))
+
+        if cur.rowcount == 0:
+            raise ValueError("Il lotto non è in stato CLOSING.")
+
+        cur.execute("""
+            UPDATE auction_sessions
+            SET stato='RUNNING',
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND current_lot_id=?
+        """, (league_id, lot_id))
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,azione,entita,entita_id,
+                dettagli_json,created_at
+            )
+            VALUES (?,?,'LOT_REOPENED','AUCTION_LOT',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            user_id,
+            str(lot_id),
+            json.dumps({"stato": "OPEN"}, ensure_ascii=False)
+        ))
+
+        conn.commit()
+        return True
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+
+def chiudi_lotto_banditore(league_id, lot_id, motivo="CLOSED"):
+    league_id = int(league_id)
+    lot_id = int(lot_id)
+    user_id = int(st.session_state.get("auth_user_id") or 0)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=? AND user_id=? AND is_active=1
+              AND (is_auctioneer=1 OR is_admin=1)
+        """, (league_id, user_id))
+        if int(cur.fetchone()[0] or 0) == 0:
+            raise PermissionError("Operazione riservata a Banditore o Admin.")
+
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM bids
+            WHERE league_id=? AND lot_id=?
+        """, (league_id, lot_id))
+        numero_offerte = int(cur.fetchone()[0] or 0)
+
+        if numero_offerte > 0:
+            raise ValueError(
+                "Il lotto contiene offerte: non può essere chiuso senza assegnazione."
+            )
+
+        cur.execute("""
+            UPDATE auction_lots
             SET stato=?,
                 closed_at=CURRENT_TIMESTAMP
-            WHERE id=? AND league_id=? AND stato='OPEN'
+            WHERE id=? AND league_id=? AND stato IN ('OPEN','CLOSING')
         """, (str(motivo), lot_id, league_id))
 
         if cur.rowcount == 0:
-            raise ValueError("Il lotto non è più aperto.")
+            raise ValueError("Il lotto non è più attivo.")
 
         cur.execute("""
             UPDATE auction_sessions
@@ -25525,7 +25690,7 @@ def render_console_asta_team():
 
     team_id = int(team_id)
 
-    st.subheader("📡 Console Asta · Bidding 1.0")
+    st.subheader("📡 Console Asta · Live State 1.0")
     st.caption(
         "Le offerte sono registrate lato server. La migliore offerta valida "
         "è condivisa tra tutte le squadre e con il Banditore."
@@ -25581,7 +25746,15 @@ def render_console_asta_team():
             else round(float(best["amount"]) + incremento, 2)
         )
 
-        st.success("🟢 LOTTO APERTO")
+        lotto_stato = str(lotto.get("stato","")).upper()
+
+        if lotto_stato == "OPEN":
+            st.success("🟢 LOTTO APERTO")
+        elif lotto_stato == "CLOSING":
+            st.warning("🟠 OFFERTE CHIUSE · ASSEGNAZIONE IN CORSO")
+        else:
+            st.info(f"Stato lotto: {lotto_stato}")
+
         st.markdown(
             f"""
             <div style="
@@ -25641,8 +25814,25 @@ def render_console_asta_team():
             f'Prossima offerta minima: {offerta_minima:g}'
         )
 
+        if lotto_stato == "CLOSING":
+            if best is None:
+                st.info("Le offerte sono chiuse. Nessuna offerta registrata.")
+            elif int(best["team_id"]) == team_id:
+                st.success(
+                    f'🔒 Offerte chiuse: sei in testa a **{best["amount"]:g}** crediti.'
+                )
+            else:
+                st.warning(
+                    f'🔒 Offerte chiuse: miglior offerta **{best["amount"]:g}** · '
+                    f'**{best["team"]}**'
+                )
+
         if tipo_asta == "DRAFT":
             st.info("Il Draft non utilizza il sistema di bidding.")
+        elif lotto_stato != "OPEN":
+            st.caption(
+                "Nuove offerte non consentite: il Banditore ha chiuso il bidding."
+            )
         else:
             b1, b2 = st.columns([1, 1.5])
 
@@ -26009,7 +26199,7 @@ def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
                     assigned_team_id=?,
                     final_price=?,
                     closed_at=CURRENT_TIMESTAMP
-                WHERE id=? AND league_id=? AND stato='OPEN'
+                WHERE id=? AND league_id=? AND stato IN ('OPEN','CLOSING')
             """, (team_id, prezzo, _lot_id, league_id))
 
             cur.execute("""
@@ -26314,7 +26504,9 @@ def audit_asta_multilega(league_id, limit=100):
               AND a.azione IN (
                 'PLAYER_ASSIGNED',
                 'PLAYER_ASSIGNMENT_UNDONE',
-                'BID_PLACED'
+                'BID_PLACED',
+                'LOT_CLOSING',
+                'LOT_REOPENED'
               )
             ORDER BY a.id DESC
             LIMIT ?
@@ -26706,10 +26898,22 @@ def render_banditore_asta():
         st.warning("Impossibile leggere il lotto corrente: " + str(errore))
 
     if lotto_aperto:
-        st.success(
-            f'🟢 Lotto aperto: **{lotto_aperto["nome"]}** · '
-            f'{lotto_aperto["squadra"]} · {lotto_aperto["ruolo_mantra"]}'
-        )
+        _stato_lotto_banditore = str(lotto_aperto.get("stato","")).upper()
+
+        if _stato_lotto_banditore == "OPEN":
+            st.success(
+                f'🟢 Lotto aperto: **{lotto_aperto["nome"]}** · '
+                f'{lotto_aperto["squadra"]} · {lotto_aperto["ruolo_mantra"]}'
+            )
+        elif _stato_lotto_banditore == "CLOSING":
+            st.warning(
+                f'🟠 Offerte chiuse: **{lotto_aperto["nome"]}** · '
+                "attesa assegnazione definitiva"
+            )
+        else:
+            st.info(
+                f'Lot #{lotto_aperto["lot_id"]} · stato {_stato_lotto_banditore}'
+            )
 
         try:
             _stato_bids_banditore = stato_offerte_lotto_multilega(
@@ -26729,30 +26933,89 @@ def render_banditore_asta():
                 f'**{_best_banditore["team"]}**'
             )
 
-            if st.button(
-                "✅ ASSEGNA AL MIGLIOR OFFERENTE",
-                type="primary",
-                use_container_width=True,
-                key="auctioneer_assign_best_bid"
-            ):
-                try:
-                    risultato = assegna_giocatore_banditore(
-                        league_id,
-                        lotto_aperto["player_id"],
-                        _best_banditore["team_id"],
-                        _best_banditore["amount"]
-                    )
-                    invalida_cache_dati()
-                    st.session_state["auctioneer_msg"] = (
-                        f'{lotto_aperto["nome"]} assegnato a '
-                        f'{risultato["team"]} a '
-                        f'{_best_banditore["amount"]:g} crediti.'
-                    )
-                    st.rerun(scope="fragment")
-                except Exception as errore:
-                    st.error(str(errore))
+            if _stato_lotto_banditore == "OPEN":
+                if st.button(
+                    "🔒 CHIUDI LE OFFERTE",
+                    type="primary",
+                    use_container_width=True,
+                    key="auctioneer_freeze_bids"
+                ):
+                    try:
+                        metti_lotto_in_chiusura_banditore(
+                            league_id,
+                            lotto_aperto["lot_id"]
+                        )
+                        st.session_state["auctioneer_msg"] = (
+                            "Offerte chiuse. Ora puoi confermare l'assegnazione."
+                        )
+                        st.rerun(scope="fragment")
+                    except Exception as errore:
+                        st.error(str(errore))
+
+            elif _stato_lotto_banditore == "CLOSING":
+                if st.button(
+                    "✅ ASSEGNA AL MIGLIOR OFFERENTE",
+                    type="primary",
+                    use_container_width=True,
+                    key="auctioneer_assign_best_bid"
+                ):
+                    try:
+                        risultato = assegna_giocatore_banditore(
+                            league_id,
+                            lotto_aperto["player_id"],
+                            _best_banditore["team_id"],
+                            _best_banditore["amount"]
+                        )
+
+                        if tipo_asta == "CHIAMATA":
+                            avanza_turno_squadra_multilega(
+                                league_id,
+                                tipo_asta
+                            )
+
+                        invalida_cache_dati()
+                        st.session_state["auctioneer_msg"] = (
+                            f'{lotto_aperto["nome"]} assegnato a '
+                            f'{risultato["team"]} a '
+                            f'{_best_banditore["amount"]:g} crediti.'
+                        )
+                        st.rerun(scope="fragment")
+                    except Exception as errore:
+                        st.error(str(errore))
+
+                if st.button(
+                    "↩ RIAPRI OFFERTE",
+                    use_container_width=True,
+                    key="auctioneer_reopen_bids"
+                ):
+                    try:
+                        riapri_lotto_banditore(
+                            league_id,
+                            lotto_aperto["lot_id"]
+                        )
+                        st.session_state["auctioneer_msg"] = (
+                            "Lotto riaperto alle offerte."
+                        )
+                        st.rerun(scope="fragment")
+                    except Exception as errore:
+                        st.error(str(errore))
         else:
             st.caption("Nessuna offerta registrata sul lotto corrente.")
+
+            if _stato_lotto_banditore == "CLOSING":
+                if st.button(
+                    "↩ RIAPRI OFFERTE",
+                    use_container_width=True,
+                    key="auctioneer_reopen_no_bid"
+                ):
+                    try:
+                        riapri_lotto_banditore(
+                            league_id,
+                            lotto_aperto["lot_id"]
+                        )
+                        st.rerun(scope="fragment")
+                    except Exception as errore:
+                        st.error(str(errore))
 
         with st.expander("📜 Offerte lotto corrente", expanded=False):
             if not _stato_bids_banditore["bids"]:
@@ -26772,7 +27035,7 @@ def render_banditore_asta():
                     hide_index=True
                 )
 
-        if st.button(
+        if not _stato_bids_banditore["bids"] and st.button(
             "⏹ CHIUDI LOTTO SENZA ASSEGNAZIONE",
             use_container_width=True,
             key="auctioneer_close_lot"
@@ -27032,6 +27295,15 @@ def render_banditore_asta():
             st.warning(
                 "Sono presenti offerte: l'assegnazione deve rispettare "
                 "il miglior offerente e il relativo prezzo."
+            )
+
+        if (
+            _best_manual is not None
+            and str(lotto_aperto.get("stato","")).upper() != "CLOSING"
+        ):
+            _assegnazione_bloccata = True
+            st.caption(
+                "Prima dell'assegnazione devi chiudere le offerte."
             )
 
     if _assegnazione_bloccata:
