@@ -11644,7 +11644,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "0.7"
+MULTILEGA_SCHEMA_VERSION = "0.8"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -13343,6 +13343,149 @@ def rinomina_squadra_multilega(
         )
 
 
+
+def elimina_lega_multilega(
+    league_id
+):
+    """
+    Elimina definitivamente una lega e tutti i dati ad essa collegati.
+
+    Sicurezza:
+    - l'utente autenticato deve essere ADMIN attivo della lega;
+    - gli account USERS globali NON vengono eliminati;
+    - la cancellazione è transazionale;
+    - supporta anche tabelle multilega future se già presenti.
+    """
+
+    league_id = int(
+        league_id
+    )
+
+    user_id = int(
+        st.session_state.get(
+            "auth_user_id"
+        )
+    )
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+
+        cur.execute("""
+            SELECT
+                l.nome
+            FROM leagues l
+            JOIN league_members lm
+              ON lm.league_id = l.id
+            WHERE l.id = ?
+              AND lm.user_id = ?
+              AND lm.is_admin = 1
+              AND lm.is_active = 1
+            LIMIT 1
+        """, (
+            league_id,
+            user_id
+        ))
+
+        riga = cur.fetchone()
+
+        if not riga:
+            raise PermissionError(
+                "Non sei autorizzato a eliminare questa lega."
+            )
+
+        nome_lega = str(
+            riga[0]
+            or ""
+        )
+
+        # Rileva le tabelle realmente presenti.
+        cur.execute("""
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+        """)
+
+        tabelle_presenti = {
+            str(
+                r[0]
+            )
+            for r in cur.fetchall()
+        }
+
+        # Prima le tabelle figlie, poi la lega.
+        # L'elenco comprende anche le strutture previste per
+        # le prossime fasi dell'asta live.
+        tabelle_legate = [
+            "bids",
+            "assignments",
+            "auction_lots",
+            "auction_sessions",
+            "player_evaluations",
+            "iqr_profiles",
+            "rosters",
+            "team_budgets",
+            "league_players",
+            "league_members",
+            "teams",
+            "league_rules",
+            "audit_log",
+        ]
+
+        for tabella in tabelle_legate:
+
+            if tabella not in tabelle_presenti:
+                continue
+
+            cur.execute(
+                f"PRAGMA table_info({tabella})"
+            )
+
+            colonne = {
+                str(
+                    r[1]
+                )
+                for r in cur.fetchall()
+            }
+
+            if "league_id" in colonne:
+
+                cur.execute(
+                    f"DELETE FROM {tabella} WHERE league_id = ?",
+                    (
+                        league_id,
+                    )
+                )
+
+        cur.execute("""
+            DELETE FROM leagues
+            WHERE id = ?
+        """, (
+            league_id,
+        ))
+
+        conn.commit()
+
+        return nome_lega
+
+    except Exception:
+
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+        raise
+
+    finally:
+
+        _portal_close(
+            conn
+        )
+
+
+
 def render_admin_multilega():
     """
     MULTILEGA 0.3:
@@ -13568,6 +13711,14 @@ def render_admin_multilega():
 
     with tab_esistenti:
 
+        if "ml08_lega_eliminata" in st.session_state:
+
+            st.success(
+                st.session_state.pop(
+                    "ml08_lega_eliminata"
+                )
+            )
+
         try:
 
             leghe = (
@@ -13738,6 +13889,140 @@ def render_admin_multilega():
                                         errore
                                     )
                                 )
+
+                st.markdown(
+                    "---"
+                )
+
+                st.markdown(
+                    "#### ⚠️ Elimina lega"
+                )
+
+                st.caption(
+                    "L'eliminazione è definitiva: vengono cancellati "
+                    "regolamento, squadre, membership, rose, budget e "
+                    "tutti i dati collegati alla lega. Gli account utente "
+                    "restano disponibili."
+                )
+
+                conferma_testo = st.text_input(
+                    (
+                        "Per confermare scrivi esattamente: "
+                        + str(
+                            lega[
+                                "nome"
+                            ]
+                        )
+                    ),
+                    key=(
+                        "ml08_delete_confirm_"
+                        + str(
+                            lega[
+                                "league_id"
+                            ]
+                        )
+                    )
+                )
+
+                conferma_eliminazione = st.checkbox(
+                    "Confermo di voler eliminare definitivamente questa lega",
+                    key=(
+                        "ml08_delete_check_"
+                        + str(
+                            lega[
+                                "league_id"
+                            ]
+                        )
+                    )
+                )
+
+                nome_corretto = (
+                    str(
+                        conferma_testo
+                    ).strip()
+                    == str(
+                        lega[
+                            "nome"
+                        ]
+                    ).strip()
+                )
+
+                if st.button(
+                    "🗑️ ELIMINA DEFINITIVAMENTE LA LEGA",
+                    type="secondary",
+                    use_container_width=True,
+                    disabled=not (
+                        nome_corretto
+                        and conferma_eliminazione
+                    ),
+                    key=(
+                        "ml08_delete_league_"
+                        + str(
+                            lega[
+                                "league_id"
+                            ]
+                        )
+                    )
+                ):
+
+                    try:
+
+                        lega_eliminata_id = int(
+                            lega[
+                                "league_id"
+                            ]
+                        )
+
+                        nome_eliminato = (
+                            elimina_lega_multilega(
+                                lega_eliminata_id
+                            )
+                        )
+
+                        st.session_state[
+                            "ml08_lega_eliminata"
+                        ] = (
+                            "Lega «"
+                            + nome_eliminato
+                            + "» eliminata definitivamente."
+                        )
+
+                        # Se era la lega attualmente aperta, il contesto
+                        # non deve più restare valido.
+                        if int(
+                            st.session_state.get(
+                                "ml_league_id",
+                                -1
+                            )
+                        ) == lega_eliminata_id:
+
+                            azzera_contesto_multilega()
+
+                        st.session_state.pop(
+                            "ml_accesso_validato",
+                            None
+                        )
+
+                        st.session_state.pop(
+                            (
+                                "ml03_boot_"
+                                + str(
+                                    PROFILO_ATTIVO
+                                )
+                            ),
+                            None
+                        )
+
+                        st.rerun()
+
+                    except Exception as errore:
+
+                        st.error(
+                            "Impossibile eliminare la lega: "
+                            + str(
+                                errore
+                            )
+                        )
 
 
 
@@ -22695,7 +22980,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 0.7 &nbsp;|&nbsp; V89 Profilo Utente'
+        'MULTILEGA 0.8 &nbsp;|&nbsp; V90 Eliminazione Lega'
         '</div>',
         unsafe_allow_html=True
     )
