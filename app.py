@@ -1547,6 +1547,7 @@ def salva_regolamento_avanzato(league_id, valori):
                     (league_id,uid,st.session_state.get("ml_team_id"),str(league_id),
                      json.dumps(valori,ensure_ascii=False)))
         conn.commit()
+        invalida_cache_admin_multilega()
     except Exception:
         try: conn.rollback()
         except Exception: pass
@@ -1556,6 +1557,11 @@ def salva_regolamento_avanzato(league_id, valori):
 
 
 def carica_regolamento_avanzato(league_id):
+    cache_key="_ml16_admin_rules_"+str(int(league_id))
+    cached=st.session_state.get(cache_key)
+    if isinstance(cached,dict):
+        return dict(cached)
+
     conn=_portal_raw_connection(); cur=conn.cursor()
     try:
         cur.execute("""SELECT moltiplicatore_oltre_soglia,tipo_asta,fasce_gol_json,
@@ -1568,7 +1574,7 @@ def carica_regolamento_avanzato(league_id):
         if not r: return None
         try: fasce=json.loads(r[2] or "{}")
         except Exception: fasce=DEFAULT_FASCE_GOL
-        return {"moltiplicatore":max(1,int(float(r[0] or 1))),"tipo_asta":str(r[1] or "A CHIAMATA"),
+        risultato={"moltiplicatore":max(1,int(float(r[0] or 1))),"tipo_asta":str(r[1] or "A CHIAMATA"),
                 "fasce":[float(fasce.get(str(i),DEFAULT_FASCE_GOL[str(i)])) for i in range(1,11)],
                 "gol_fatto":float(r[3] if r[3] is not None else 3),"gol_subito":float(r[4] if r[4] is not None else -1),
                 "ammonizione":float(r[5] if r[5] is not None else -.5),"espulsione":float(r[6] if r[6] is not None else -1),
@@ -1579,6 +1585,8 @@ def carica_regolamento_avanzato(league_id):
                 "rendimento_fasce":(
                     json.loads(r[15]) if r[15] else DEFAULT_RENDIMENTO_FASCE
                 )}
+        st.session_state[cache_key]=dict(risultato)
+        return risultato
     finally: _portal_close(conn)
 
 
@@ -2430,49 +2438,34 @@ def imposta_workspace_team_multilega():
 
 def inizializza_workspace_team_multilega():
     """
-    Crea lo schema legacy-compatibile dedicato al team selezionato,
-    clona SOLO l'anagrafica/listone dalla base e inizializza il budget
-    con quello previsto dal regolamento della lega.
+    V98 - inizializzazione veloce del workspace.
 
-    Gli stati d'asta, i prezzi, la rosa, gli svincoli, le operazioni,
-    gli snapshot e la configurazione restano completamente separati.
+    Il workspace viene preparato una sola volta per sessione e coppia
+    league_id/team_id. Questo evita round-trip Cloud ripetuti ad ogni
+    semplice cambio di sezione.
     """
 
     if PROFILO_LEGACY_SUPPORTATO:
         return
 
-    league_id = int(
-        st.session_state.get(
-            "ml_league_id"
-        )
-    )
+    league_id = int(st.session_state.get("ml_league_id"))
+    team_id = st.session_state.get("ml_team_id")
 
-    team_id = st.session_state.get(
-        "ml_team_id"
+    workspace_id = (
+        "L" + str(league_id)
+        + "_T" + str(team_id if team_id is not None else "ADMIN")
     )
+    guard_key = "_ml16_workspace_ready_" + workspace_id
 
-    # La funzione inizializza_database è cache_resource: la chiave
-    # include esplicitamente lega e squadra così ogni workspace viene
-    # inizializzato in modo indipendente.
-    cache_key = (
-        "ML96|"
-        + str(PROFILO_ATTIVO)
-        + "|L"
-        + str(league_id)
-        + "|T"
-        + str(
-            team_id
-            if team_id is not None
-            else "ADMIN"
-        )
-    )
+    if st.session_state.get(guard_key, False):
+        return
 
-    inizializza_database(
-        cache_key
-    )
+    cache_key = "ML98|" + str(PROFILO_ATTIVO) + "|" + workspace_id
 
-    # Un Admin puro non necessita del listone operativo.
+    inizializza_database(cache_key)
+
     if team_id is None:
+        st.session_state[guard_key] = True
         return
 
     raw_conn = _get_raw_connection()
@@ -2590,6 +2583,7 @@ def inizializza_workspace_team_multilega():
         )
 
         raw_conn.commit()
+        st.session_state[guard_key] = True
 
     finally:
 
@@ -12209,7 +12203,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "1.5"
+MULTILEGA_SCHEMA_VERSION = "1.6"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -13696,11 +13690,28 @@ def crea_lega_multilega(
         )
 
 
+
+def invalida_cache_admin_multilega():
+    for chiave in list(st.session_state.keys()):
+        if chiave.startswith((
+            "_ml16_admin_leghe_",
+            "_ml16_admin_rules_",
+            "_ml16_admin_teams_",
+            "_ml16_admin_teamdetails_"
+        )):
+            st.session_state.pop(chiave, None)
+
+
 def leghe_amministrate_multilega():
     """
     Elenco compatto delle leghe in cui l'utente corrente è ADMIN.
     Una sola query.
     """
+
+    cache_key="_ml16_admin_leghe_"+str(st.session_state.get("auth_user_id",""))
+    cached=st.session_state.get(cache_key)
+    if isinstance(cached,list):
+        return [dict(x) for x in cached]
 
     conn = get_connection()
     cur = conn.cursor()
@@ -13769,18 +13780,12 @@ def leghe_amministrate_multilega():
             "squadre_attive"
         ]
 
-        return [
-            dict(
-                zip(
-                    colonne,
-                    riga
-                )
-            )
-            for riga in (
-                cur.fetchall()
-                or []
-            )
+        risultato = [
+            dict(zip(colonne, riga))
+            for riga in (cur.fetchall() or [])
         ]
+        st.session_state[cache_key]=[dict(x) for x in risultato]
+        return risultato
 
     finally:
 
@@ -13792,6 +13797,11 @@ def leghe_amministrate_multilega():
 def squadre_lega_multilega(
     league_id
 ):
+    cache_key="_ml16_admin_teams_"+str(int(league_id))
+    cached=st.session_state.get(cache_key)
+    if isinstance(cached,list):
+        return [dict(x) for x in cached]
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -13811,29 +13821,17 @@ def squadre_lega_multilega(
             int(league_id),
         ))
 
-        return [
+        risultato = [
             {
-                "team_id":
-                    int(r[0]),
-
-                "nome":
-                    str(r[1]),
-
-                "posizione":
-                    int(r[2] or 0),
-
-                "owner_user_id":
-                    (
-                        int(r[3])
-                        if r[3] is not None
-                        else None
-                    )
+                "team_id": int(r[0]),
+                "nome": str(r[1]),
+                "posizione": int(r[2] or 0),
+                "owner_user_id": int(r[3]) if r[3] is not None else None
             }
-            for r in (
-                cur.fetchall()
-                or []
-            )
+            for r in (cur.fetchall() or [])
         ]
+        st.session_state[cache_key]=[dict(x) for x in risultato]
+        return risultato
 
     finally:
 
@@ -13849,6 +13847,11 @@ def dettagli_squadre_lega_multilega(league_id):
     I ruoli sono sempre letti dal DB, non dalla sessione browser.
     """
     league_id = int(league_id)
+    cache_key="_ml16_admin_teamdetails_"+str(league_id)
+    cached=st.session_state.get(cache_key)
+    if isinstance(cached,list):
+        return [dict(x) for x in cached]
+
     conn = _portal_raw_connection()
     cur = conn.cursor()
     try:
@@ -13874,7 +13877,7 @@ def dettagli_squadre_lega_multilega(league_id):
               AND t.is_active = 1
             ORDER BY t.posizione, t.id
         """, (league_id,))
-        return [
+        risultato = [
             {
                 "team_id": int(r[0]),
                 "nome": str(r[1] or ""),
@@ -13888,6 +13891,8 @@ def dettagli_squadre_lega_multilega(league_id):
             }
             for r in (cur.fetchall() or [])
         ]
+        st.session_state[cache_key]=[dict(x) for x in risultato]
+        return risultato
     finally:
         _portal_close(conn)
 
@@ -14002,6 +14007,7 @@ def aggiorna_ruoli_squadra_multilega(league_id, team_id, is_admin, is_auctioneer
         ))
 
         conn.commit()
+        invalida_cache_admin_multilega()
     except Exception:
         try:
             conn.rollback()
@@ -14070,6 +14076,7 @@ def reset_password_squadra_multilega(league_id, team_id, nuova_password):
             json.dumps({"team": nome, "username": username}, ensure_ascii=False)
         ))
         conn.commit()
+        invalida_cache_admin_multilega()
         return username
     except Exception:
         try:
@@ -14184,6 +14191,7 @@ def collega_utente_esistente_lega(
         ))
 
         conn.commit()
+        invalida_cache_admin_multilega()
         return team_id
     except Exception:
         try:
@@ -14243,6 +14251,7 @@ def aggiorna_stato_lega_multilega(league_id, nuovo_stato):
             json.dumps({"prima": stato_prima, "dopo": nuovo_stato}, ensure_ascii=False)
         ))
         conn.commit()
+        invalida_cache_admin_multilega()
     except Exception:
         try:
             conn.rollback()
@@ -14313,6 +14322,7 @@ def rinomina_squadra_multilega(
             )
 
         conn.commit()
+        invalida_cache_admin_multilega()
 
     finally:
 
@@ -14379,6 +14389,7 @@ def aggiungi_squadra_multilega(league_id, username, password, is_admin=False, is
                      json.dumps({"username":username,"admin":bool(is_admin),
                                  "auctioneer":bool(is_auctioneer)},ensure_ascii=False)))
         conn.commit()
+        invalida_cache_admin_multilega()
         return team_id
     except Exception:
         try: conn.rollback()
@@ -14444,6 +14455,7 @@ def rimuovi_squadra_multilega(league_id, team_id):
                     (league_id,user_admin,str(team_id),
                      json.dumps({"nome":nome},ensure_ascii=False)))
         conn.commit()
+        invalida_cache_admin_multilega()
         return nome
     except Exception:
         try: conn.rollback()
@@ -14576,6 +14588,7 @@ def elimina_lega_multilega(
         ))
 
         conn.commit()
+        invalida_cache_admin_multilega()
 
         return nome_lega
 
@@ -16249,11 +16262,7 @@ def carica_ultime_operazioni():
 
     if chiave in st.session_state:
 
-        return (
-            st.session_state[
-                chiave
-            ].copy()
-        )
+        return st.session_state[chiave]
 
     conn = get_connection()
 
@@ -16815,7 +16824,8 @@ def invalida_cache_dati():
         "pdf_rosa_moduli",
         "_df_giocatori_sessione",
         "_ultime_operazioni_sessione",
-        "_costi_svincoli_sessione"
+        "_costi_svincoli_sessione",
+        "_ml16_sidebar_metrics"
     ]
 
     for chiave in chiavi_sessione:
@@ -19640,7 +19650,8 @@ if (
         "budget_asta_corrente",
         "budget_asta_input",
         "_titolarita_cache",
-        "_formazioni_tipo_fast_cache"
+        "_formazioni_tipo_fast_cache",
+        "_ml16_sidebar_metrics"
     ]:
 
         st.session_state.pop(
@@ -19666,84 +19677,65 @@ if "budget_asta_input" not in st.session_state:
         ]
     )
 
-df_completo = (
-    carica_tutti_giocatori()
-)
+df_completo = carica_tutti_giocatori()
 
 df_rosa_globale = (
-    df_completo[
-        df_completo["Stato"]
-        == "MIO"
-    ]
-    .copy()
+    df_completo[df_completo["Stato"] == "MIO"].copy()
 )
 
-valore_attivi = (
-    calcola_valore_acquisti_attivi()
+_prezzi_rosa = pd.to_numeric(
+    df_rosa_globale.get("Prezzo", pd.Series(dtype=float)),
+    errors="coerce"
+).fillna(0)
+
+_runtime_signature = (
+    _workspace_runtime_key,
+    int(len(df_rosa_globale)),
+    round(float(_prezzi_rosa.sum()), 2),
+    tuple(sorted(int(x) for x in df_rosa_globale.get("Id", pd.Series(dtype=int)).tolist()))
 )
 
-costi_svincoli = (
-    calcola_costi_svincoli()
-)
+_runtime_cached = st.session_state.get("_ml16_sidebar_metrics")
 
-valore_acquisti = round(
-    valore_attivi
-    + costi_svincoli,
-    2
-)
+if isinstance(_runtime_cached, dict) and _runtime_cached.get("signature") == _runtime_signature:
+    valore_attivi = _runtime_cached["valore_attivi"]
+    costi_svincoli = _runtime_cached["costi_svincoli"]
+    valore_acquisti = _runtime_cached["valore_acquisti"]
+    spesa_effettiva = _runtime_cached["spesa_effettiva"]
+    oltre_soglia = _runtime_cached["oltre_soglia"]
+    numero_rosa = _runtime_cached["numero_rosa"]
+    numero_portieri = _runtime_cached["numero_portieri"]
+    slot_liberi = _runtime_cached["slot_liberi"]
+    iqr = _runtime_cached["iqr"]
+else:
+    valore_attivi = round(float(_prezzi_rosa.sum()), 2)
+    costi_svincoli = calcola_costi_svincoli()
+    valore_acquisti = round(valore_attivi + costi_svincoli, 2)
+    spesa_effettiva = calcola_spesa_effettiva(valore_acquisti)
+    oltre_soglia = round(max(0, valore_acquisti - SOGLIA_BASE), 2)
+    numero_rosa = len(df_rosa_globale)
+    numero_portieri = conta_portieri(df_rosa_globale)
+    slot_liberi = max(0, MAX_GIOCATORI - numero_rosa)
+    iqr = calcola_iqr(df_rosa_globale, df_completo, MAX_GIOCATORI)
 
-spesa_effettiva = (
-    calcola_spesa_effettiva(
-        valore_acquisti
-    )
-)
-
-oltre_soglia = round(
-    max(
-        0,
-        valore_acquisti
-        - SOGLIA_BASE
-    ),
-    2
-)
-
-numero_rosa = len(
-    df_rosa_globale
-)
-
-numero_portieri = (
-    conta_portieri(
-        df_rosa_globale
-    )
-)
-
-slot_liberi = max(
-    0,
-    MAX_GIOCATORI
-    - numero_rosa
-)
+    st.session_state["_ml16_sidebar_metrics"] = {
+        "signature": _runtime_signature,
+        "valore_attivi": valore_attivi,
+        "costi_svincoli": costi_svincoli,
+        "valore_acquisti": valore_acquisti,
+        "spesa_effettiva": spesa_effettiva,
+        "oltre_soglia": oltre_soglia,
+        "numero_rosa": numero_rosa,
+        "numero_portieri": numero_portieri,
+        "slot_liberi": slot_liberi,
+        "iqr": iqr,
+    }
 
 budget_asta = float(
-    st.session_state.get(
-        "budget_asta_corrente",
-        SOGLIA_BASE
-    )
+    st.session_state.get("budget_asta_corrente", SOGLIA_BASE)
 )
 
-budget_rimanente = round(
-    budget_asta
-    - spesa_effettiva,
-    2
-)
-
-
-iqr = (
-    calcola_iqr(
-        df_rosa_globale,
-        df_completo,
-        MAX_GIOCATORI
-    )
-)
+budget_rimanente = round(budget_asta - spesa_effettiva, 2)
 
 
 # ============================================================
@@ -24495,7 +24487,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 1.5 &nbsp;|&nbsp; V97 Partecipanti e Ruoli'
+        'MULTILEGA 1.6 &nbsp;|&nbsp; V98 Performance Review'
         '</div>',
         unsafe_allow_html=True
     )
