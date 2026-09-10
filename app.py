@@ -1447,6 +1447,14 @@ TIPI_ASTA_FANTA_LIVE = [
     "DRAFT"
 ]
 
+DEFAULT_RENDIMENTO_FASCE = [
+    {"media_min": 6.00, "punti": 0.0},
+    {"media_min": 6.25, "punti": 1.0},
+    {"media_min": 6.50, "punti": 2.0},
+    {"media_min": 6.75, "punti": 3.0},
+    {"media_min": 7.00, "punti": 4.0},
+]
+
 
 def inizializza_schema_regolamento_avanzato():
     if st.session_state.get("_ml10_rules_schema_ok", False):
@@ -1468,6 +1476,8 @@ def inizializza_schema_regolamento_avanzato():
             ("mod_rendimento","INTEGER NOT NULL DEFAULT 0"),
             ("mod_fair_play","INTEGER NOT NULL DEFAULT 0"),
             ("mod_capitano","INTEGER NOT NULL DEFAULT 0"),
+            ("mod_rendimento_tipo","TEXT NOT NULL DEFAULT 'BONUS'"),
+            ("mod_rendimento_fasce_json","TEXT"),
         ]
         for nome,tipo in aggiunte:
             if nome not in cols:
@@ -1475,6 +1485,10 @@ def inizializza_schema_regolamento_avanzato():
         cur.execute("""UPDATE league_rules SET fasce_gol_json=?
                        WHERE fasce_gol_json IS NULL OR TRIM(fasce_gol_json)=''""",
                     (json.dumps(DEFAULT_FASCE_GOL),))
+        cur.execute("""UPDATE league_rules SET mod_rendimento_fasce_json=?
+                       WHERE mod_rendimento_fasce_json IS NULL
+                          OR TRIM(mod_rendimento_fasce_json)=''""",
+                    (json.dumps(DEFAULT_RENDIMENTO_FASCE),))
         # Normalizza il vecchio tipo ALTRO senza alterare le leghe valide.
         cur.execute("""UPDATE league_rules SET tipo_asta='A CHIAMATA'
                        WHERE tipo_asta IS NULL OR TRIM(tipo_asta)='' OR UPPER(tipo_asta)='ALTRO'""")
@@ -1512,7 +1526,9 @@ def salva_regolamento_avanzato(league_id, valori):
                        valore_gol_fatto=?, valore_gol_subito=?, valore_ammonizione=?,
                        valore_espulsione=?, valore_rigore_segnato=?, valore_rigore_subito=?,
                        numero_panchinari=?, mod_d_factor=?, mod_rendimento=?,
-                       mod_fair_play=?, mod_capitano=?, updated_at=CURRENT_TIMESTAMP
+                       mod_fair_play=?, mod_capitano=?,
+                       mod_rendimento_tipo=?, mod_rendimento_fasce_json=?,
+                       updated_at=CURRENT_TIMESTAMP
                        WHERE league_id=?""",
                     (int(valori["moltiplicatore"]),valori["tipo_asta"],
                      json.dumps(_fasce_gol_da_valori(fasce)),
@@ -1521,7 +1537,10 @@ def salva_regolamento_avanzato(league_id, valori):
                      float(valori["rigore_segnato"]),float(valori["rigore_subito"]),
                      int(valori["numero_panchinari"]),int(bool(valori["d_factor"])),
                      int(bool(valori["rendimento"])),int(bool(valori["fair_play"])),
-                     int(bool(valori["capitano"])),league_id))
+                     int(bool(valori["capitano"])),
+                     str(valori.get("rendimento_tipo","BONUS")),
+                     json.dumps(valori.get("rendimento_fasce",DEFAULT_RENDIMENTO_FASCE)),
+                     league_id))
         cur.execute("""INSERT INTO audit_log
                        (league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at)
                        VALUES (?,?,?,'RULES_UPDATED','LEAGUE_RULES',?,?,CURRENT_TIMESTAMP)""",
@@ -1542,7 +1561,8 @@ def carica_regolamento_avanzato(league_id):
         cur.execute("""SELECT moltiplicatore_oltre_soglia,tipo_asta,fasce_gol_json,
                        valore_gol_fatto,valore_gol_subito,valore_ammonizione,valore_espulsione,
                        valore_rigore_segnato,valore_rigore_subito,numero_panchinari,
-                       mod_d_factor,mod_rendimento,mod_fair_play,mod_capitano
+                       mod_d_factor,mod_rendimento,mod_fair_play,mod_capitano,
+                       mod_rendimento_tipo,mod_rendimento_fasce_json
                        FROM league_rules WHERE league_id=? LIMIT 1""",(int(league_id),))
         r=cur.fetchone()
         if not r: return None
@@ -1554,8 +1574,53 @@ def carica_regolamento_avanzato(league_id):
                 "ammonizione":float(r[5] if r[5] is not None else -.5),"espulsione":float(r[6] if r[6] is not None else -1),
                 "rigore_segnato":float(r[7] if r[7] is not None else 3),"rigore_subito":float(r[8] if r[8] is not None else -1),
                 "numero_panchinari":int(r[9] or 10),"d_factor":bool(r[10]),"rendimento":bool(r[11]),
-                "fair_play":bool(r[12]),"capitano":bool(r[13])}
+                "fair_play":bool(r[12]),"capitano":bool(r[13]),
+                "rendimento_tipo":str(r[14] or "BONUS"),
+                "rendimento_fasce":(
+                    json.loads(r[15]) if r[15] else DEFAULT_RENDIMENTO_FASCE
+                )}
     finally: _portal_close(conn)
+
+
+
+def render_tabella_rendimento(prefisso, tipo_default="BONUS", fasce_default=None):
+    fasce_default=fasce_default or DEFAULT_RENDIMENTO_FASCE
+    st.markdown("##### 1 · BONUS / MALUS")
+    tipo=st.radio(
+        "Applicazione del modificatore",
+        ["BONUS","MALUS"],
+        index=0 if str(tipo_default).upper()=="BONUS" else 1,
+        horizontal=True,
+        key=prefisso+"_tipo",
+        help="BONUS aggiunge punti alla propria squadra; MALUS sottrae punti all'avversario."
+    )
+    st.caption(
+        "BONUS: i punti vengono aggiunti alla tua squadra.  ·  "
+        "MALUS: i punti vengono sottratti alla squadra avversaria."
+    )
+    st.markdown("##### 2 · VALORE BONUS / MALUS")
+    st.caption("Imposta la soglia di media voto e i punti associati. I punti vanno inseriti come valore positivo: sarà il sistema ad aggiungerli (BONUS) o sottrarli all'avversario (MALUS).")
+    valori=[]
+    for i,fascia in enumerate(fasce_default):
+        c1,c2=st.columns(2)
+        with c1:
+            media=st.number_input(
+                "Media voto da",
+                min_value=0.0,max_value=10.0,
+                value=float(fascia.get("media_min",6.0)),
+                step=0.05,format="%.2f",
+                key=f"{prefisso}_media_{i}"
+            )
+        with c2:
+            punti=st.number_input(
+                "Punti "+("da aggiungere" if tipo=="BONUS" else "da togliere"),
+                min_value=0.0,max_value=20.0,
+                value=abs(float(fascia.get("punti",0.0))),
+                step=0.5,format="%.2f",
+                key=f"{prefisso}_punti_{i}"
+            )
+        valori.append({"media_min":float(media),"punti":float(punti)})
+    return tipo,valori
 
 
 def render_help_modificatori():
@@ -1981,11 +2046,25 @@ def render_portale_iniziale():
 
             numero_panchinari=st.selectbox("Numero panchinari",list(range(6,11)),index=4)
             st.markdown("#### Modificatori")
-            mo1,mo2,mo3,mo4=st.columns(4)
-            with mo1: d_factor=st.toggle("D-Factor",value=False)
-            with mo2: rendimento=st.toggle("Fattore Rendimento",value=False)
+            scelta_dr=st.radio(
+                "D-Factor / Fattore Rendimento",
+                ["NESSUNO","D-FACTOR","FATTORE RENDIMENTO"],
+                horizontal=True,
+                key="ml11_new_dr"
+            )
+            d_factor=(scelta_dr=="D-FACTOR")
+            rendimento=(scelta_dr=="FATTORE RENDIMENTO")
+            mo3,mo4=st.columns(2)
             with mo3: fair_play=st.toggle("Fattore Fair Play",value=False)
             with mo4: capitano=st.toggle("Fattore Capitano",value=False)
+            rendimento_tipo="BONUS"
+            rendimento_fasce=DEFAULT_RENDIMENTO_FASCE
+            if d_factor or rendimento:
+                st.markdown("---")
+                st.markdown("#### Configurazione rendimento")
+                rendimento_tipo,rendimento_fasce=render_tabella_rendimento(
+                    "ml11_new_rend","BONUS",DEFAULT_RENDIMENTO_FASCE
+                )
             render_help_modificatori()
 
             st.markdown(
@@ -2177,7 +2256,9 @@ def render_portale_iniziale():
                         "d_factor": d_factor,
                         "rendimento": rendimento,
                         "fair_play": fair_play,
-                        "capitano": capitano
+                        "capitano": capitano,
+                        "rendimento_tipo": rendimento_tipo,
+                        "rendimento_fasce": rendimento_fasce
                     }
                 )
 
@@ -11841,7 +11922,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "1.0"
+MULTILEGA_SCHEMA_VERSION = "1.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -14183,25 +14264,41 @@ def render_admin_multilega():
                                 ersub=st.number_input("RIGORE SUBITO",value=reg_adv["rigore_subito"],step=0.5,format="%.2f",key="ml10_rsub_"+str(lega["league_id"]))
 
                             st.markdown("**Modificatori**")
-                            em1,em2,em3,em4=st.columns(4)
-                            with em1: edf=st.toggle("D-Factor",value=reg_adv["d_factor"],key="ml10_df_"+str(lega["league_id"]))
-                            with em2: erend=st.toggle("Fattore Rendimento",value=reg_adv["rendimento"],key="ml10_rend_"+str(lega["league_id"]))
+                            dr_default=("D-FACTOR" if reg_adv["d_factor"] else
+                                        "FATTORE RENDIMENTO" if reg_adv["rendimento"] else "NESSUNO")
+                            edr=st.radio(
+                                "D-Factor / Fattore Rendimento",
+                                ["NESSUNO","D-FACTOR","FATTORE RENDIMENTO"],
+                                index=["NESSUNO","D-FACTOR","FATTORE RENDIMENTO"].index(dr_default),
+                                horizontal=True,
+                                key="ml11_dr_"+str(lega["league_id"])
+                            )
+                            edf=(edr=="D-FACTOR")
+                            erend=(edr=="FATTORE RENDIMENTO")
+                            em3,em4=st.columns(2)
                             with em3: efp=st.toggle("Fattore Fair Play",value=reg_adv["fair_play"],key="ml10_fp_"+str(lega["league_id"]))
                             with em4: ecap=st.toggle("Fattore Capitano",value=reg_adv["capitano"],key="ml10_cap_"+str(lega["league_id"]))
+                            erend_tipo=reg_adv.get("rendimento_tipo","BONUS")
+                            erend_fasce=reg_adv.get("rendimento_fasce",DEFAULT_RENDIMENTO_FASCE)
+                            if edf or erend:
+                                st.markdown("---")
+                                st.markdown("**Configurazione rendimento**")
+                                erend_tipo,erend_fasce=render_tabella_rendimento(
+                                    "ml11_edit_rend_"+str(lega["league_id"]),
+                                    erend_tipo,erend_fasce
+                                )
                             render_help_modificatori()
                             save_rules=st.form_submit_button("SALVA REGOLAMENTO",type="primary",use_container_width=True)
                         if save_rules:
-                            if edf and erend:
-                                st.error("D-Factor e Fattore Rendimento sono alternativi: attivane uno solo.")
-                            else:
-                                try:
-                                    salva_regolamento_avanzato(lega["league_id"],{
+                            try:
+                                salva_regolamento_avanzato(lega["league_id"],{
                                         "moltiplicatore":edit_mult,"tipo_asta":edit_asta,"fasce":edit_fasce,
                                         "gol_fatto":egf,"gol_subito":egs,"ammonizione":eam,"espulsione":eesp,
                                         "rigore_segnato":ers,"rigore_subito":ersub,"numero_panchinari":edit_panchina,
-                                        "d_factor":edf,"rendimento":erend,"fair_play":efp,"capitano":ecap})
-                                    st.success("Regolamento aggiornato."); st.rerun()
-                                except Exception as errore: st.error(str(errore))
+                                        "d_factor":edf,"rendimento":erend,"fair_play":efp,"capitano":ecap,
+                                        "rendimento_tipo":erend_tipo,"rendimento_fasce":erend_fasce})
+                                st.success("Regolamento aggiornato."); st.rerun()
+                            except Exception as errore: st.error(str(errore))
 
                 squadre = squadre_lega_multilega(
                     lega[
@@ -23430,7 +23527,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 1.0 &nbsp;|&nbsp; V92 Regolamento Avanzato'
+        'MULTILEGA 1.1 &nbsp;|&nbsp; V93 Modificatori Rendimento'
         '</div>',
         unsafe_allow_html=True
     )
