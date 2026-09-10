@@ -1434,6 +1434,144 @@ def migra_password_account_legacy():
 # MULTILEGA 0.7 - PROFILO UTENTE
 # ============================================================
 
+
+DEFAULT_FASCE_GOL = {
+    "1": 66.0, "2": 72.0, "3": 78.0, "4": 84.0, "5": 90.0,
+    "6": 97.0, "7": 103.0, "8": 109.0, "9": 115.0, "10": 121.0
+}
+
+TIPI_ASTA_FANTA_LIVE = [
+    "A CHIAMATA",
+    "ALFABETICO",
+    "RANDOM",
+    "DRAFT"
+]
+
+
+def inizializza_schema_regolamento_avanzato():
+    if st.session_state.get("_ml10_rules_schema_ok", False):
+        return
+    conn=_portal_raw_connection(); cur=conn.cursor()
+    try:
+        cur.execute("PRAGMA table_info(league_rules)")
+        cols={str(r[1]) for r in cur.fetchall()}
+        aggiunte=[
+            ("fasce_gol_json","TEXT"),
+            ("valore_gol_fatto","REAL NOT NULL DEFAULT 3.0"),
+            ("valore_gol_subito","REAL NOT NULL DEFAULT -1.0"),
+            ("valore_ammonizione","REAL NOT NULL DEFAULT -0.5"),
+            ("valore_espulsione","REAL NOT NULL DEFAULT -1.0"),
+            ("valore_rigore_segnato","REAL NOT NULL DEFAULT 3.0"),
+            ("valore_rigore_subito","REAL NOT NULL DEFAULT -1.0"),
+            ("numero_panchinari","INTEGER NOT NULL DEFAULT 10"),
+            ("mod_d_factor","INTEGER NOT NULL DEFAULT 0"),
+            ("mod_rendimento","INTEGER NOT NULL DEFAULT 0"),
+            ("mod_fair_play","INTEGER NOT NULL DEFAULT 0"),
+            ("mod_capitano","INTEGER NOT NULL DEFAULT 0"),
+        ]
+        for nome,tipo in aggiunte:
+            if nome not in cols:
+                cur.execute(f"ALTER TABLE league_rules ADD COLUMN {nome} {tipo}")
+        cur.execute("""UPDATE league_rules SET fasce_gol_json=?
+                       WHERE fasce_gol_json IS NULL OR TRIM(fasce_gol_json)=''""",
+                    (json.dumps(DEFAULT_FASCE_GOL),))
+        # Normalizza il vecchio tipo ALTRO senza alterare le leghe valide.
+        cur.execute("""UPDATE league_rules SET tipo_asta='A CHIAMATA'
+                       WHERE tipo_asta IS NULL OR TRIM(tipo_asta)='' OR UPPER(tipo_asta)='ALTRO'""")
+        conn.commit()
+        st.session_state["_ml10_rules_schema_ok"]=True
+    finally:
+        _portal_close(conn)
+
+
+def _fasce_gol_da_valori(valori):
+    return {str(i+1): float(v) for i,v in enumerate(valori)}
+
+
+def salva_regolamento_avanzato(league_id, valori):
+    league_id=int(league_id); uid=int(st.session_state.get("auth_user_id"))
+    conn=_portal_raw_connection(); cur=conn.cursor()
+    try:
+        cur.execute("""SELECT COUNT(*) FROM league_members
+                       WHERE league_id=? AND user_id=? AND is_admin=1 AND is_active=1""",(league_id,uid))
+        if int(cur.fetchone()[0] or 0)==0:
+            raise PermissionError("Operazione riservata all'Admin della lega.")
+        fasce=[float(x) for x in valori["fasce"]]
+        if any(round(x*2)!=x*2 for x in fasce):
+            raise ValueError("Le fasce gol devono usare incrementi di 0,5 punti.")
+        if any(fasce[i] <= fasce[i-1] for i in range(1,len(fasce))):
+            raise ValueError("Le fasce gol devono essere in ordine crescente.")
+        if int(valori["moltiplicatore"]) < 1:
+            raise ValueError("Il moltiplicatore deve essere un intero almeno pari a 1.")
+        if valori["tipo_asta"] not in TIPI_ASTA_FANTA_LIVE:
+            raise ValueError("Tipo asta non valido.")
+        if not 6 <= int(valori["numero_panchinari"]) <= 10:
+            raise ValueError("Il numero panchinari deve essere compreso tra 6 e 10.")
+        cur.execute("""UPDATE league_rules SET
+                       moltiplicatore_oltre_soglia=?, tipo_asta=?, fasce_gol_json=?,
+                       valore_gol_fatto=?, valore_gol_subito=?, valore_ammonizione=?,
+                       valore_espulsione=?, valore_rigore_segnato=?, valore_rigore_subito=?,
+                       numero_panchinari=?, mod_d_factor=?, mod_rendimento=?,
+                       mod_fair_play=?, mod_capitano=?, updated_at=CURRENT_TIMESTAMP
+                       WHERE league_id=?""",
+                    (int(valori["moltiplicatore"]),valori["tipo_asta"],
+                     json.dumps(_fasce_gol_da_valori(fasce)),
+                     float(valori["gol_fatto"]),float(valori["gol_subito"]),
+                     float(valori["ammonizione"]),float(valori["espulsione"]),
+                     float(valori["rigore_segnato"]),float(valori["rigore_subito"]),
+                     int(valori["numero_panchinari"]),int(bool(valori["d_factor"])),
+                     int(bool(valori["rendimento"])),int(bool(valori["fair_play"])),
+                     int(bool(valori["capitano"])),league_id))
+        cur.execute("""INSERT INTO audit_log
+                       (league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at)
+                       VALUES (?,?,?,'RULES_UPDATED','LEAGUE_RULES',?,?,CURRENT_TIMESTAMP)""",
+                    (league_id,uid,st.session_state.get("ml_team_id"),str(league_id),
+                     json.dumps(valori,ensure_ascii=False)))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def carica_regolamento_avanzato(league_id):
+    conn=_portal_raw_connection(); cur=conn.cursor()
+    try:
+        cur.execute("""SELECT moltiplicatore_oltre_soglia,tipo_asta,fasce_gol_json,
+                       valore_gol_fatto,valore_gol_subito,valore_ammonizione,valore_espulsione,
+                       valore_rigore_segnato,valore_rigore_subito,numero_panchinari,
+                       mod_d_factor,mod_rendimento,mod_fair_play,mod_capitano
+                       FROM league_rules WHERE league_id=? LIMIT 1""",(int(league_id),))
+        r=cur.fetchone()
+        if not r: return None
+        try: fasce=json.loads(r[2] or "{}")
+        except Exception: fasce=DEFAULT_FASCE_GOL
+        return {"moltiplicatore":max(1,int(float(r[0] or 1))),"tipo_asta":str(r[1] or "A CHIAMATA"),
+                "fasce":[float(fasce.get(str(i),DEFAULT_FASCE_GOL[str(i)])) for i in range(1,11)],
+                "gol_fatto":float(r[3] if r[3] is not None else 3),"gol_subito":float(r[4] if r[4] is not None else -1),
+                "ammonizione":float(r[5] if r[5] is not None else -.5),"espulsione":float(r[6] if r[6] is not None else -1),
+                "rigore_segnato":float(r[7] if r[7] is not None else 3),"rigore_subito":float(r[8] if r[8] is not None else -1),
+                "numero_panchinari":int(r[9] or 10),"d_factor":bool(r[10]),"rendimento":bool(r[11]),
+                "fair_play":bool(r[12]),"capitano":bool(r[13])}
+    finally: _portal_close(conn)
+
+
+def render_help_modificatori():
+    with st.expander("ℹ️ Come funzionano i modificatori"):
+        st.markdown("""
+**D-Factor** — premia le buone prestazioni del pacchetto difensivo tramite la media voto dei giocatori eleggibili. Nel Mantra considera normalmente cinque uomini difensivi; esiste anche la configurazione 5+1 con portiere.
+
+**Fattore Rendimento** — premia o penalizza il rendimento complessivo della squadra, valorizzando anche i calciatori che ottengono buoni voti senza bonus. Richiede 11 giocatori a voto.
+
+**Fattore Fair Play** — premia una squadra che conclude la partita senza cartellini. Richiede 11 giocatori a voto.
+
+**Fattore Capitano** — consente di indicare capitano e vice e applicare un bonus/malus in funzione del voto del capitano.
+
+Nota: secondo il regolamento Fantacalcio, **D-Factor e Fattore Rendimento sono alternativi** e non possono essere utilizzati contemporaneamente.
+        """)
+
 def inizializza_schema_profilo_utente():
     if st.session_state.get("_ml07_profile_schema_ok", False):
         return
@@ -1799,23 +1937,56 @@ def render_portale_iniziale():
 
                 moltiplicatore = st.number_input(
                     "Moltiplicatore oltre soglia",
-                    min_value=1.0,
-                    value=3.0,
-                    step=0.5
+                    min_value=1,
+                    value=1,
+                    step=1,
+                    format="%d"
                 )
 
                 tipo_asta = st.selectbox(
                     "Tipo asta",
-                    [
-                        "CHIAMATA",
-                        "ALTRO"
-                    ]
+                    TIPI_ASTA_FANTA_LIVE
                 )
 
                 fonte = st.text_input(
                     "Fonte listone",
                     value="Fantacalcio.it"
                 )
+
+            st.markdown("#### Calcolo punteggi")
+            st.caption("Soglia minima per ciascun gol · modificabile a scatti di 0,5 punti.")
+            fasce_creazione=[]
+            fc1,fc2,fc3,fc4,fc5=st.columns(5)
+            for idx,(col,default) in enumerate(zip(
+                [fc1,fc2,fc3,fc4,fc5],[66.0,72.0,78.0,84.0,90.0]),start=1):
+                with col:
+                    fasce_creazione.append(st.number_input(f"{idx} gol",value=default,step=0.5,format="%.1f",key=f"ml10_new_goal_{idx}"))
+            fc6,fc7,fc8,fc9,fc10=st.columns(5)
+            for idx,(col,default) in enumerate(zip(
+                [fc6,fc7,fc8,fc9,fc10],[97.0,103.0,109.0,115.0,121.0]),start=6):
+                with col:
+                    fasce_creazione.append(st.number_input(f"{idx} gol",value=default,step=0.5,format="%.1f",key=f"ml10_new_goal_{idx}"))
+
+            st.markdown("#### Bonus / Malus")
+            bm1,bm2,bm3=st.columns(3)
+            with bm1:
+                gol_fatto=st.number_input("GOL FATTO",value=3.0,step=0.5,format="%.2f")
+                gol_subito=st.number_input("GOL SUBITO",value=-1.0,step=0.5,format="%.2f")
+            with bm2:
+                ammonizione=st.number_input("AMMONIZIONE",value=-0.5,step=0.5,format="%.2f")
+                espulsione=st.number_input("ESPULSIONE",value=-1.0,step=0.5,format="%.2f")
+            with bm3:
+                rigore_segnato=st.number_input("RIGORE SEGNATO",value=3.0,step=0.5,format="%.2f")
+                rigore_subito=st.number_input("RIGORE SUBITO",value=-1.0,step=0.5,format="%.2f")
+
+            numero_panchinari=st.selectbox("Numero panchinari",list(range(6,11)),index=4)
+            st.markdown("#### Modificatori")
+            mo1,mo2,mo3,mo4=st.columns(4)
+            with mo1: d_factor=st.toggle("D-Factor",value=False)
+            with mo2: rendimento=st.toggle("Fattore Rendimento",value=False)
+            with mo3: fair_play=st.toggle("Fattore Fair Play",value=False)
+            with mo4: capitano=st.toggle("Fattore Capitano",value=False)
+            render_help_modificatori()
 
             st.markdown(
                 "#### 2 · Squadre, password e ruoli"
@@ -1924,6 +2095,11 @@ def render_portale_iniziale():
                         "la rosa massima."
                     )
 
+                if d_factor and rendimento:
+                    raise ValueError(
+                        "D-Factor e Fattore Rendimento sono alternativi: attivane uno solo."
+                    )
+
                 league_id = crea_lega_da_portale(
                     {
                         "nome":
@@ -1985,6 +2161,26 @@ def render_portale_iniziale():
                     squadre
                 )
 
+                salva_regolamento_avanzato(
+                    league_id,
+                    {
+                        "moltiplicatore": int(moltiplicatore),
+                        "tipo_asta": tipo_asta,
+                        "fasce": fasce_creazione,
+                        "gol_fatto": gol_fatto,
+                        "gol_subito": gol_subito,
+                        "ammonizione": ammonizione,
+                        "espulsione": espulsione,
+                        "rigore_segnato": rigore_segnato,
+                        "rigore_subito": rigore_subito,
+                        "numero_panchinari": numero_panchinari,
+                        "d_factor": d_factor,
+                        "rendimento": rendimento,
+                        "fair_play": fair_play,
+                        "capitano": capitano
+                    }
+                )
+
                 st.success(
                     f"Lega creata correttamente (ID {league_id}). "
                     "Ora ogni squadra può accedere dalla scheda ACCEDI "
@@ -2002,6 +2198,7 @@ def render_portale_iniziale():
 
 inizializza_portale_auth()
 inizializza_schema_profilo_utente()
+inizializza_schema_regolamento_avanzato()
 
 try:
 
@@ -11644,7 +11841,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "0.8"
+MULTILEGA_SCHEMA_VERSION = "1.0"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -13344,6 +13541,138 @@ def rinomina_squadra_multilega(
 
 
 
+
+def aggiungi_squadra_multilega(league_id, username, password, is_admin=False, is_auctioneer=False):
+    league_id=int(league_id)
+    username=str(username).strip()
+    password=str(password)
+    if not username:
+        raise ValueError("Inserisci il nome squadra / username.")
+    if len(password)<8:
+        raise ValueError("La password iniziale deve contenere almeno 8 caratteri.")
+
+    user_admin=int(st.session_state.get("auth_user_id"))
+    conn=_portal_raw_connection(); cur=conn.cursor()
+    try:
+        cur.execute("""SELECT COUNT(*) FROM league_members
+                       WHERE league_id=? AND user_id=? AND is_admin=1 AND is_active=1""",
+                    (league_id,user_admin))
+        if int(cur.fetchone()[0] or 0)==0:
+            raise PermissionError("Operazione riservata all'Admin della lega.")
+
+        cur.execute("SELECT id FROM users WHERE LOWER(username)=LOWER(?) LIMIT 1",(username,))
+        if cur.fetchone():
+            raise ValueError("Questo username è già utilizzato. Usa un nome squadra diverso.")
+
+        cur.execute("SELECT COALESCE(MAX(posizione),0)+1 FROM teams WHERE league_id=?",(league_id,))
+        posizione=int(cur.fetchone()[0] or 1)
+
+        cur.execute("""INSERT INTO users
+                       (username,password_hash,is_active,created_at,updated_at)
+                       VALUES (?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)""",
+                    (username,password_hash_sicuro(password)))
+        new_user_id=int(cur.lastrowid)
+
+        cur.execute("""INSERT INTO teams
+                       (league_id,nome,owner_user_id,posizione,is_active,created_at,updated_at)
+                       VALUES (?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)""",
+                    (league_id,username,new_user_id,posizione))
+        team_id=int(cur.lastrowid)
+
+        cur.execute("""INSERT INTO league_members
+                       (league_id,user_id,team_id,is_admin,is_auctioneer,is_team_member,is_active,joined_at)
+                       VALUES (?,?,?,?,?,1,1,CURRENT_TIMESTAMP)""",
+                    (league_id,new_user_id,team_id,1 if is_admin else 0,1 if is_auctioneer else 0))
+
+        # Mantiene il numero partecipanti coerente con le squadre attive.
+        cur.execute("""UPDATE league_rules
+                       SET partecipanti=(SELECT COUNT(*) FROM teams
+                                         WHERE league_id=? AND is_active=1),
+                           updated_at=CURRENT_TIMESTAMP
+                       WHERE league_id=?""",(league_id,league_id))
+
+        cur.execute("""INSERT INTO audit_log
+                       (league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at)
+                       VALUES (?,?,?,'TEAM_ADDED','TEAM',?,?,CURRENT_TIMESTAMP)""",
+                    (league_id,user_admin,team_id,str(team_id),
+                     json.dumps({"username":username,"admin":bool(is_admin),
+                                 "auctioneer":bool(is_auctioneer)},ensure_ascii=False)))
+        conn.commit()
+        return team_id
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def rimuovi_squadra_multilega(league_id, team_id):
+    league_id=int(league_id); team_id=int(team_id)
+    user_admin=int(st.session_state.get("auth_user_id"))
+    conn=_portal_raw_connection(); cur=conn.cursor()
+    try:
+        cur.execute("""SELECT COUNT(*) FROM league_members
+                       WHERE league_id=? AND user_id=? AND is_admin=1 AND is_active=1""",
+                    (league_id,user_admin))
+        if int(cur.fetchone()[0] or 0)==0:
+            raise PermissionError("Operazione riservata all'Admin della lega.")
+
+        cur.execute("""SELECT nome,owner_user_id FROM teams
+                       WHERE id=? AND league_id=? AND is_active=1 LIMIT 1""",(team_id,league_id))
+        r=cur.fetchone()
+        if not r: raise ValueError("Squadra non trovata.")
+        nome=str(r[0] or "")
+        owner_user_id=int(r[1]) if r[1] is not None else None
+
+        # Impedisce di lasciare la lega senza alcun Admin.
+        if owner_user_id is not None:
+            cur.execute("""SELECT is_admin FROM league_members
+                           WHERE league_id=? AND team_id=? AND user_id=? AND is_active=1 LIMIT 1""",
+                        (league_id,team_id,owner_user_id))
+            m=cur.fetchone()
+            if m and int(m[0] or 0)==1:
+                cur.execute("""SELECT COUNT(DISTINCT user_id) FROM league_members
+                               WHERE league_id=? AND is_admin=1 AND is_active=1
+                                 AND user_id<>?""",(league_id,owner_user_id))
+                if int(cur.fetchone()[0] or 0)==0:
+                    raise ValueError("Non puoi rimuovere l'unico Admin della lega. Assegna prima il ruolo Admin a un'altra squadra.")
+
+        # Pulisce dati team-scoped presenti nello schema.
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        presenti={str(x[0]) for x in cur.fetchall()}
+        for tabella in ["bids","assignments","player_evaluations","iqr_profiles","rosters","team_budgets"]:
+            if tabella not in presenti: continue
+            cur.execute(f"PRAGMA table_info({tabella})")
+            cols={str(x[1]) for x in cur.fetchall()}
+            if "league_id" in cols and "team_id" in cols:
+                cur.execute(f"DELETE FROM {tabella} WHERE league_id=? AND team_id=?",(league_id,team_id))
+
+        cur.execute("DELETE FROM league_members WHERE league_id=? AND team_id=?",(league_id,team_id))
+        cur.execute("DELETE FROM teams WHERE league_id=? AND id=?",(league_id,team_id))
+
+        cur.execute("""UPDATE league_rules
+                       SET partecipanti=(SELECT COUNT(*) FROM teams
+                                         WHERE league_id=? AND is_active=1),
+                           updated_at=CURRENT_TIMESTAMP
+                       WHERE league_id=?""",(league_id,league_id))
+
+        cur.execute("""INSERT INTO audit_log
+                       (league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at)
+                       VALUES (?,?,NULL,'TEAM_REMOVED','TEAM',?,?,CURRENT_TIMESTAMP)""",
+                    (league_id,user_admin,str(team_id),
+                     json.dumps({"nome":nome},ensure_ascii=False)))
+        conn.commit()
+        return nome
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+
 def elimina_lega_multilega(
     league_id
 ):
@@ -13610,18 +13939,16 @@ def render_admin_multilega():
 
                 moltiplicatore = st.number_input(
                     "Moltiplicatore oltre soglia",
-                    min_value=1.0,
-                    max_value=10.0,
-                    value=3.0,
-                    step=0.5
+                    min_value=1,
+                    max_value=10,
+                    value=1,
+                    step=1,
+                    format="%d"
                 )
 
                 tipo_asta = st.selectbox(
                     "Tipologia asta",
-                    [
-                        "CHIAMATA",
-                        "ALTRO"
-                    ],
+                    TIPI_ASTA_FANTA_LIVE,
                     index=0
                 )
 
@@ -13710,6 +14037,9 @@ def render_admin_multilega():
         )
 
     with tab_esistenti:
+
+        if "ml09_team_message" in st.session_state:
+            st.success(st.session_state.pop("ml09_team_message"))
 
         if "ml08_lega_eliminata" in st.session_state:
 
@@ -13807,6 +14137,72 @@ def render_admin_multilega():
                     f"Oltre soglia ×{lega['moltiplicatore']}"
                 )
 
+                reg_adv=carica_regolamento_avanzato(lega["league_id"])
+                if reg_adv:
+                    with st.expander("📝 Modifica regolamento e punteggi", expanded=False):
+                        with st.form("ml10_rules_"+str(lega["league_id"])):
+                            er1,er2,er3=st.columns(3)
+                            with er1:
+                                edit_mult=st.number_input("Moltiplicatore oltre soglia",min_value=1,
+                                    value=int(reg_adv["moltiplicatore"]),step=1,format="%d",
+                                    key="ml10_mult_"+str(lega["league_id"]))
+                            with er2:
+                                tipo_corrente=reg_adv["tipo_asta"] if reg_adv["tipo_asta"] in TIPI_ASTA_FANTA_LIVE else "A CHIAMATA"
+                                edit_asta=st.selectbox("Tipo asta",TIPI_ASTA_FANTA_LIVE,
+                                    index=TIPI_ASTA_FANTA_LIVE.index(tipo_corrente),
+                                    key="ml10_asta_"+str(lega["league_id"]))
+                            with er3:
+                                edit_panchina=st.selectbox("Numero panchinari",list(range(6,11)),
+                                    index=max(0,min(4,int(reg_adv["numero_panchinari"])-6)),
+                                    key="ml10_panch_"+str(lega["league_id"]))
+
+                            st.markdown("**Calcolo punteggi · fasce gol**")
+                            edit_fasce=[]
+                            cols=st.columns(5)
+                            for idx in range(5):
+                                with cols[idx]:
+                                    edit_fasce.append(st.number_input(f"{idx+1} gol",value=reg_adv["fasce"][idx],
+                                        step=0.5,format="%.1f",key=f"ml10_f_{lega['league_id']}_{idx+1}"))
+                            cols=st.columns(5)
+                            for j in range(5):
+                                idx=j+5
+                                with cols[j]:
+                                    edit_fasce.append(st.number_input(f"{idx+1} gol",value=reg_adv["fasce"][idx],
+                                        step=0.5,format="%.1f",key=f"ml10_f_{lega['league_id']}_{idx+1}"))
+
+                            st.markdown("**Bonus / Malus**")
+                            eb1,eb2,eb3=st.columns(3)
+                            with eb1:
+                                egf=st.number_input("GOL FATTO",value=reg_adv["gol_fatto"],step=0.5,format="%.2f",key="ml10_gf_"+str(lega["league_id"]))
+                                egs=st.number_input("GOL SUBITO",value=reg_adv["gol_subito"],step=0.5,format="%.2f",key="ml10_gs_"+str(lega["league_id"]))
+                            with eb2:
+                                eam=st.number_input("AMMONIZIONE",value=reg_adv["ammonizione"],step=0.5,format="%.2f",key="ml10_am_"+str(lega["league_id"]))
+                                eesp=st.number_input("ESPULSIONE",value=reg_adv["espulsione"],step=0.5,format="%.2f",key="ml10_es_"+str(lega["league_id"]))
+                            with eb3:
+                                ers=st.number_input("RIGORE SEGNATO",value=reg_adv["rigore_segnato"],step=0.5,format="%.2f",key="ml10_rs_"+str(lega["league_id"]))
+                                ersub=st.number_input("RIGORE SUBITO",value=reg_adv["rigore_subito"],step=0.5,format="%.2f",key="ml10_rsub_"+str(lega["league_id"]))
+
+                            st.markdown("**Modificatori**")
+                            em1,em2,em3,em4=st.columns(4)
+                            with em1: edf=st.toggle("D-Factor",value=reg_adv["d_factor"],key="ml10_df_"+str(lega["league_id"]))
+                            with em2: erend=st.toggle("Fattore Rendimento",value=reg_adv["rendimento"],key="ml10_rend_"+str(lega["league_id"]))
+                            with em3: efp=st.toggle("Fattore Fair Play",value=reg_adv["fair_play"],key="ml10_fp_"+str(lega["league_id"]))
+                            with em4: ecap=st.toggle("Fattore Capitano",value=reg_adv["capitano"],key="ml10_cap_"+str(lega["league_id"]))
+                            render_help_modificatori()
+                            save_rules=st.form_submit_button("SALVA REGOLAMENTO",type="primary",use_container_width=True)
+                        if save_rules:
+                            if edf and erend:
+                                st.error("D-Factor e Fattore Rendimento sono alternativi: attivane uno solo.")
+                            else:
+                                try:
+                                    salva_regolamento_avanzato(lega["league_id"],{
+                                        "moltiplicatore":edit_mult,"tipo_asta":edit_asta,"fasce":edit_fasce,
+                                        "gol_fatto":egf,"gol_subito":egs,"ammonizione":eam,"espulsione":eesp,
+                                        "rigore_segnato":ers,"rigore_subito":ersub,"numero_panchinari":edit_panchina,
+                                        "d_factor":edf,"rendimento":erend,"fair_play":efp,"capitano":ecap})
+                                    st.success("Regolamento aggiornato."); st.rerun()
+                                except Exception as errore: st.error(str(errore))
+
                 squadre = squadre_lega_multilega(
                     lega[
                         "league_id"
@@ -13889,6 +14285,60 @@ def render_admin_multilega():
                                         errore
                                     )
                                 )
+
+                st.markdown("---")
+                st.markdown("#### ➕ Aggiungi squadra")
+                st.caption("Crea una nuova squadra con credenziali di primo accesso e, se necessario, assegna anche i ruoli Banditore o Admin.")
+
+                with st.form("ml09_add_team_"+str(lega["league_id"])):
+                    a1,a2=st.columns(2)
+                    with a1:
+                        add_username=st.text_input("Nome squadra / Username",key="ml09_user_"+str(lega["league_id"]))
+                        add_password=st.text_input("Password iniziale",type="password",key="ml09_pass_"+str(lega["league_id"]))
+                    with a2:
+                        add_banditore=st.checkbox("Anche Banditore",key="ml09_band_"+str(lega["league_id"]))
+                        add_admin=st.checkbox("Anche Admin",key="ml09_admin_"+str(lega["league_id"]))
+                    add_submit=st.form_submit_button("➕ AGGIUNGI SQUADRA",type="primary",use_container_width=True)
+
+                if add_submit:
+                    try:
+                        aggiungi_squadra_multilega(
+                            lega["league_id"],add_username,add_password,
+                            is_admin=add_admin,is_auctioneer=add_banditore)
+                        st.session_state["ml09_team_message"]="Squadra «"+str(add_username).strip()+"» aggiunta correttamente."
+                        st.session_state.pop("ml_accesso_validato",None)
+                        st.rerun()
+                    except Exception as errore:
+                        st.error(str(errore))
+
+                st.markdown("---")
+                st.markdown("#### ➖ Rimuovi squadra")
+                st.caption("La rimozione cancella la squadra dalla lega e i suoi dati collegati. L'account utente globale viene conservato.")
+
+                if len(squadre) <= 1:
+                    st.info("Non puoi rimuovere l'ultima squadra della lega.")
+                else:
+                    opzioni={s["nome"]:s["team_id"] for s in squadre}
+                    team_da_rimuovere=st.selectbox(
+                        "Squadra da rimuovere",
+                        list(opzioni.keys()),
+                        key="ml09_remove_select_"+str(lega["league_id"]))
+                    conferma_remove=st.checkbox(
+                        "Confermo la rimozione definitiva della squadra selezionata",
+                        key="ml09_remove_check_"+str(lega["league_id"]))
+                    if st.button(
+                        "➖ RIMUOVI SQUADRA",
+                        disabled=not conferma_remove,
+                        use_container_width=True,
+                        key="ml09_remove_btn_"+str(lega["league_id"])):
+                        try:
+                            nome_rimosso=rimuovi_squadra_multilega(
+                                lega["league_id"],opzioni[team_da_rimuovere])
+                            st.session_state["ml09_team_message"]="Squadra «"+nome_rimosso+"» rimossa dalla lega."
+                            st.session_state.pop("ml_accesso_validato",None)
+                            st.rerun()
+                        except Exception as errore:
+                            st.error(str(errore))
 
                 st.markdown(
                     "---"
@@ -22980,7 +23430,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 0.8 &nbsp;|&nbsp; V90 Eliminazione Lega'
+        'MULTILEGA 1.0 &nbsp;|&nbsp; V92 Regolamento Avanzato'
         '</div>',
         unsafe_allow_html=True
     )
