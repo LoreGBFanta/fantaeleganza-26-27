@@ -2531,8 +2531,13 @@ def inizializza_workspace_team_multilega():
                     'DISPONIBILE',
                     NULL,
                     CURRENT_TIMESTAMP
-                FROM giocatori
+                FROM league_player_catalog
+                WHERE league_id = ?
                 """
+                ,
+                (
+                    league_id,
+                )
             )
 
         # Budget iniziale della specifica lega.
@@ -12203,7 +12208,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "2.8"
+MULTILEGA_SCHEMA_VERSION = "2.9"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -12345,6 +12350,34 @@ def inizializza_database_multilega():
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(league_id, team_id, player_id)
             )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS league_player_catalog (
+                league_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                ruolo_classico TEXT,
+                ruolo_mantra TEXT,
+                nome TEXT NOT NULL,
+                squadra TEXT,
+                quotazione_attuale REAL,
+                quotazione_iniziale REAL,
+                differenza REAL,
+                quotazione_attuale_mantra REAL,
+                quotazione_iniziale_mantra REAL,
+                differenza_mantra REAL,
+                fvm REAL,
+                fvm_mantra REAL,
+                uploaded_by_user_id INTEGER,
+                uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (league_id, player_id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS ix_league_player_catalog_nome
+            ON league_player_catalog(league_id, nome)
         """)
 
         cur.execute("""
@@ -14549,6 +14582,7 @@ def elimina_lega_multilega(
             "iqr_profiles",
             "rosters",
             "team_budgets",
+            "league_player_catalog",
             "league_players",
             "league_members",
             "teams",
@@ -14631,6 +14665,67 @@ def render_admin_multilega():
         "MULTILEGA 0.5 · La creazione di nuove leghe è stata spostata "
         "nel portale iniziale. Qui l'Admin gestisce le leghe esistenti."
     )
+
+
+    # ========================================================
+    # V110 · LISTONE CENTRALIZZATO DI LEGA
+    # ========================================================
+    _league_admin_listone = st.session_state.get("ml_league_id")
+
+    if _league_admin_listone is not None:
+        with st.expander(
+            "☷ LISTONE DI LEGA · CARICAMENTO ADMIN",
+            expanded=False
+        ):
+            st.caption(
+                "Il listone viene caricato una sola volta dall'Admin ed è "
+                "condiviso automaticamente con tutte le squadre della lega. "
+                "La sezione LISTONE dei team è solo consultiva."
+            )
+
+            _file_listone_admin = st.file_uploader(
+                "Carica il listone Fantacalcio.it",
+                type=["xlsx","xlsm"],
+                key=f"admin_listone_upload_{int(_league_admin_listone)}"
+            )
+
+            if _file_listone_admin is not None:
+                if st.button(
+                    "☁️ CARICA / AGGIORNA LISTONE DI LEGA",
+                    type="primary",
+                    use_container_width=True,
+                    key=f"admin_listone_commit_{int(_league_admin_listone)}"
+                ):
+                    try:
+                        _df_admin_listone = parse_file_listone_fantacalcio(
+                            _file_listone_admin.getvalue()
+                        )
+                        _esito_listone = importa_listone_lega_da_admin(
+                            int(_league_admin_listone),
+                            _df_admin_listone
+                        )
+                        st.success(
+                            "✅ Listone di lega aggiornato. "
+                            f"Totale: {_esito_listone['totale']} · "
+                            f"Nuovi: {_esito_listone['nuovi']} · "
+                            f"Aggiornati: {_esito_listone['aggiornati']}."
+                        )
+                    except Exception as errore:
+                        st.error("Errore caricamento listone: " + str(errore))
+
+            try:
+                _df_catalogo_admin = carica_listone_centrale_lega(
+                    int(_league_admin_listone)
+                )
+                if _df_catalogo_admin.empty:
+                    st.info("Nessun listone ancora caricato per questa lega.")
+                else:
+                    st.caption(
+                        f"Giocatori attualmente nel listone condiviso: "
+                        f"{len(_df_catalogo_admin)}"
+                    )
+            except Exception as errore:
+                st.warning("Impossibile leggere il listone di lega: " + str(errore))
 
     tab_nuova, tab_esistenti = st.tabs(
         [
@@ -15496,6 +15591,367 @@ def render_admin_multilega():
 # ============================================================
 # IMPORT LISTONE
 # ============================================================
+
+
+def importa_listone_lega_da_admin(league_id, df):
+    """
+    V110 - Il listone è di proprietà della LEGA, non del singolo profilo.
+
+    Solo ADMIN può caricarlo/aggiornarlo. Tutti i team della stessa lega
+    leggono lo stesso catalogo centrale.
+    """
+    league_id = int(league_id)
+    user_id = int(st.session_state.get("auth_user_id") or 0)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    def _clean(v):
+        if v is None:
+            return None
+        try:
+            if pd.isna(v):
+                return None
+        except Exception:
+            pass
+        return v
+
+    def _num(v):
+        v = _clean(v)
+        if v is None or v == "":
+            return None
+        try:
+            return float(v)
+        except Exception:
+            return None
+
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=? AND user_id=? AND is_active=1 AND is_admin=1
+        """, (league_id, user_id))
+        if int(cur.fetchone()[0] or 0) == 0:
+            raise PermissionError("Solo l'Admin della lega può caricare il listone.")
+
+        obbligatorie = {"Id","R","RM","Nome","Squadra"}
+        mancanti = obbligatorie - set(str(c).strip() for c in df.columns)
+        if mancanti:
+            raise ValueError(
+                "Formato listone non valido. Colonne mancanti: "
+                + ", ".join(sorted(mancanti))
+            )
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS league_player_catalog (
+                league_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                ruolo_classico TEXT,
+                ruolo_mantra TEXT,
+                nome TEXT NOT NULL,
+                squadra TEXT,
+                quotazione_attuale REAL,
+                quotazione_iniziale REAL,
+                differenza REAL,
+                quotazione_attuale_mantra REAL,
+                quotazione_iniziale_mantra REAL,
+                differenza_mantra REAL,
+                fvm REAL,
+                fvm_mantra REAL,
+                uploaded_by_user_id INTEGER,
+                uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (league_id, player_id)
+            )
+        """)
+
+        cur.execute("""
+            SELECT player_id
+            FROM league_player_catalog
+            WHERE league_id=?
+        """, (league_id,))
+        esistenti = {int(r[0]) for r in (cur.fetchall() or [])}
+
+        righe = []
+        ids_importati = set()
+
+        for _, row in df.iterrows():
+            try:
+                player_id = int(row.get("Id"))
+            except Exception:
+                continue
+
+            nome = str(row.get("Nome","") or "").strip()
+            if not nome:
+                continue
+
+            ids_importati.add(player_id)
+            righe.append((
+                league_id,
+                player_id,
+                str(row.get("R","") or "").strip(),
+                str(row.get("RM","") or "").strip(),
+                nome,
+                str(row.get("Squadra","") or "").strip(),
+                _num(row.get("Qt.A")),
+                _num(row.get("Qt.I")),
+                _num(row.get("Diff.")),
+                _num(row.get("Qt.A M")),
+                _num(row.get("Qt.I M")),
+                _num(row.get("Diff.M")),
+                _num(row.get("FVM")),
+                _num(row.get("FVM M")),
+                user_id
+            ))
+
+        if not righe:
+            raise ValueError("Il file non contiene giocatori validi.")
+
+        # Upsert a blocchi.
+        DIM = 50
+        for i in range(0, len(righe), DIM):
+            blocco = righe[i:i+DIM]
+            ph_riga = "(" + ",".join(["?"]*15) + ")"
+            ph = ",".join([ph_riga]*len(blocco))
+            params = []
+            for r in blocco:
+                params.extend(r)
+
+            cur.execute(f"""
+                INSERT INTO league_player_catalog (
+                    league_id,player_id,ruolo_classico,ruolo_mantra,nome,squadra,
+                    quotazione_attuale,quotazione_iniziale,differenza,
+                    quotazione_attuale_mantra,quotazione_iniziale_mantra,
+                    differenza_mantra,fvm,fvm_mantra,uploaded_by_user_id
+                )
+                VALUES {ph}
+                ON CONFLICT(league_id,player_id)
+                DO UPDATE SET
+                    ruolo_classico=excluded.ruolo_classico,
+                    ruolo_mantra=excluded.ruolo_mantra,
+                    nome=excluded.nome,
+                    squadra=excluded.squadra,
+                    quotazione_attuale=excluded.quotazione_attuale,
+                    quotazione_iniziale=excluded.quotazione_iniziale,
+                    differenza=excluded.differenza,
+                    quotazione_attuale_mantra=excluded.quotazione_attuale_mantra,
+                    quotazione_iniziale_mantra=excluded.quotazione_iniziale_mantra,
+                    differenza_mantra=excluded.differenza_mantra,
+                    fvm=excluded.fvm,
+                    fvm_mantra=excluded.fvm_mantra,
+                    uploaded_by_user_id=excluded.uploaded_by_user_id,
+                    updated_at=CURRENT_TIMESTAMP
+            """, tuple(params))
+
+        # Inserisce i nuovi giocatori anche nello stato operativo della lega.
+        cur.execute("""
+            INSERT INTO league_players (
+                league_id,player_id,stato,assigned_team_id,
+                prezzo_assegnazione,updated_at
+            )
+            SELECT
+                c.league_id,c.player_id,'DISPONIBILE',NULL,NULL,CURRENT_TIMESTAMP
+            FROM league_player_catalog c
+            WHERE c.league_id=?
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM league_players lp
+                  WHERE lp.league_id=c.league_id
+                    AND lp.player_id=c.player_id
+              )
+        """, (league_id,))
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,azione,entita,entita_id,
+                dettagli_json,created_at
+            )
+            VALUES (?,?,'LEAGUE_LIST_UPLOAD','LEAGUE',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            user_id,
+            str(league_id),
+            json.dumps({
+                "righe": len(righe),
+                "nuovi": len(ids_importati - esistenti),
+                "aggiornati": len(ids_importati & esistenti),
+            }, ensure_ascii=False)
+        ))
+
+        conn.commit()
+
+        # Sincronizza subito tutti i workspace team già creati.
+        cur.execute("""
+            SELECT id
+            FROM teams
+            WHERE league_id=? AND is_active=1
+            ORDER BY id
+        """, (league_id,))
+        team_ids = [int(r[0]) for r in (cur.fetchall() or [])]
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+    for team_id in team_ids:
+        try:
+            sincronizza_listone_lega_nel_workspace(league_id, team_id)
+        except Exception:
+            pass
+
+    invalida_cache_dati()
+
+    return {
+        "totale": len(righe),
+        "nuovi": len(ids_importati - esistenti),
+        "aggiornati": len(ids_importati & esistenti),
+    }
+
+
+def carica_listone_centrale_lega(league_id):
+    league_id = int(league_id)
+    conn = _portal_raw_connection()
+    try:
+        df = pd.read_sql_query("""
+            SELECT
+                c.player_id AS Id,
+                c.ruolo_classico AS R,
+                c.ruolo_mantra AS RM,
+                c.nome AS Nome,
+                c.squadra AS Squadra,
+                c.quotazione_attuale AS "Qt.A",
+                c.quotazione_iniziale AS "Qt.I",
+                c.differenza AS "Diff.",
+                c.quotazione_attuale_mantra AS "Qt.A M",
+                c.quotazione_iniziale_mantra AS "Qt.I M",
+                c.differenza_mantra AS "Diff.M",
+                c.fvm AS FVM,
+                c.fvm_mantra AS "FVM M",
+                COALESCE(lp.stato,'DISPONIBILE') AS Stato,
+                lp.prezzo_assegnazione AS Prezzo
+            FROM league_player_catalog c
+            LEFT JOIN league_players lp
+              ON lp.league_id=c.league_id
+             AND lp.player_id=c.player_id
+            WHERE c.league_id=?
+            ORDER BY c.nome
+        """, conn, params=(league_id,))
+        return df
+    finally:
+        _portal_close(conn)
+
+
+def sincronizza_listone_lega_nel_workspace(league_id, team_id):
+    """
+    Copia/aggiorna il catalogo centrale della lega nel workspace locale del team.
+    Non sovrascrive gli stati MIO/prezzi della rosa; quelli vengono riallineati
+    separatamente da rosters.
+    """
+    league_id = int(league_id)
+    team_id = int(team_id)
+    tab = "giocatori_ml_l" + str(league_id) + "_t" + str(team_id)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name=? LIMIT 1
+        """, (tab,))
+        if not cur.fetchone():
+            return False
+
+        cur.execute("""
+            SELECT
+                player_id,ruolo_classico,ruolo_mantra,nome,squadra,
+                quotazione_attuale,quotazione_iniziale,differenza,
+                quotazione_attuale_mantra,quotazione_iniziale_mantra,
+                differenza_mantra,fvm,fvm_mantra
+            FROM league_player_catalog
+            WHERE league_id=?
+        """, (league_id,))
+        righe = cur.fetchall() or []
+
+        for r in righe:
+            cur.execute(
+                f"""
+                INSERT INTO {tab} (
+                    id,ruolo_classico,ruolo_mantra,nome,squadra,
+                    quotazione_attuale,quotazione_iniziale,differenza,
+                    quotazione_attuale_mantra,quotazione_iniziale_mantra,
+                    differenza_mantra,fvm,fvm_mantra,stato,
+                    prezzo_acquisto,ultimo_aggiornamento
+                )
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'DISPONIBILE',NULL,CURRENT_TIMESTAMP)
+                ON CONFLICT(id) DO UPDATE SET
+                    ruolo_classico=excluded.ruolo_classico,
+                    ruolo_mantra=excluded.ruolo_mantra,
+                    nome=excluded.nome,
+                    squadra=excluded.squadra,
+                    quotazione_attuale=excluded.quotazione_attuale,
+                    quotazione_iniziale=excluded.quotazione_iniziale,
+                    differenza=excluded.differenza,
+                    quotazione_attuale_mantra=excluded.quotazione_attuale_mantra,
+                    quotazione_iniziale_mantra=excluded.quotazione_iniziale_mantra,
+                    differenza_mantra=excluded.differenza_mantra,
+                    fvm=excluded.fvm,
+                    fvm_mantra=excluded.fvm_mantra,
+                    ultimo_aggiornamento=CURRENT_TIMESTAMP
+                """,
+                tuple(r)
+            )
+
+        conn.commit()
+        return True
+    finally:
+        _portal_close(conn)
+
+
+def parse_file_listone_fantacalcio(contenuto):
+    excel = pd.ExcelFile(
+        io.BytesIO(contenuto),
+        engine="openpyxl"
+    )
+
+    foglio_tutti = None
+    for nome_foglio in excel.sheet_names:
+        if str(nome_foglio).strip().upper() == "TUTTI":
+            foglio_tutti = nome_foglio
+            break
+
+    if foglio_tutti is None:
+        raise ValueError("Non trovo il foglio Tutti.")
+
+    df_excel = pd.read_excel(
+        io.BytesIO(contenuto),
+        sheet_name=foglio_tutti,
+        engine="openpyxl",
+        header=1
+    )
+
+    df_excel = (
+        df_excel
+        .dropna(axis=1, how="all")
+        .dropna(axis=0, how="all")
+    )
+    df_excel.columns = [str(c).strip() for c in df_excel.columns]
+
+    obbligatorie = {"Id","R","RM","Nome","Squadra"}
+    mancanti = obbligatorie - set(df_excel.columns)
+    if mancanti:
+        raise ValueError(
+            "Formato non valido. Colonne mancanti: "
+            + ", ".join(sorted(mancanti))
+        )
+
+    return df_excel
+
+
 
 def importa_listone_nel_database(df):
 
@@ -24508,7 +24964,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 2.8 &nbsp;|&nbsp; V109 Chiamata e Draft Team'
+        'MULTILEGA 2.9 &nbsp;|&nbsp; V110 Listone Centralizzato Admin'
         '</div>',
         unsafe_allow_html=True
     )
@@ -24880,15 +25336,16 @@ def inizializza_listone_lega_asta(league_id):
                 league_id, player_id, stato,
                 assigned_team_id, prezzo_assegnazione, updated_at
             )
-            SELECT ?, g.id, 'DISPONIBILE', NULL, NULL, CURRENT_TIMESTAMP
-            FROM giocatori g
-            WHERE NOT EXISTS (
+            SELECT ?, c.player_id, 'DISPONIBILE', NULL, NULL, CURRENT_TIMESTAMP
+            FROM league_player_catalog c
+            WHERE c.league_id=?
+              AND NOT EXISTS (
                 SELECT 1
                 FROM league_players lp
                 WHERE lp.league_id=?
-                  AND lp.player_id=g.id
+                  AND lp.player_id=c.player_id
             )
-        """,(league_id,league_id))
+        """,(league_id,league_id,league_id))
 
         cur.execute("""
             INSERT INTO team_budgets (
@@ -24934,7 +25391,7 @@ def lotto_corrente_multilega(league_id):
                 l.closing_at
             FROM auction_sessions s
             LEFT JOIN auction_lots l ON l.id=s.current_lot_id
-            LEFT JOIN giocatori g ON g.id=l.player_id
+            LEFT JOIN league_player_catalog g ON g.player_id=l.player_id AND g.league_id=s.league_id
             WHERE s.league_id=?
             LIMIT 1
         """, (league_id,))
@@ -25862,7 +26319,7 @@ def chiamata_pendente_multilega(league_id):
             FROM auction_calls c
             LEFT JOIN teams t
               ON t.id=c.team_id AND t.league_id=c.league_id
-            LEFT JOIN giocatori g ON g.id=c.player_id
+            LEFT JOIN league_player_catalog g ON g.player_id=c.player_id AND g.league_id=c.league_id
             WHERE c.league_id=? AND c.stato='PENDING'
             ORDER BY c.id
             LIMIT 1
@@ -26099,7 +26556,8 @@ def render_console_asta_team():
     )
 
     try:
-        # Riallinea il workspace operativo prima di mostrare dati d'asta/rosa.
+        # Riallinea prima il listone centralizzato della lega e poi rosa/budget.
+        sincronizza_listone_lega_nel_workspace(league_id, team_id)
         sincronizza_workspace_team_da_normalizzato(league_id, team_id)
 
         lotto = lotto_corrente_multilega(league_id)
@@ -26419,7 +26877,7 @@ def elenco_giocatori_asta_multilega(league_id):
     try:
         cur.execute("""
             SELECT
-                g.id,
+                g.player_id,
                 COALESCE(g.nome,''),
                 COALESCE(g.squadra,''),
                 COALESCE(g.ruolo_mantra,''),
@@ -26427,12 +26885,12 @@ def elenco_giocatori_asta_multilega(league_id):
                 COALESCE(lp.stato,'DISPONIBILE'),
                 lp.assigned_team_id,
                 lp.prezzo_assegnazione
-            FROM giocatori g
+            FROM league_player_catalog g
             JOIN league_players lp
-              ON lp.player_id=g.id
+              ON lp.player_id=g.player_id
              AND lp.league_id=?
             ORDER BY g.nome COLLATE NOCASE
-        """,(league_id,))
+        """,(league_id,league_id,))
         return [
             {
                 "player_id":int(r[0]),
@@ -26810,7 +27268,7 @@ def ultime_assegnazioni_banditore(league_id, limit=15):
                 COALESCE(uu.username,''),
                 h.undone_at
             FROM auction_assignment_history h
-            LEFT JOIN giocatori g ON g.id=h.player_id
+            LEFT JOIN league_player_catalog g ON g.player_id=h.player_id AND g.league_id=h.league_id
             LEFT JOIN teams t ON t.id=h.team_id AND t.league_id=h.league_id
             LEFT JOIN users u ON u.id=h.assigned_by_user_id
             LEFT JOIN users uu ON uu.id=h.undone_by_user_id
@@ -28576,341 +29034,122 @@ def render_navigazione_e_pagina():
 
     elif sezione == "LISTONE":
 
-        st.subheader(
-            "☷ Listone giocatori"
+        st.subheader("☷ Listone giocatori")
+        st.caption(
+            "Listone ufficiale della lega · sola consultazione. "
+            "Il caricamento e gli aggiornamenti sono gestiti dall'Admin."
         )
 
-        file_caricato = st.file_uploader(
-            "Carica il listone Fantacalcio.it",
-            type=[
-                "xlsx",
-                "xlsm"
-            ]
-        )
+        _league_listone = st.session_state.get("ml_league_id")
 
-        if file_caricato is not None:
-
-            try:
-
-                contenuto = (
-                    file_caricato
-                    .getvalue()
-                )
-
-                excel = pd.ExcelFile(
-                    io.BytesIO(
-                        contenuto
-                    ),
-                    engine="openpyxl"
-                )
-
-                foglio_tutti = None
-
-                for nome_foglio in (
-                    excel.sheet_names
-                ):
-
-                    if (
-                        nome_foglio
-                        .strip()
-                        .upper()
-                        == "TUTTI"
-                    ):
-
-                        foglio_tutti = (
-                            nome_foglio
-                        )
-
-                        break
-
-                if foglio_tutti is None:
-
-                    st.error(
-                        "Non trovo il foglio Tutti."
-                    )
-
-                else:
-
-                    df_excel = pd.read_excel(
-                        io.BytesIO(
-                            contenuto
-                        ),
-                        sheet_name=(
-                            foglio_tutti
-                        ),
-                        engine="openpyxl",
-                        header=1
-                    )
-
-                    df_excel = (
-                        df_excel
-                        .dropna(
-                            axis=1,
-                            how="all"
-                        )
-                        .dropna(
-                            axis=0,
-                            how="all"
-                        )
-                    )
-
-                    df_excel.columns = [
-                        str(c).strip()
-                        for c
-                        in df_excel.columns
-                    ]
-
-                    obbligatorie = {
-                        "Id",
-                        "R",
-                        "RM",
-                        "Nome",
-                        "Squadra"
-                    }
-
-                    mancanti = (
-                        obbligatorie
-                        - set(
-                            df_excel.columns
-                        )
-                    )
-
-                    if mancanti:
-
-                        st.error(
-                            "Formato non valido. "
-                            "Colonne mancanti: "
-                            + ", ".join(
-                                sorted(
-                                    mancanti
-                                )
-                            )
-                        )
-
-                    else:
-
-                        nuovi, aggiornati = (
-                            importa_listone_nel_database(
-                                df_excel
-                            )
-                        )
-
-                        st.success(
-                            "✅ Listone importato con successo — "
-                            f"{st.session_state.get('ultimo_upload_listone', '')}. "
-                            f"Nuovi: {nuovi} — "
-                            f"Aggiornati: {aggiornati}. "
-                            "I giocatori invariati non sono stati riscritti."
-                        )
-
-            except Exception as errore:
-
-                st.error(
-                    f"Errore: {errore}"
-                )
-
-        df = (
-            df_completo.copy()
-        )
-
-        if df.empty:
-
-            st.info(
-                "Il database è vuoto."
-            )
-
+        if _league_listone is None:
+            st.info("Nessuna lega selezionata.")
         else:
+            try:
+                df = carica_listone_centrale_lega(
+                    int(_league_listone)
+                )
+            except Exception as errore:
+                df = pd.DataFrame()
+                st.error("Impossibile leggere il listone della lega: " + str(errore))
 
-            f1, f2, f3 = st.columns(3)
+            if df.empty:
+                st.info(
+                    "Il listone della lega non è ancora stato caricato. "
+                    "L'Admin deve caricarlo da GESTIONE LEGA."
+                )
+            else:
+                f1, f2, f3 = st.columns(3)
 
-            with f1:
-
-                filtro_stato = (
-                    st.selectbox(
+                with f1:
+                    filtro_stato = st.selectbox(
                         "Stato",
-                        [
-                            "TUTTI",
-                            "DISPONIBILE",
-                            "MIO",
-                            "AVVERSARIO"
-                        ]
+                        ["TUTTI","DISPONIBILE","ASSEGNATO"],
+                        key="listone_consulta_stato"
                     )
-                )
 
-            with f2:
-
-                filtro_ruolo = (
-                    st.selectbox(
+                with f2:
+                    filtro_ruolo = st.selectbox(
                         "Primo ruolo",
-                        [
-                            "TUTTI"
-                        ]
-                        + ELENCO_RUOLI
+                        ["TUTTI"] + ELENCO_RUOLI,
+                        key="listone_consulta_ruolo"
                     )
+
+                squadre = sorted(
+                    df["Squadra"]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                    .tolist()
                 )
 
-            squadre = sorted(
-                df[
-                    "Squadra"
-                ]
-                .dropna()
-                .astype(str)
-                .unique()
-                .tolist()
-            )
-
-            with f3:
-
-                filtro_squadra = (
-                    st.selectbox(
+                with f3:
+                    filtro_squadra = st.selectbox(
                         "Squadra",
-                        [
-                            "TUTTE"
-                        ]
-                        + squadre
+                        ["TUTTE"] + squadre,
+                        key="listone_consulta_squadra"
                     )
+
+                ricerca = st.text_input(
+                    "🔎 Cerca giocatore",
+                    key="listone_consulta_ricerca"
                 )
 
-            ricerca = st.text_input(
-                "🔎 Cerca giocatore"
-            )
+                filtrato = df.copy()
 
-            filtrato = (
-                df.copy()
-            )
-
-            if (
-                filtro_stato
-                != "TUTTI"
-            ):
-
-                filtrato = (
-                    filtrato[
-                        filtrato[
-                            "Stato"
-                        ]
+                if filtro_stato != "TUTTI":
+                    filtrato = filtrato[
+                        filtrato["Stato"].astype(str).str.upper()
                         == filtro_stato
                     ]
-                )
 
-            if (
-                filtro_ruolo
-                != "TUTTI"
-            ):
-
-                filtrato = (
-                    filtrato[
-                        filtrato[
-                            "RM"
-                        ]
-                        .apply(
-                            primo_ruolo
-                        )
+                if filtro_ruolo != "TUTTI":
+                    filtrato = filtrato[
+                        filtrato["RM"]
+                        .apply(primo_ruolo)
                         .str.upper()
                         == filtro_ruolo.upper()
                     ]
-                )
 
-            if (
-                filtro_squadra
-                != "TUTTE"
-            ):
-
-                filtrato = (
-                    filtrato[
-                        filtrato[
-                            "Squadra"
-                        ]
-                        == filtro_squadra
+                if filtro_squadra != "TUTTE":
+                    filtrato = filtrato[
+                        filtrato["Squadra"] == filtro_squadra
                     ]
-                )
 
-            if ricerca:
-
-                testo = (
-                    ricerca
-                    .lower()
-                    .strip()
-                )
-
-                filtrato = (
-                    filtrato[
-                        filtrato[
-                            "Nome"
-                        ]
+                if ricerca:
+                    testo = ricerca.lower().strip()
+                    filtrato = filtrato[
+                        filtrato["Nome"]
                         .astype(str)
                         .str.lower()
-                        .str.contains(
-                            testo,
-                            na=False
-                        )
+                        .str.contains(testo, na=False)
                     ]
+
+                filtrato["Priorita"] = (
+                    filtrato["RM"].apply(priorita_ruolo)
                 )
 
-            filtrato[
-                "Priorita"
-            ] = (
-                filtrato[
-                    "RM"
-                ]
-                .apply(
-                    priorita_ruolo
-                )
-            )
-
-            filtrato = (
-                filtrato
-                .sort_values(
-                    by=[
-                        "Priorita",
-                        "FVM",
-                        "Nome"
-                    ],
-                    ascending=[
-                        True,
-                        False,
-                        True
-                    ],
+                filtrato = filtrato.sort_values(
+                    by=["Priorita","FVM","Nome"],
+                    ascending=[True,False,True],
                     na_position="last"
                 )
-            )
 
-            vista = (
-                filtrato[
+                vista = filtrato[
                     [
-                        "Id",
-                        "R",
-                        "RM",
-                        "Nome",
-                        "Squadra",
-                        "Qt.A",
-                        "Qt.I",
-                        "Diff.",
-                        "FVM",
-                        "Stato",
-                        "Prezzo"
+                        "Id","R","RM","Nome","Squadra",
+                        "Qt.A","Qt.I","Diff.","FVM","Stato","Prezzo"
                     ]
-                ]
-                .copy()
-            )
+                ].copy()
 
-            vista[
-                "Prezzo"
-            ] = (
-                vista[
-                    "Prezzo"
-                ]
-                .apply(
-                    formatta_crediti
+                vista["Prezzo"] = vista["Prezzo"].apply(formatta_crediti)
+
+                st.dataframe(
+                    vista,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=620
                 )
-            )
-
-            st.dataframe(
-                vista,
-                use_container_width=True,
-                hide_index=True,
-                height=620
-            )
 
 
     # ============================================================
