@@ -1919,9 +1919,7 @@ def render_portale_iniziale():
             "esclusivamente come hash sicuro."
         )
 
-        with st.form(
-            "ml05_crea_lega_form"
-        ):
+        with st.container():
 
             st.markdown(
                 "#### 1 · Regolamento"
@@ -2046,25 +2044,43 @@ def render_portale_iniziale():
 
             numero_panchinari=st.selectbox("Numero panchinari",list(range(6,11)),index=4)
             st.markdown("#### Modificatori")
-            scelta_dr=st.radio(
+            st.caption(
+                "D-Factor e Fattore Rendimento sono alternativi. "
+                "Selezionandone uno compare subito la relativa configurazione."
+            )
+            scelta_dr=st.selectbox(
                 "D-Factor / Fattore Rendimento",
                 ["NESSUNO","D-FACTOR","FATTORE RENDIMENTO"],
-                horizontal=True,
-                key="ml11_new_dr"
+                key="ml12_new_dr"
             )
             d_factor=(scelta_dr=="D-FACTOR")
             rendimento=(scelta_dr=="FATTORE RENDIMENTO")
+
             mo3,mo4=st.columns(2)
-            with mo3: fair_play=st.toggle("Fattore Fair Play",value=False)
-            with mo4: capitano=st.toggle("Fattore Capitano",value=False)
+            with mo3:
+                fair_play=st.toggle("Fattore Fair Play",value=False,key="ml12_new_fp")
+            with mo4:
+                capitano=st.toggle("Fattore Capitano",value=False,key="ml12_new_cap")
+
             rendimento_tipo="BONUS"
-            rendimento_fasce=DEFAULT_RENDIMENTO_FASCE
-            if d_factor or rendimento:
+            rendimento_fasce=[dict(x) for x in DEFAULT_RENDIMENTO_FASCE]
+
+            if scelta_dr!="NESSUNO":
                 st.markdown("---")
-                st.markdown("#### Configurazione rendimento")
-                rendimento_tipo,rendimento_fasce=render_tabella_rendimento(
-                    "ml11_new_rend","BONUS",DEFAULT_RENDIMENTO_FASCE
+                st.markdown(
+                    "#### ⚙️ Configurazione "
+                    + ("D-Factor" if d_factor else "Fattore Rendimento")
                 )
+                st.info(
+                    "Scegli BONUS per aggiungere i punti alla tua squadra "
+                    "oppure MALUS per sottrarli alla squadra avversaria."
+                )
+                rendimento_tipo,rendimento_fasce=render_tabella_rendimento(
+                    "ml12_new_rend",
+                    "BONUS",
+                    DEFAULT_RENDIMENTO_FASCE
+                )
+
             render_help_modificatori()
 
             st.markdown(
@@ -2146,11 +2162,12 @@ def render_portale_iniziale():
                 "Confermo la creazione della lega e degli account"
             )
 
-            crea = st.form_submit_button(
+            crea = st.button(
                 "CREA LA TUA LEGA",
                 type="primary",
                 use_container_width=True,
-                disabled=not conferma
+                disabled=not conferma,
+                key="ml12_create_league"
             )
 
         if crea:
@@ -11922,7 +11939,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "1.1"
+MULTILEGA_SCHEMA_VERSION = "1.2"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -14221,7 +14238,7 @@ def render_admin_multilega():
                 reg_adv=carica_regolamento_avanzato(lega["league_id"])
                 if reg_adv:
                     with st.expander("📝 Modifica regolamento e punteggi", expanded=False):
-                        with st.form("ml10_rules_"+str(lega["league_id"])):
+                        with st.container():
                             er1,er2,er3=st.columns(3)
                             with er1:
                                 edit_mult=st.number_input("Moltiplicatore oltre soglia",min_value=1,
@@ -14264,31 +14281,61 @@ def render_admin_multilega():
                                 ersub=st.number_input("RIGORE SUBITO",value=reg_adv["rigore_subito"],step=0.5,format="%.2f",key="ml10_rsub_"+str(lega["league_id"]))
 
                             st.markdown("**Modificatori**")
+                            st.caption(
+                                "D-Factor e Fattore Rendimento sono alternativi. "
+                                "La configurazione appare quando ne selezioni uno."
+                            )
                             dr_default=("D-FACTOR" if reg_adv["d_factor"] else
                                         "FATTORE RENDIMENTO" if reg_adv["rendimento"] else "NESSUNO")
-                            edr=st.radio(
+                            edr=st.selectbox(
                                 "D-Factor / Fattore Rendimento",
                                 ["NESSUNO","D-FACTOR","FATTORE RENDIMENTO"],
                                 index=["NESSUNO","D-FACTOR","FATTORE RENDIMENTO"].index(dr_default),
-                                horizontal=True,
-                                key="ml11_dr_"+str(lega["league_id"])
+                                key="ml12_dr_"+str(lega["league_id"])
                             )
                             edf=(edr=="D-FACTOR")
                             erend=(edr=="FATTORE RENDIMENTO")
+
                             em3,em4=st.columns(2)
-                            with em3: efp=st.toggle("Fattore Fair Play",value=reg_adv["fair_play"],key="ml10_fp_"+str(lega["league_id"]))
-                            with em4: ecap=st.toggle("Fattore Capitano",value=reg_adv["capitano"],key="ml10_cap_"+str(lega["league_id"]))
+                            with em3:
+                                efp=st.toggle(
+                                    "Fattore Fair Play",
+                                    value=reg_adv["fair_play"],
+                                    key="ml12_fp_"+str(lega["league_id"])
+                                )
+                            with em4:
+                                ecap=st.toggle(
+                                    "Fattore Capitano",
+                                    value=reg_adv["capitano"],
+                                    key="ml12_cap_"+str(lega["league_id"])
+                                )
+
                             erend_tipo=reg_adv.get("rendimento_tipo","BONUS")
                             erend_fasce=reg_adv.get("rendimento_fasce",DEFAULT_RENDIMENTO_FASCE)
-                            if edf or erend:
+
+                            if edr!="NESSUNO":
                                 st.markdown("---")
-                                st.markdown("**Configurazione rendimento**")
-                                erend_tipo,erend_fasce=render_tabella_rendimento(
-                                    "ml11_edit_rend_"+str(lega["league_id"]),
-                                    erend_tipo,erend_fasce
+                                st.markdown(
+                                    "**⚙️ Configurazione "
+                                    + ("D-Factor**" if edf else "Fattore Rendimento**")
                                 )
+                                st.info(
+                                    "Scegli BONUS per aggiungere i punti alla tua squadra "
+                                    "oppure MALUS per sottrarli alla squadra avversaria."
+                                )
+                                erend_tipo,erend_fasce=render_tabella_rendimento(
+                                    "ml12_edit_rend_"+str(lega["league_id"]),
+                                    erend_tipo,
+                                    erend_fasce
+                                )
+
                             render_help_modificatori()
-                            save_rules=st.form_submit_button("SALVA REGOLAMENTO",type="primary",use_container_width=True)
+                            save_rules=st.button(
+                                "SALVA REGOLAMENTO",
+                                type="primary",
+                                use_container_width=True,
+                                key="ml12_save_rules_"+str(lega["league_id"])
+                            )
                         if save_rules:
                             try:
                                 salva_regolamento_avanzato(lega["league_id"],{
@@ -23527,7 +23574,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 1.1 &nbsp;|&nbsp; V93 Modificatori Rendimento'
+        'MULTILEGA 1.2 &nbsp;|&nbsp; V94 Config Modificatori Visibile'
         '</div>',
         unsafe_allow_html=True
     )
