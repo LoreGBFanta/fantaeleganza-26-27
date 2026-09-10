@@ -12203,7 +12203,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "2.0"
+MULTILEGA_SCHEMA_VERSION = "2.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -24507,7 +24507,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 2.0 &nbsp;|&nbsp; V101 Auctioneer 1.0'
+        'MULTILEGA 2.1 &nbsp;|&nbsp; V102 Audit e Undo Asta'
         '</div>',
         unsafe_allow_html=True
     )
@@ -24757,13 +24757,28 @@ st.markdown("""
 
 def inizializza_listone_lega_asta(league_id):
     """
-    Inizializza league_players usando il listone globale come catalogo.
-    Non tocca le tabelle operative delle singole squadre.
+    Inizializza il catalogo di lega e le strutture operative dell'asta.
+    V102 aggiunge una cronologia autorevole delle assegnazioni, necessaria
+    per audit e annullamento controllato.
     """
     league_id=int(league_id)
     conn=_portal_raw_connection()
     cur=conn.cursor()
     try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auction_assignment_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                prezzo REAL NOT NULL,
+                stato TEXT NOT NULL DEFAULT 'ACTIVE',
+                assigned_by_user_id INTEGER,
+                assigned_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                undone_by_user_id INTEGER,
+                undone_at TEXT
+            )
+        """)
         cur.execute("""
             INSERT INTO league_players (
                 league_id, player_id, stato,
@@ -25023,6 +25038,18 @@ def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
                 updated_at=CURRENT_TIMESTAMP
         """,(league_id,team_id,budget,nuovo_valore,nuova_spesa))
 
+        cur.execute("""
+            INSERT INTO auction_assignment_history (
+                league_id,player_id,team_id,prezzo,stato,
+                assigned_by_user_id,assigned_at
+            )
+            VALUES (?,?,?,?,'ACTIVE',?,CURRENT_TIMESTAMP)
+        """,(league_id,player_id,team_id,prezzo,user_id))
+
+        cur.execute("SELECT last_insert_rowid()")
+        _hist_row=cur.fetchone()
+        history_id=int(_hist_row[0]) if _hist_row and _hist_row[0] is not None else 0
+
         # Sincronizza il workspace fisico della squadra target.
         tab_team="giocatori_ml_l"+str(league_id)+"_t"+str(team_id)
         try:
@@ -25049,6 +25076,7 @@ def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
             json.dumps({
                 "prezzo":prezzo,
                 "team":nome_team,
+                "history_id":history_id,
                 "valore_acquisti":nuovo_valore,
                 "spesa_effettiva":nuova_spesa
             },ensure_ascii=False)
@@ -25068,6 +25096,286 @@ def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
         except Exception:
             pass
         raise
+    finally:
+        _portal_close(conn)
+
+
+
+def ultime_assegnazioni_banditore(league_id, limit=15):
+    league_id=int(league_id)
+    inizializza_listone_lega_asta(league_id)
+    conn=_portal_raw_connection()
+    cur=conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                h.id,
+                h.player_id,
+                COALESCE(g.nome,''),
+                COALESCE(g.squadra,''),
+                COALESCE(g.ruolo_mantra,''),
+                h.team_id,
+                COALESCE(t.nome,''),
+                h.prezzo,
+                h.stato,
+                COALESCE(u.username,''),
+                h.assigned_at,
+                COALESCE(uu.username,''),
+                h.undone_at
+            FROM auction_assignment_history h
+            LEFT JOIN giocatori g ON g.id=h.player_id
+            LEFT JOIN teams t ON t.id=h.team_id AND t.league_id=h.league_id
+            LEFT JOIN users u ON u.id=h.assigned_by_user_id
+            LEFT JOIN users uu ON uu.id=h.undone_by_user_id
+            WHERE h.league_id=?
+            ORDER BY h.id DESC
+            LIMIT ?
+        """,(league_id,int(limit)))
+        return [
+            {
+                "history_id":int(r[0]),
+                "player_id":int(r[1]),
+                "giocatore":str(r[2]),
+                "squadra_reale":str(r[3]),
+                "ruolo":str(r[4]),
+                "team_id":int(r[5]),
+                "team":str(r[6]),
+                "prezzo":float(r[7] or 0),
+                "stato":str(r[8] or ""),
+                "assegnato_da":str(r[9] or ""),
+                "assegnato_il":str(r[10] or ""),
+                "annullato_da":str(r[11] or ""),
+                "annullato_il":str(r[12] or ""),
+            }
+            for r in (cur.fetchall() or [])
+        ]
+    finally:
+        _portal_close(conn)
+
+
+def annulla_assegnazione_banditore(league_id, history_id):
+    """
+    Annulla una singola assegnazione ancora ACTIVE.
+
+    L'annullamento è consentito solo se il giocatore risulta ancora assegnato
+    alla stessa squadra e allo stesso prezzo. In questo modo non si può
+    annullare una vecchia assegnazione dopo successive modifiche.
+    """
+    league_id=int(league_id)
+    history_id=int(history_id)
+    user_id=int(st.session_state.get("auth_user_id") or 0)
+
+    conn=_portal_raw_connection()
+    cur=conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=? AND user_id=? AND is_active=1
+              AND (is_auctioneer=1 OR is_admin=1)
+        """,(league_id,user_id))
+        if int(cur.fetchone()[0] or 0)==0:
+            raise PermissionError("Operazione riservata a Banditore o Admin.")
+
+        cur.execute("""
+            SELECT player_id,team_id,prezzo,stato
+            FROM auction_assignment_history
+            WHERE id=? AND league_id=?
+            LIMIT 1
+        """,(history_id,league_id))
+        rh=cur.fetchone()
+        if not rh:
+            raise ValueError("Assegnazione non trovata.")
+
+        player_id=int(rh[0]); team_id=int(rh[1]); prezzo=float(rh[2] or 0)
+        if str(rh[3] or "").upper()!="ACTIVE":
+            raise ValueError("Questa assegnazione è già stata annullata.")
+
+        cur.execute("""
+            SELECT stato,assigned_team_id,prezzo_assegnazione
+            FROM league_players
+            WHERE league_id=? AND player_id=?
+            LIMIT 1
+        """,(league_id,player_id))
+        rp=cur.fetchone()
+        if not rp:
+            raise ValueError("Stato del giocatore non trovato.")
+
+        stato=str(rp[0] or "").upper()
+        team_corrente=int(rp[1]) if rp[1] is not None else None
+        prezzo_corrente=float(rp[2] or 0) if rp[2] is not None else None
+
+        if stato!="ASSEGNATO" or team_corrente!=team_id:
+            raise ValueError(
+                "L'assegnazione non è più quella corrente: annullamento bloccato."
+            )
+        if prezzo_corrente is None or abs(prezzo_corrente-prezzo)>0.0001:
+            raise ValueError(
+                "Il prezzo corrente non coincide con l'assegnazione da annullare."
+            )
+
+        cur.execute("""
+            DELETE FROM rosters
+            WHERE league_id=? AND team_id=? AND player_id=?
+        """,(league_id,team_id,player_id))
+
+        cur.execute("""
+            UPDATE league_players
+            SET stato='DISPONIBILE',
+                assigned_team_id=NULL,
+                prezzo_assegnazione=NULL,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND player_id=?
+        """,(league_id,player_id))
+
+        # Ricalcolo autorevole del valore acquisti della squadra
+        cur.execute("""
+            SELECT
+                COALESCE(SUM(prezzo_acquisto),0)
+            FROM rosters
+            WHERE league_id=? AND team_id=?
+        """,(league_id,team_id))
+        valore=float(cur.fetchone()[0] or 0)
+
+        cur.execute("""
+            SELECT
+                COALESCE(budget_iniziale,500),
+                COALESCE(soglia_budget,500),
+                COALESCE(moltiplicatore_oltre_soglia,1)
+            FROM league_rules
+            WHERE league_id=?
+            LIMIT 1
+        """,(league_id,))
+        rr=cur.fetchone()
+        budget_default=float(rr[0] or 500) if rr else 500.0
+        soglia=float(rr[1] or budget_default) if rr else budget_default
+        moltiplicatore=max(1,float(rr[2] or 1)) if rr else 1.0
+
+        if valore <= soglia:
+            spesa=round(valore,2)
+        else:
+            spesa=round(soglia+(valore-soglia)*moltiplicatore,2)
+
+        cur.execute("""
+            SELECT budget_impostato
+            FROM team_budgets
+            WHERE league_id=? AND team_id=?
+            LIMIT 1
+        """,(league_id,team_id))
+        rb=cur.fetchone()
+        budget=float(rb[0]) if rb and rb[0] is not None else budget_default
+
+        cur.execute("""
+            INSERT INTO team_budgets (
+                league_id,team_id,budget_impostato,valore_acquisti,
+                spesa_effettiva,updated_at
+            )
+            VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,team_id)
+            DO UPDATE SET
+                valore_acquisti=excluded.valore_acquisti,
+                spesa_effettiva=excluded.spesa_effettiva,
+                updated_at=CURRENT_TIMESTAMP
+        """,(league_id,team_id,budget,valore,spesa))
+
+        # Sincronizza anche il workspace della squadra, se già esistente.
+        tab_team="giocatori_ml_l"+str(league_id)+"_t"+str(team_id)
+        try:
+            cur.execute(
+                f"""UPDATE {tab_team}
+                    SET stato='DISPONIBILE',
+                        prezzo_acquisto=NULL,
+                        ultimo_aggiornamento=CURRENT_TIMESTAMP
+                    WHERE id=?""",
+                (player_id,)
+            )
+        except Exception:
+            pass
+
+        cur.execute("""
+            UPDATE auction_assignment_history
+            SET stato='UNDONE',
+                undone_by_user_id=?,
+                undone_at=CURRENT_TIMESTAMP
+            WHERE id=? AND league_id=? AND stato='ACTIVE'
+        """,(user_id,history_id,league_id))
+
+        if cur.rowcount==0:
+            raise ValueError("L'assegnazione è già stata annullata.")
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,team_id,azione,entita,entita_id,
+                dettagli_json,created_at
+            )
+            VALUES (?,?,?,'PLAYER_ASSIGNMENT_UNDONE','PLAYER',?,?,CURRENT_TIMESTAMP)
+        """,(
+            league_id,user_id,team_id,str(player_id),
+            json.dumps({
+                "history_id":history_id,
+                "prezzo_annullato":prezzo,
+                "valore_acquisti_dopo":valore,
+                "spesa_effettiva_dopo":spesa
+            },ensure_ascii=False)
+        ))
+
+        conn.commit()
+        return {
+            "player_id":player_id,
+            "team_id":team_id,
+            "prezzo":prezzo,
+            "valore_acquisti":valore,
+            "spesa_effettiva":spesa
+        }
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def audit_asta_multilega(league_id, limit=100):
+    league_id=int(league_id)
+    conn=_portal_raw_connection()
+    cur=conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                a.id,
+                a.azione,
+                COALESCE(u.username,''),
+                COALESCE(t.nome,''),
+                a.entita_id,
+                COALESCE(a.dettagli_json,''),
+                a.created_at
+            FROM audit_log a
+            LEFT JOIN users u ON u.id=a.user_id
+            LEFT JOIN teams t
+              ON t.id=a.team_id AND t.league_id=a.league_id
+            WHERE a.league_id=?
+              AND a.azione IN (
+                'PLAYER_ASSIGNED',
+                'PLAYER_ASSIGNMENT_UNDONE'
+              )
+            ORDER BY a.id DESC
+            LIMIT ?
+        """,(league_id,int(limit)))
+        return [
+            {
+                "id":int(r[0]),
+                "azione":str(r[1]),
+                "utente":str(r[2]),
+                "squadra":str(r[3]),
+                "player_id":str(r[4] or ""),
+                "dettagli":str(r[5] or ""),
+                "data":str(r[6] or "")
+            }
+            for r in (cur.fetchall() or [])
+        ]
     finally:
         _portal_close(conn)
 
@@ -25199,6 +25507,109 @@ def render_banditore_asta():
         for t in teams
     ])
     st.dataframe(df_team,use_container_width=True,hide_index=True)
+
+    st.markdown("---")
+    st.markdown("#### ↶ Ultime assegnazioni")
+    st.caption(
+        "Puoi annullare un'assegnazione solo se è ancora quella corrente "
+        "del giocatore. L'operazione ripristina disponibilità, rosa e budget."
+    )
+
+    try:
+        storico=ultime_assegnazioni_banditore(league_id,15)
+    except Exception as errore:
+        storico=[]
+        st.error("Impossibile leggere la cronologia asta: "+str(errore))
+
+    attive=[x for x in storico if x["stato"].upper()=="ACTIVE"]
+
+    if not storico:
+        st.info("Nessuna assegnazione registrata.")
+    else:
+        righe_storico=[]
+        for x in storico:
+            righe_storico.append({
+                "ID":x["history_id"],
+                "Giocatore":x["giocatore"],
+                "Ruolo":x["ruolo"],
+                "Squadra":x["team"],
+                "Prezzo":x["prezzo"],
+                "Stato":"ATTIVA" if x["stato"].upper()=="ACTIVE" else "ANNULLATA",
+                "Assegnata da":x["assegnato_da"],
+                "Data":x["assegnato_il"]
+            })
+        st.dataframe(
+            pd.DataFrame(righe_storico),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    if attive:
+        opzioni_undo={
+            f'#{x["history_id"]} · {x["giocatore"]} → {x["team"]} · {x["prezzo"]:g} cr.':x
+            for x in attive
+        }
+        scelta_undo=st.selectbox(
+            "Assegnazione da annullare",
+            list(opzioni_undo.keys()),
+            key="auctioneer_undo_select"
+        )
+        conferma_undo_asta=st.checkbox(
+            "Confermo l'annullamento dell'assegnazione selezionata",
+            key="auctioneer_undo_confirm"
+        )
+        if st.button(
+            "↶ ANNULLA ASSEGNAZIONE",
+            disabled=not conferma_undo_asta,
+            use_container_width=True,
+            key="auctioneer_undo_btn"
+        ):
+            x=opzioni_undo[scelta_undo]
+            try:
+                annulla_assegnazione_banditore(
+                    league_id,
+                    x["history_id"]
+                )
+                invalida_cache_dati()
+                st.session_state["auctioneer_msg"]=(
+                    f'Assegnazione di {x["giocatore"]} a {x["team"]} annullata.'
+                )
+                st.rerun(scope="fragment")
+            except Exception as errore:
+                st.error(str(errore))
+
+    with st.expander("📜 Audit asta", expanded=False):
+        try:
+            audit=audit_asta_multilega(league_id,100)
+            if not audit:
+                st.caption("Nessun evento d'asta registrato.")
+            else:
+                righe=[]
+                for a in audit:
+                    try:
+                        det=json.loads(a["dettagli"]) if a["dettagli"] else {}
+                    except Exception:
+                        det={}
+                    righe.append({
+                        "Data":a["data"],
+                        "Evento":(
+                            "ASSEGNAZIONE"
+                            if a["azione"]=="PLAYER_ASSIGNED"
+                            else "ANNULLAMENTO"
+                        ),
+                        "Utente":a["utente"],
+                        "Squadra":a["squadra"],
+                        "Player ID":a["player_id"],
+                        "Prezzo":det.get("prezzo",det.get("prezzo_annullato","")),
+                        "History ID":det.get("history_id","")
+                    })
+                st.dataframe(
+                    pd.DataFrame(righe),
+                    use_container_width=True,
+                    hide_index=True
+                )
+        except Exception as errore:
+            st.error("Impossibile leggere l'audit: "+str(errore))
 
 
 # ============================================================
