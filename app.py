@@ -12203,7 +12203,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "1.6"
+MULTILEGA_SCHEMA_VERSION = "1.7"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -19659,83 +19659,103 @@ if (
             None
         )
 
-if "budget_asta_corrente" not in st.session_state:
+SEZIONE_PRE_NAV = st.session_state.get("pagina", "DASHBOARD")
+SEZIONE_OPERATIVA = SEZIONE_PRE_NAV not in ("GESTIONE LEGA", "PROFILO")
 
-    st.session_state[
-        "budget_asta_corrente"
-    ] = (
-        leggi_budget_asta()
-    )
+if SEZIONE_OPERATIVA:
+    if "budget_asta_corrente" not in st.session_state:
 
-if "budget_asta_input" not in st.session_state:
-
-    st.session_state[
-        "budget_asta_input"
-    ] = (
         st.session_state[
             "budget_asta_corrente"
-        ]
+        ] = (
+            leggi_budget_asta()
+        )
+
+    if "budget_asta_input" not in st.session_state:
+
+        st.session_state[
+            "budget_asta_input"
+        ] = (
+            st.session_state[
+                "budget_asta_corrente"
+            ]
+        )
+
+    df_completo = carica_tutti_giocatori()
+
+    df_rosa_globale = (
+        df_completo[df_completo["Stato"] == "MIO"].copy()
     )
 
-df_completo = carica_tutti_giocatori()
+    _prezzi_rosa = pd.to_numeric(
+        df_rosa_globale.get("Prezzo", pd.Series(dtype=float)),
+        errors="coerce"
+    ).fillna(0)
 
-df_rosa_globale = (
-    df_completo[df_completo["Stato"] == "MIO"].copy()
-)
+    _runtime_signature = (
+        _workspace_runtime_key,
+        int(len(df_rosa_globale)),
+        round(float(_prezzi_rosa.sum()), 2),
+        tuple(sorted(int(x) for x in df_rosa_globale.get("Id", pd.Series(dtype=int)).tolist()))
+    )
 
-_prezzi_rosa = pd.to_numeric(
-    df_rosa_globale.get("Prezzo", pd.Series(dtype=float)),
-    errors="coerce"
-).fillna(0)
+    _runtime_cached = st.session_state.get("_ml16_sidebar_metrics")
 
-_runtime_signature = (
-    _workspace_runtime_key,
-    int(len(df_rosa_globale)),
-    round(float(_prezzi_rosa.sum()), 2),
-    tuple(sorted(int(x) for x in df_rosa_globale.get("Id", pd.Series(dtype=int)).tolist()))
-)
+    if isinstance(_runtime_cached, dict) and _runtime_cached.get("signature") == _runtime_signature:
+        valore_attivi = _runtime_cached["valore_attivi"]
+        costi_svincoli = _runtime_cached["costi_svincoli"]
+        valore_acquisti = _runtime_cached["valore_acquisti"]
+        spesa_effettiva = _runtime_cached["spesa_effettiva"]
+        oltre_soglia = _runtime_cached["oltre_soglia"]
+        numero_rosa = _runtime_cached["numero_rosa"]
+        numero_portieri = _runtime_cached["numero_portieri"]
+        slot_liberi = _runtime_cached["slot_liberi"]
+        iqr = _runtime_cached["iqr"]
+    else:
+        valore_attivi = round(float(_prezzi_rosa.sum()), 2)
+        costi_svincoli = calcola_costi_svincoli()
+        valore_acquisti = round(valore_attivi + costi_svincoli, 2)
+        spesa_effettiva = calcola_spesa_effettiva(valore_acquisti)
+        oltre_soglia = round(max(0, valore_acquisti - SOGLIA_BASE), 2)
+        numero_rosa = len(df_rosa_globale)
+        numero_portieri = conta_portieri(df_rosa_globale)
+        slot_liberi = max(0, MAX_GIOCATORI - numero_rosa)
+        iqr = calcola_iqr(df_rosa_globale, df_completo, MAX_GIOCATORI)
 
-_runtime_cached = st.session_state.get("_ml16_sidebar_metrics")
+        st.session_state["_ml16_sidebar_metrics"] = {
+            "signature": _runtime_signature,
+            "valore_attivi": valore_attivi,
+            "costi_svincoli": costi_svincoli,
+            "valore_acquisti": valore_acquisti,
+            "spesa_effettiva": spesa_effettiva,
+            "oltre_soglia": oltre_soglia,
+            "numero_rosa": numero_rosa,
+            "numero_portieri": numero_portieri,
+            "slot_liberi": slot_liberi,
+            "iqr": iqr,
+        }
 
-if isinstance(_runtime_cached, dict) and _runtime_cached.get("signature") == _runtime_signature:
-    valore_attivi = _runtime_cached["valore_attivi"]
-    costi_svincoli = _runtime_cached["costi_svincoli"]
-    valore_acquisti = _runtime_cached["valore_acquisti"]
-    spesa_effettiva = _runtime_cached["spesa_effettiva"]
-    oltre_soglia = _runtime_cached["oltre_soglia"]
-    numero_rosa = _runtime_cached["numero_rosa"]
-    numero_portieri = _runtime_cached["numero_portieri"]
-    slot_liberi = _runtime_cached["slot_liberi"]
-    iqr = _runtime_cached["iqr"]
+    budget_asta = float(
+        st.session_state.get("budget_asta_corrente", SOGLIA_BASE)
+    )
+
+    budget_rimanente = round(budget_asta - spesa_effettiva, 2)
 else:
-    valore_attivi = round(float(_prezzi_rosa.sum()), 2)
-    costi_svincoli = calcola_costi_svincoli()
-    valore_acquisti = round(valore_attivi + costi_svincoli, 2)
-    spesa_effettiva = calcola_spesa_effettiva(valore_acquisti)
-    oltre_soglia = round(max(0, valore_acquisti - SOGLIA_BASE), 2)
-    numero_rosa = len(df_rosa_globale)
-    numero_portieri = conta_portieri(df_rosa_globale)
-    slot_liberi = max(0, MAX_GIOCATORI - numero_rosa)
-    iqr = calcola_iqr(df_rosa_globale, df_completo, MAX_GIOCATORI)
-
-    st.session_state["_ml16_sidebar_metrics"] = {
-        "signature": _runtime_signature,
-        "valore_attivi": valore_attivi,
-        "costi_svincoli": costi_svincoli,
-        "valore_acquisti": valore_acquisti,
-        "spesa_effettiva": spesa_effettiva,
-        "oltre_soglia": oltre_soglia,
-        "numero_rosa": numero_rosa,
-        "numero_portieri": numero_portieri,
-        "slot_liberi": slot_liberi,
-        "iqr": iqr,
-    }
-
-budget_asta = float(
-    st.session_state.get("budget_asta_corrente", SOGLIA_BASE)
-)
-
-budget_rimanente = round(budget_asta - spesa_effettiva, 2)
+    # Le sezioni Profilo/Gestione Lega non richiedono listone, rosa,
+    # cronologia economica o calcolo IQR.
+    df_completo = pd.DataFrame()
+    df_rosa_globale = pd.DataFrame()
+    valore_attivi = 0.0
+    costi_svincoli = 0.0
+    valore_acquisti = 0.0
+    spesa_effettiva = 0.0
+    oltre_soglia = 0.0
+    numero_rosa = 0
+    numero_portieri = 0
+    slot_liberi = MAX_GIOCATORI
+    iqr = 0.0
+    budget_asta = float(st.session_state.get("budget_asta_corrente", SOGLIA_BASE))
+    budget_rimanente = budget_asta
 
 
 # ============================================================
@@ -24487,7 +24507,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 1.6 &nbsp;|&nbsp; V98 Performance Review'
+        'MULTILEGA 1.7 &nbsp;|&nbsp; V99 Navigazione Fast'
         '</div>',
         unsafe_allow_html=True
     )
@@ -24756,132 +24776,85 @@ if "ADMIN" in RUOLI_ATTIVI:
         )
     )
 
+def _naviga_a(pagina_destinazione):
+    """
+    V99 PERFORMANCE:
+    il click su un widget Streamlit provoca già un rerun completo.
+    In V98 la navbar chiamava anche st.rerun() nel corpo del bottone,
+    causando DUE esecuzioni complete consecutive per ogni cambio sezione.
+    Il callback aggiorna lo stato PRIMA dell'unico rerun automatico.
+    """
+    st.session_state.pagina = pagina_destinazione
+
+
 st.markdown(
     '<div class="nav-title">Navigazione</div>',
     unsafe_allow_html=True
 )
 
-nav_cols = st.columns(
-    len(
-        PAGINE
-    )
-)
+nav_cols = st.columns(len(PAGINE))
 
-for col, (
-    icona,
-    pagina
-) in zip(
-    nav_cols,
-    PAGINE
-):
-
+for col, (icona, pagina_nav) in zip(nav_cols, PAGINE):
     with col:
-
-        if st.button(
-            f"{icona}  {pagina}",
+        st.button(
+            f"{icona}  {pagina_nav}",
             use_container_width=True,
             type=(
                 "primary"
-                if st.session_state.pagina
-                == pagina
+                if st.session_state.pagina == pagina_nav
                 else "secondary"
             ),
-            key=f"nav_{pagina}"
-        ):
+            key=f"nav_{pagina_nav}",
+            on_click=_naviga_a,
+            args=(pagina_nav,)
+        )
 
-            st.session_state.pagina = (
-                pagina
-            )
-
-            st.rerun()
-
-sezione = (
-    st.session_state.pagina
-)
+sezione = st.session_state.pagina
 
 
 # ============================================================
 # TOOLBAR UNDO COMPATTA
 # ============================================================
 
-operazioni_undo = (
-    carica_ultime_operazioni()
-    if sezione not in ("GESTIONE LEGA", "PROFILO")
-    else pd.DataFrame()
-)
+if sezione not in ("GESTIONE LEGA", "PROFILO"):
 
-undo1, undo2 = st.columns(
-    [
-        1.7,
-        7
-    ]
-)
+    operazioni_undo = carica_ultime_operazioni()
 
-with undo1:
+    undo1, undo2 = st.columns([1.7, 7])
 
-    if st.button(
-        "↶ ANNULLA ULTIMA OPERAZIONE",
-        use_container_width=True,
-        disabled=(
-            operazioni_undo.empty
-        ),
-        key="btn_undo_generale"
-    ):
-
-        conferma_undo()
-
-
-with undo2:
-
-    if not operazioni_undo.empty:
-
-        ultima = (
-            operazioni_undo.iloc[0]
-        )
-
-        testo_ultima = (
-            f'<div class="operation-info">'
-            f'Ultima operazione annullabile:&nbsp;'
-            f'<b>'
-            f'{html.escape(str(ultima["Operazione"]))}'
-            f' — '
-            f'{html.escape(str(ultima["Giocatore"]))}'
-            f'</b>'
-            f'&nbsp;'
-            f'({len(operazioni_undo)}/10)'
-            f'</div>'
-        )
-
-        st.markdown(
-            testo_ultima,
-            unsafe_allow_html=True
-        )
-
-
-with st.expander(
-    "📜 Ultime operazioni",
-    expanded=False
-):
-
-    if operazioni_undo.empty:
-
-        st.caption(
-            "Nessuna operazione registrata."
-        )
-
-    else:
-
-        st.dataframe(
-            operazioni_undo[
-                [
-                    "Operazione",
-                    "Giocatore",
-                    "Data"
-                ]
-            ],
+    with undo1:
+        if st.button(
+            "↶ ANNULLA ULTIMA OPERAZIONE",
             use_container_width=True,
-            hide_index=True
-        )
+            disabled=operazioni_undo.empty,
+            key="btn_undo_generale"
+        ):
+            conferma_undo()
+
+    with undo2:
+        if not operazioni_undo.empty:
+            ultima = operazioni_undo.iloc[0]
+            testo_ultima = (
+                f'<div class="operation-info">'
+                f'Ultima operazione annullabile:&nbsp;'
+                f'<b>{html.escape(str(ultima["Operazione"]))}'
+                f' — {html.escape(str(ultima["Giocatore"]))}</b>'
+                f'&nbsp;({len(operazioni_undo)}/10)'
+                f'</div>'
+            )
+            st.markdown(testo_ultima, unsafe_allow_html=True)
+
+    with st.expander("📜 Ultime operazioni", expanded=False):
+        if operazioni_undo.empty:
+            st.caption("Nessuna operazione registrata.")
+        else:
+            st.dataframe(
+                operazioni_undo[["Operazione", "Giocatore", "Data"]],
+                use_container_width=True,
+                hide_index=True
+            )
+else:
+    operazioni_undo = pd.DataFrame()
 
 
 
