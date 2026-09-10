@@ -2330,7 +2330,18 @@ SUFFIX_PROFILO = (
     else (
         "_gostobar"
         if PROFILO_ATTIVO == "GOSTOBAR"
-        else ""
+        else (
+            "_ml_pending_u"
+            + str(
+                int(
+                    st.session_state.get(
+                        "auth_user_id",
+                        0
+                    )
+                    or 0
+                )
+            )
+        )
     )
 )
 
@@ -2353,6 +2364,269 @@ def nome_tabella_profilo(
         )
         + SUFFIX_PROFILO
     )
+
+
+def imposta_workspace_team_multilega():
+    """
+    V96 - Isolamento operativo.
+
+    Per gli account non legacy il vecchio motore dell'app continua a
+    usare le stesse query, ma le tabelle fisiche sono dedicate in modo
+    deterministico alla coppia league_id/team_id.
+
+    In questo modo nessun nuovo utente può ricadere sulle tabelle base
+    di IBBINI IDIOTA.
+    """
+
+    global SUFFIX_PROFILO
+
+    if PROFILO_LEGACY_SUPPORTATO:
+        return SUFFIX_PROFILO
+
+    league_id = st.session_state.get(
+        "ml_league_id"
+    )
+
+    team_id = st.session_state.get(
+        "ml_team_id"
+    )
+
+    user_id = int(
+        st.session_state.get(
+            "auth_user_id",
+            0
+        )
+        or 0
+    )
+
+    if league_id is None:
+        raise RuntimeError(
+            "Contesto lega non valido."
+        )
+
+    if team_id is None:
+        # Un Admin senza squadra non deve mai usare dati di un'altra
+        # squadra. Gli assegniamo quindi un workspace tecnico isolato.
+        SUFFIX_PROFILO = (
+            "_ml_l"
+            + str(int(league_id))
+            + "_admin_u"
+            + str(user_id)
+        )
+    else:
+        SUFFIX_PROFILO = (
+            "_ml_l"
+            + str(int(league_id))
+            + "_t"
+            + str(int(team_id))
+        )
+
+    st.session_state[
+        "ml_workspace_suffix"
+    ] = SUFFIX_PROFILO
+
+    return SUFFIX_PROFILO
+
+
+def inizializza_workspace_team_multilega():
+    """
+    Crea lo schema legacy-compatibile dedicato al team selezionato,
+    clona SOLO l'anagrafica/listone dalla base e inizializza il budget
+    con quello previsto dal regolamento della lega.
+
+    Gli stati d'asta, i prezzi, la rosa, gli svincoli, le operazioni,
+    gli snapshot e la configurazione restano completamente separati.
+    """
+
+    if PROFILO_LEGACY_SUPPORTATO:
+        return
+
+    league_id = int(
+        st.session_state.get(
+            "ml_league_id"
+        )
+    )
+
+    team_id = st.session_state.get(
+        "ml_team_id"
+    )
+
+    # La funzione inizializza_database è cache_resource: la chiave
+    # include esplicitamente lega e squadra così ogni workspace viene
+    # inizializzato in modo indipendente.
+    cache_key = (
+        "ML96|"
+        + str(PROFILO_ATTIVO)
+        + "|L"
+        + str(league_id)
+        + "|T"
+        + str(
+            team_id
+            if team_id is not None
+            else "ADMIN"
+        )
+    )
+
+    inizializza_database(
+        cache_key
+    )
+
+    # Un Admin puro non necessita del listone operativo.
+    if team_id is None:
+        return
+
+    raw_conn = _get_raw_connection()
+    raw_cur = raw_conn.cursor()
+
+    tab_giocatori = nome_tabella_profilo(
+        "giocatori"
+    )
+
+    tab_config = nome_tabella_profilo(
+        "configurazione_app"
+    )
+
+    try:
+
+        raw_cur.execute(
+            f"SELECT COUNT(*) FROM {tab_giocatori}"
+        )
+
+        quanti = int(
+            raw_cur.fetchone()[0]
+            or 0
+        )
+
+        # Il listone di base viene usato esclusivamente come catalogo.
+        # Stato/prezzo non vengono mai copiati.
+        if quanti == 0:
+
+            raw_cur.execute(
+                f"""
+                INSERT INTO {tab_giocatori} (
+                    id,
+                    ruolo_classico,
+                    ruolo_mantra,
+                    nome,
+                    squadra,
+                    quotazione_attuale,
+                    quotazione_iniziale,
+                    differenza,
+                    quotazione_attuale_mantra,
+                    quotazione_iniziale_mantra,
+                    differenza_mantra,
+                    fvm,
+                    fvm_mantra,
+                    stato,
+                    prezzo_acquisto,
+                    ultimo_aggiornamento
+                )
+                SELECT
+                    id,
+                    ruolo_classico,
+                    ruolo_mantra,
+                    nome,
+                    squadra,
+                    quotazione_attuale,
+                    quotazione_iniziale,
+                    differenza,
+                    quotazione_attuale_mantra,
+                    quotazione_iniziale_mantra,
+                    differenza_mantra,
+                    fvm,
+                    fvm_mantra,
+                    'DISPONIBILE',
+                    NULL,
+                    CURRENT_TIMESTAMP
+                FROM giocatori
+                """
+            )
+
+        # Budget iniziale della specifica lega.
+        raw_cur.execute(
+            """
+            SELECT COALESCE(
+                budget_iniziale,
+                500
+            )
+            FROM league_rules
+            WHERE league_id = ?
+            LIMIT 1
+            """,
+            (
+                league_id,
+            )
+        )
+
+        r_budget = raw_cur.fetchone()
+
+        budget_regolamento = float(
+            (
+                r_budget[0]
+                if r_budget
+                else 500
+            )
+            or 500
+        )
+
+        raw_cur.execute(
+            f"""
+            INSERT INTO {tab_config} (
+                chiave,
+                valore
+            )
+            VALUES (
+                'budget_asta',
+                ?
+            )
+            ON CONFLICT(chiave)
+            DO NOTHING
+            """,
+            (
+                str(
+                    budget_regolamento
+                ),
+            )
+        )
+
+        raw_conn.commit()
+
+    finally:
+
+        if not USA_DATABASE_CLOUD:
+            try:
+                raw_conn.close()
+            except Exception:
+                pass
+
+
+def verifica_isolamento_workspace():
+    """
+    Controllo fail-closed: per ogni utente non legacy il suffisso deve
+    contenere il league_id e non può mai essere vuoto.
+    """
+
+    if PROFILO_LEGACY_SUPPORTATO:
+        return True
+
+    league_id = st.session_state.get(
+        "ml_league_id"
+    )
+
+    if (
+        not SUFFIX_PROFILO
+        or SUFFIX_PROFILO == ""
+        or league_id is None
+        or (
+            "_ml_l"
+            + str(int(league_id))
+        ) not in SUFFIX_PROFILO
+    ):
+        raise RuntimeError(
+            "Blocco di sicurezza MULTILEGA: workspace non isolato."
+        )
+
+    return True
 
 
 # ============================================================
@@ -11935,7 +12209,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "1.3"
+MULTILEGA_SCHEMA_VERSION = "1.4"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -12882,7 +13156,9 @@ def azzera_contesto_multilega():
         "ml_ruoli",
         "ml_stagione",
         "ml_modalita",
-        "ml_accesso_validato"
+        "ml_accesso_validato",
+        "ml_workspace_suffix",
+        "ml_runtime_workspace_key"
     ]:
 
         st.session_state.pop(
@@ -18587,9 +18863,11 @@ def gestisci_backup_cloud():
 # INIZIALIZZAZIONE
 # ============================================================
 
-inizializza_database(
-    PROFILO_ATTIVO
-)
+if PROFILO_LEGACY_SUPPORTATO:
+
+    inizializza_database(
+        PROFILO_ATTIVO
+    )
 
 # ------------------------------------------------------------
 # MULTILEGA 0.3 - FAST BOOT
@@ -18696,6 +18974,21 @@ applica_accesso_multilega(
     ACCESSO_MULTILEGA_ATTIVO
 )
 
+# ============================================================
+# MULTILEGA 1.4 - ISOLAMENTO TEAM / LEGA
+# ============================================================
+# Da questo punto in poi tutte le query legacy-compatibili dei nuovi
+# utenti vengono instradate esclusivamente nel workspace della coppia
+# league_id/team_id validata dal database.
+
+if not PROFILO_LEGACY_SUPPORTATO:
+
+    imposta_workspace_team_multilega()
+
+    verifica_isolamento_workspace()
+
+    inizializza_workspace_team_multilega()
+
 LEGA_ATTIVA_NOME = (
     st.session_state.get(
         "ml_league_nome",
@@ -18716,6 +19009,45 @@ RUOLI_ATTIVI = (
         []
     )
 )
+
+_workspace_runtime_key = (
+    str(
+        st.session_state.get(
+            "ml_league_id",
+            ""
+        )
+    )
+    + ":"
+    + str(
+        st.session_state.get(
+            "ml_team_id",
+            ""
+        )
+    )
+)
+
+if (
+    st.session_state.get(
+        "ml_runtime_workspace_key"
+    )
+    != _workspace_runtime_key
+):
+
+    st.session_state[
+        "ml_runtime_workspace_key"
+    ] = _workspace_runtime_key
+
+    for _chiave_workspace in [
+        "budget_asta_corrente",
+        "budget_asta_input",
+        "_titolarita_cache",
+        "_formazioni_tipo_fast_cache"
+    ]:
+
+        st.session_state.pop(
+            _chiave_workspace,
+            None
+        )
 
 if "budget_asta_corrente" not in st.session_state:
 
@@ -23204,6 +23536,12 @@ st.markdown(
 
 with st.sidebar:
 
+
+    if not PROFILO_LEGACY_SUPPORTATO:
+        st.caption(
+            "🔒 Dati isolati per lega e squadra"
+        )
+
     header_html = (
         '<div class="fanta-header">'
         '<div class="fanta-brand">'
@@ -23558,7 +23896,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 1.3 &nbsp;|&nbsp; V95 Modificatori Semplificati'
+        'MULTILEGA 1.4 &nbsp;|&nbsp; V96 Isolamento Team/Lega'
         '</div>',
         unsafe_allow_html=True
     )
