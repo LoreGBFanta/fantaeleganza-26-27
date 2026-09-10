@@ -12203,7 +12203,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "2.6"
+MULTILEGA_SCHEMA_VERSION = "2.7"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -24507,7 +24507,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 2.6 &nbsp;|&nbsp; V107 Stato Chiusura Asta'
+        'MULTILEGA 2.7 &nbsp;|&nbsp; V108 Live Refresh e Sync'
         '</div>',
         unsafe_allow_html=True
     )
@@ -24983,8 +24983,10 @@ def apri_lotto_banditore(league_id, player_id):
                 LIMIT 1
             """, (int(rs[0]), league_id))
             rl = cur.fetchone()
-            if rl and str(rl[0] or "").upper() == "OPEN":
-                raise ValueError("Esiste già un lotto aperto. Chiudilo prima di aprirne un altro.")
+            if rl and str(rl[0] or "").upper() in ("OPEN","CLOSING"):
+                raise ValueError(
+                    "Esiste già un lotto attivo. Devi completarlo prima di aprirne un altro."
+                )
 
         cur.execute("""
             INSERT INTO auction_lots (
@@ -25244,6 +25246,141 @@ def chiudi_lotto_banditore(league_id, lot_id, motivo="CLOSED"):
         _portal_close(conn)
 
 
+
+def sincronizza_workspace_team_da_normalizzato(league_id, team_id):
+    """
+    V108: riallinea il workspace compatibile della squadra con le tabelle
+    normalizzate autorevoli (rosters / team_budgets).
+
+    È best-effort: se il workspace non è ancora stato creato, il dato centrale
+    resta comunque corretto e verrà sincronizzato quando il team aprirà l'app.
+    """
+    league_id=int(league_id)
+    team_id=int(team_id)
+    tab_team="giocatori_ml_l"+str(league_id)+"_t"+str(team_id)
+    tab_conf="configurazione_app_ml_l"+str(league_id)+"_t"+str(team_id)
+
+    conn=_portal_raw_connection()
+    cur=conn.cursor()
+    try:
+        # Verifica esistenza tabella giocatori del workspace.
+        cur.execute("""
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table' AND name=?
+            LIMIT 1
+        """,(tab_team,))
+        if not cur.fetchone():
+            return False
+
+        # Il workspace è una proiezione: prima libera gli stati di acquisto
+        # locali, poi riapplica la rosa normalizzata.
+        try:
+            cur.execute(
+                f"""
+                UPDATE {tab_team}
+                SET stato='DISPONIBILE',
+                    prezzo_acquisto=NULL
+                WHERE UPPER(COALESCE(stato,''))='MIO'
+                """
+            )
+        except Exception:
+            pass
+
+        cur.execute("""
+            SELECT player_id, prezzo_acquisto
+            FROM rosters
+            WHERE league_id=? AND team_id=?
+        """,(league_id,team_id))
+
+        for player_id, prezzo in (cur.fetchall() or []):
+            try:
+                cur.execute(
+                    f"""
+                    UPDATE {tab_team}
+                    SET stato='MIO',
+                        prezzo_acquisto=?,
+                        ultimo_aggiornamento=CURRENT_TIMESTAMP
+                    WHERE id=?
+                    """,
+                    (float(prezzo or 0),int(player_id))
+                )
+            except Exception:
+                pass
+
+        # Sincronizza anche il budget locale se la tabella/configurazione
+        # compatibile è già presente. Le colonne possono variare tra versioni,
+        # quindi la scrittura resta volutamente best-effort.
+        cur.execute("""
+            SELECT
+                COALESCE(b.budget_impostato,r.budget_iniziale,500),
+                COALESCE(b.valore_acquisti,0),
+                COALESCE(b.spesa_effettiva,0)
+            FROM teams t
+            LEFT JOIN league_rules r ON r.league_id=t.league_id
+            LEFT JOIN team_budgets b
+              ON b.league_id=t.league_id AND b.team_id=t.id
+            WHERE t.league_id=? AND t.id=?
+            LIMIT 1
+        """,(league_id,team_id))
+        rb=cur.fetchone()
+
+        if rb:
+            try:
+                cur.execute("""
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type='table' AND name=?
+                    LIMIT 1
+                """,(tab_conf,))
+                if cur.fetchone():
+                    cur.execute(f"PRAGMA table_info({tab_conf})")
+                    cols={str(r[1]) for r in (cur.fetchall() or [])}
+
+                    aggiornamenti=[]
+                    valori=[]
+
+                    for nome_col,valore in (
+                        ("budget",float(rb[0] or 0)),
+                        ("budget_impostato",float(rb[0] or 0)),
+                        ("valore_acquisti",float(rb[1] or 0)),
+                        ("spesa_effettiva",float(rb[2] or 0)),
+                    ):
+                        if nome_col in cols:
+                            aggiornamenti.append(nome_col+"=?")
+                            valori.append(valore)
+
+                    if aggiornamenti:
+                        cur.execute(
+                            f"UPDATE {tab_conf} SET "+",".join(aggiornamenti),
+                            tuple(valori)
+                        )
+            except Exception:
+                pass
+
+        conn.commit()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        _portal_close(conn)
+
+
+def sincronizza_workspace_corrente_team():
+    league_id=st.session_state.get("ml_league_id")
+    team_id=st.session_state.get("ml_team_id")
+    if league_id is None or team_id is None:
+        return False
+    return sincronizza_workspace_team_da_normalizzato(
+        int(league_id),int(team_id)
+    )
+
+
+
 def situazione_team_corrente_multilega(league_id, team_id):
     league_id = int(league_id)
     team_id = int(team_id)
@@ -25474,7 +25611,8 @@ def verifica_offerta_team_multilega(
                 COALESCE(max_giocatori,30),
                 COALESCE(budget_iniziale,500),
                 COALESCE(soglia_budget,budget_iniziale,500),
-                COALESCE(moltiplicatore_oltre_soglia,1)
+                COALESCE(moltiplicatore_oltre_soglia,1),
+                COALESCE(tipo_asta,'CHIAMATA')
             FROM league_rules
             WHERE league_id=?
             LIMIT 1
@@ -25482,6 +25620,9 @@ def verifica_offerta_team_multilega(
         rr = cur.fetchone()
         if not rr:
             raise ValueError("Regolamento della lega non trovato.")
+
+        if str(rr[5] or "").strip().upper() == "DRAFT":
+            raise ValueError("La modalità Draft non prevede offerte.")
 
         incremento = max(0.01, float(rr[0] or 1))
         max_giocatori = int(rr[1] or 30)
@@ -25676,6 +25817,7 @@ def migliore_offerta_lotto_multilega(league_id, lot_id):
 
 
 
+@st.fragment(run_every="2s")
 def render_console_asta_team():
     if "TEAM" not in RUOLI_ATTIVI:
         st.error("Questa sezione è disponibile solo per una squadra della lega.")
@@ -25690,13 +25832,16 @@ def render_console_asta_team():
 
     team_id = int(team_id)
 
-    st.subheader("📡 Console Asta · Live State 1.0")
+    st.subheader("📡 Console Asta · Live Refresh 1.0")
     st.caption(
-        "Le offerte sono registrate lato server. La migliore offerta valida "
-        "è condivisa tra tutte le squadre e con il Banditore."
+        "Aggiornamento automatico ogni 2 secondi. Offerte, stato del lotto "
+        "e miglior offerente vengono riletti dal server."
     )
 
     try:
+        # Riallinea il workspace operativo prima di mostrare dati d'asta/rosa.
+        sincronizza_workspace_team_da_normalizzato(league_id, team_id)
+
         lotto = lotto_corrente_multilega(league_id)
         team = situazione_team_corrente_multilega(league_id, team_id)
         regole = regole_bidding_multilega(league_id)
@@ -25905,7 +26050,7 @@ def render_console_asta_team():
                 )
 
     if st.button(
-        "⟳ AGGIORNA STATO ASTA",
+        "⟳ AGGIORNA ORA",
         use_container_width=True,
         key="team_auction_refresh"
     ):
@@ -26057,6 +26202,51 @@ def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
         if not rt:
             raise ValueError("Squadra non valida.")
         nome_team=str(rt[0])
+
+        # V108: se l'assegnazione riguarda il lotto corrente e sono presenti
+        # offerte, il server accetta esclusivamente il miglior offerente e
+        # il relativo importo. Non è più soltanto un vincolo dell'interfaccia.
+        cur.execute("""
+            SELECT s.current_lot_id,l.stato,l.player_id
+            FROM auction_sessions s
+            LEFT JOIN auction_lots l ON l.id=s.current_lot_id
+            WHERE s.league_id=?
+            LIMIT 1
+        """,(league_id,))
+        _lot_auth=cur.fetchone()
+
+        if (
+            _lot_auth
+            and _lot_auth[0] is not None
+            and _lot_auth[2] is not None
+            and int(_lot_auth[2])==player_id
+        ):
+            _lot_auth_id=int(_lot_auth[0])
+            _lot_auth_state=str(_lot_auth[1] or "").upper()
+
+            cur.execute("""
+                SELECT team_id,amount
+                FROM bids
+                WHERE league_id=? AND lot_id=?
+                ORDER BY amount DESC,id ASC
+                LIMIT 1
+            """,(league_id,_lot_auth_id))
+            _best_auth=cur.fetchone()
+
+            if _best_auth:
+                if _lot_auth_state!="CLOSING":
+                    raise ValueError(
+                        "Prima dell'assegnazione devi chiudere le offerte."
+                    )
+
+                if (
+                    int(_best_auth[0])!=team_id
+                    or abs(float(_best_auth[1] or 0)-prezzo)>0.0001
+                ):
+                    raise ValueError(
+                        "Assegnazione rifiutata: squadra o prezzo non coincidono "
+                        "con la migliore offerta registrata."
+                    )
 
         cur.execute("""
             SELECT
@@ -26857,16 +27047,17 @@ def render_info_modalita_asta(tipo_asta, turno=None):
 
 
 
+@st.fragment(run_every="2s")
 def render_banditore_asta():
     if not any(r in RUOLI_ATTIVI for r in ("AUCTIONEER","ADMIN")):
         st.error("Questa sezione è riservata a Banditore o Admin.")
         return
 
     league_id=int(st.session_state.get("ml_league_id"))
-    st.subheader("🔨 Banditore · Auctioneer 1.0")
+    st.subheader("🔨 Banditore · Live Refresh 1.0")
     st.caption(
-        "Assegna manualmente il giocatore vincente a una squadra. "
-        "L'operazione aggiorna listone di lega, rosa, budget e audit."
+        "Aggiornamento automatico ogni 2 secondi. Il Banditore vede solo "
+        "il giocatore corrente e lo stato autorevole delle offerte."
     )
 
     try:
@@ -30063,4 +30254,3 @@ def render_navigazione_e_pagina():
     )
 
 render_navigazione_e_pagina()
-
