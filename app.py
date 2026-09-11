@@ -12208,7 +12208,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "3.0"
+MULTILEGA_SCHEMA_VERSION = "3.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -24964,7 +24964,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 3.0 &nbsp;|&nbsp; V113 Bidding Atomico'
+        'MULTILEGA 3.1 &nbsp;|&nbsp; V114 Vincoli Offerta'
         '</div>',
         unsafe_allow_html=True
     )
@@ -26090,36 +26090,21 @@ def _spesa_effettiva_regole(valore, soglia, moltiplicatore):
     )
 
 
-def verifica_offerta_team_multilega(
+def calcola_vincoli_offerta_team_multilega(
     league_id,
     lot_id,
     team_id,
-    amount,
     user_id=None
 ):
-    """
-    Validazione server-side dell'offerta.
+    import math
 
-    Regole V104:
-    - il lotto deve essere quello corrente ed essere OPEN;
-    - l'utente deve appartenere alla squadra;
-    - la nuova offerta deve superare la migliore di almeno incremento_minimo;
-    - budget calcolato sulla spesa effettiva della lega;
-    - viene mantenuta una riserva minima di 1 credito per ogni slot
-      ancora da completare dopo l'eventuale acquisto.
-    """
     league_id = int(league_id)
     lot_id = int(lot_id)
     team_id = int(team_id)
-    amount = round(float(amount), 2)
     user_id = int(
-        user_id
-        if user_id is not None
+        user_id if user_id is not None
         else (st.session_state.get("auth_user_id") or 0)
     )
-
-    if amount <= 0:
-        raise ValueError("L'offerta deve essere superiore a zero.")
 
     conn = _portal_raw_connection()
     cur = conn.cursor()
@@ -26136,7 +26121,12 @@ def verifica_offerta_team_multilega(
             )
 
         cur.execute("""
-            SELECT s.current_lot_id, l.stato, l.player_id
+            SELECT
+                s.current_lot_id,
+                l.stato,
+                l.player_id,
+                l.current_bid,
+                l.current_team_id
             FROM auction_sessions s
             LEFT JOIN auction_lots l ON l.id=s.current_lot_id
             WHERE s.league_id=?
@@ -26153,21 +26143,37 @@ def verifica_offerta_team_multilega(
             raise ValueError("Il lotto non è più aperto.")
 
         player_id = int(rl[2])
+        best_before = float(rl[3] or 0)
+        best_team_id = int(rl[4]) if rl[4] is not None else None
 
         cur.execute("""
-            SELECT stato
-            FROM league_players
-            WHERE league_id=? AND player_id=?
+            SELECT
+                lp.stato,
+                COALESCE(c.ruolo_classico,''),
+                COALESCE(c.ruolo_mantra,'')
+            FROM league_players lp
+            LEFT JOIN league_player_catalog c
+              ON c.league_id=lp.league_id
+             AND c.player_id=lp.player_id
+            WHERE lp.league_id=? AND lp.player_id=?
             LIMIT 1
         """, (league_id, player_id))
         rp = cur.fetchone()
         if not rp or str(rp[0] or "").upper() != "DISPONIBILE":
             raise ValueError("Il giocatore non è più disponibile.")
 
+        ruolo_classico = str(rp[1] or "").strip().upper()
+        ruolo_mantra = str(rp[2] or "").strip().upper()
+        giocatore_portiere = (
+            ruolo_classico == "P"
+            or ruolo_mantra in ("P", "POR")
+        )
+
         cur.execute("""
             SELECT
                 COALESCE(incremento_minimo,1),
                 COALESCE(max_giocatori,30),
+                COALESCE(min_portieri,0),
                 COALESCE(budget_iniziale,500),
                 COALESCE(soglia_budget,budget_iniziale,500),
                 COALESCE(moltiplicatore_oltre_soglia,1),
@@ -26180,40 +26186,55 @@ def verifica_offerta_team_multilega(
         if not rr:
             raise ValueError("Regolamento della lega non trovato.")
 
-        if str(rr[5] or "").strip().upper() == "DRAFT":
-            raise ValueError("La modalità Draft non prevede offerte.")
-
         incremento = max(0.01, float(rr[0] or 1))
         max_giocatori = int(rr[1] or 30)
-        budget_default = float(rr[2] or 500)
-        soglia = float(rr[3] or budget_default)
-        moltiplicatore = max(1.0, float(rr[4] or 1))
+        min_portieri = int(rr[2] or 0)
+        budget_default = float(rr[3] or 500)
+        soglia = float(rr[4] or budget_default)
+        moltiplicatore = max(1.0, float(rr[5] or 1))
+        tipo_asta = str(rr[6] or "").strip().upper()
 
-        cur.execute("""
-            SELECT COALESCE(MAX(amount),0)
-            FROM bids
-            WHERE league_id=? AND lot_id=?
-        """, (league_id, lot_id))
-        best_before = float(cur.fetchone()[0] or 0)
+        if tipo_asta == "DRAFT":
+            raise ValueError("La modalità Draft non prevede offerte.")
 
         minimo = 1.0 if best_before <= 0 else round(best_before + incremento, 2)
 
-        if amount + 1e-9 < minimo:
-            raise ValueError(
-                f"Offerta troppo bassa. Offerta minima: {minimo:g} crediti."
-            )
-
         cur.execute("""
-            SELECT COUNT(*), COALESCE(SUM(prezzo_acquisto),0)
-            FROM rosters
-            WHERE league_id=? AND team_id=?
+            SELECT
+                COUNT(*),
+                COALESCE(SUM(ro.prezzo_acquisto),0),
+                SUM(
+                    CASE
+                        WHEN UPPER(COALESCE(c.ruolo_classico,''))='P'
+                             OR UPPER(COALESCE(c.ruolo_mantra,'')) IN ('P','POR')
+                        THEN 1 ELSE 0
+                    END
+                )
+            FROM rosters ro
+            LEFT JOIN league_player_catalog c
+              ON c.league_id=ro.league_id
+             AND c.player_id=ro.player_id
+            WHERE ro.league_id=? AND ro.team_id=?
         """, (league_id, team_id))
         rrosa = cur.fetchone()
+
         numero_rosa = int(rrosa[0] or 0)
         valore_acquisti = float(rrosa[1] or 0)
+        portieri_attuali = int(rrosa[2] or 0)
 
         if numero_rosa >= max_giocatori:
-            raise ValueError("La rosa è già completa.")
+            return {
+                "can_bid": False,
+                "motivo": "La rosa è già completa.",
+                "player_id": player_id,
+                "minimo": minimo,
+                "massimo": 0.0,
+                "best_before": best_before,
+                "best_team_id": best_team_id,
+                "portieri_attuali": portieri_attuali,
+                "min_portieri": min_portieri,
+                "riserva_minima": 0.0,
+            }
 
         cur.execute("""
             SELECT COALESCE(budget_impostato,?)
@@ -26224,43 +26245,128 @@ def verifica_offerta_team_multilega(
         rb = cur.fetchone()
         budget = float(rb[0] if rb else budget_default)
 
-        valore_con_offerta = round(valore_acquisti + amount, 2)
+        numero_dopo = numero_rosa + 1
+        slot_residui = max(0, max_giocatori - numero_dopo)
+        portieri_dopo = portieri_attuali + (1 if giocatore_portiere else 0)
+        portieri_mancanti_dopo = max(0, min_portieri - portieri_dopo)
 
-        # Dopo questo possibile acquisto restano questi slot da completare.
-        slot_residui = max(0, max_giocatori - (numero_rosa + 1))
-        riserva_minima = float(slot_residui)  # 1 credito per slot
+        vincolo_portieri_ok = slot_residui >= portieri_mancanti_dopo
 
-        valore_con_riserva = round(
-            valore_con_offerta + riserva_minima,
-            2
-        )
+        riserva_minima = float(slot_residui)
 
-        spesa_con_riserva = _spesa_effettiva_regole(
-            valore_con_riserva,
-            soglia,
-            moltiplicatore
-        )
+        if budget <= soglia:
+            valore_totale_massimo = budget
+        else:
+            valore_totale_massimo = (
+                soglia + (budget - soglia) / moltiplicatore
+            )
 
-        if spesa_con_riserva > budget + 1e-9:
-            raise ValueError(
-                "Budget insufficiente considerando anche la riserva minima "
-                f"di {riserva_minima:g} crediti per i {slot_residui} slot residui."
+        massimo = valore_totale_massimo - valore_acquisti - riserva_minima
+        massimo = max(0.0, math.floor((massimo + 1e-9) * 100) / 100)
+
+        can_bid = True
+        motivo = ""
+
+        if best_team_id is not None and best_team_id == team_id:
+            can_bid = False
+            motivo = "Sei già il miglior offerente."
+        elif not vincolo_portieri_ok:
+            can_bid = False
+            motivo = (
+                "Questa offerta renderebbe impossibile raggiungere "
+                f"il numero minimo di portieri ({min_portieri})."
+            )
+        elif massimo + 1e-9 < minimo:
+            can_bid = False
+            motivo = (
+                f"Non hai margine sufficiente per l'offerta minima "
+                f"di {minimo:g} crediti."
             )
 
         return {
+            "can_bid": can_bid,
+            "motivo": motivo,
             "player_id": player_id,
             "incremento": incremento,
             "best_before": best_before,
+            "best_team_id": best_team_id,
             "minimo": minimo,
+            "massimo": massimo,
             "budget": budget,
             "numero_rosa": numero_rosa,
             "slot_residui": slot_residui,
             "riserva_minima": riserva_minima,
-            "valore_con_offerta": valore_con_offerta,
-            "spesa_con_riserva": spesa_con_riserva,
+            "valore_acquisti": valore_acquisti,
+            "soglia": soglia,
+            "moltiplicatore": moltiplicatore,
+            "min_portieri": min_portieri,
+            "portieri_attuali": portieri_attuali,
+            "portieri_dopo": portieri_dopo,
+            "portieri_mancanti_dopo": portieri_mancanti_dopo,
+            "giocatore_portiere": giocatore_portiere,
         }
     finally:
         _portal_close(conn)
+
+
+def verifica_offerta_team_multilega(
+    league_id,
+    lot_id,
+    team_id,
+    amount,
+    user_id=None
+):
+    amount = round(float(amount), 2)
+
+    if amount <= 0:
+        raise ValueError("L'offerta deve essere superiore a zero.")
+
+    info = calcola_vincoli_offerta_team_multilega(
+        league_id, lot_id, team_id, user_id
+    )
+
+    if not info.get("can_bid", False):
+        raise ValueError(
+            info.get("motivo")
+            or "Non puoi effettuare questa offerta."
+        )
+
+    if amount + 1e-9 < float(info["minimo"]):
+        raise ValueError(
+            f"Offerta troppo bassa. Offerta minima: "
+            f"{float(info['minimo']):g} crediti."
+        )
+
+    if amount > float(info["massimo"]) + 1e-9:
+        raise ValueError(
+            f"Offerta troppo alta per il budget disponibile. "
+            f"Offerta massima: {float(info['massimo']):g} crediti."
+        )
+
+    valore_con_offerta = round(
+        float(info["valore_acquisti"]) + amount, 2
+    )
+    valore_con_riserva = round(
+        valore_con_offerta + float(info["riserva_minima"]), 2
+    )
+    spesa_con_riserva = _spesa_effettiva_regole(
+        valore_con_riserva,
+        float(info["soglia"]),
+        float(info["moltiplicatore"])
+    )
+
+    if spesa_con_riserva > float(info["budget"]) + 1e-9:
+        raise ValueError(
+            "Budget insufficiente considerando la riserva minima "
+            "per completare la rosa."
+        )
+
+    return {
+        **info,
+        "valore_con_offerta": valore_con_offerta,
+        "spesa_con_riserva": spesa_con_riserva,
+    }
+
 
 
 def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
@@ -26831,6 +26937,23 @@ def render_console_asta_team():
             else round(float(best["amount"]) + incremento, 2)
         )
 
+        try:
+            vincoli_offerta = calcola_vincoli_offerta_team_multilega(
+                league_id,
+                lotto["lot_id"],
+                team_id
+            )
+        except Exception as errore:
+            vincoli_offerta = {
+                "can_bid": False,
+                "motivo": str(errore),
+                "minimo": offerta_minima,
+                "massimo": 0.0,
+                "riserva_minima": 0.0,
+                "portieri_attuali": 0,
+                "min_portieri": 0,
+            }
+
         lotto_stato = str(lotto.get("stato","")).upper()
 
         if lotto_stato == "OPEN":
@@ -26894,10 +27017,37 @@ def render_console_asta_team():
                     f'**{best["team"]}**'
                 )
 
+        _vc1, _vc2, _vc3 = st.columns(3)
+        _vc1.metric(
+            "Offerta minima",
+            f'{float(vincoli_offerta.get("minimo",offerta_minima)):g}'
+        )
+        _vc2.metric(
+            "Offerta massima",
+            f'{float(vincoli_offerta.get("massimo",0)):g}'
+        )
+        _vc3.metric(
+            "Riserva rosa",
+            f'{float(vincoli_offerta.get("riserva_minima",0)):g}'
+        )
+
         st.caption(
             f'Incremento minimo: {incremento:g} crediti · '
-            f'Prossima offerta minima: {offerta_minima:g}'
+            f'Portieri: {int(vincoli_offerta.get("portieri_attuali",0))}/'
+            f'{int(vincoli_offerta.get("min_portieri",0))}'
         )
+
+        if (
+            lotto_stato == "OPEN"
+            and tipo_asta != "DRAFT"
+            and not vincoli_offerta.get("can_bid", False)
+        ):
+            st.warning(
+                "⛔ " + str(
+                    vincoli_offerta.get("motivo")
+                    or "Non puoi effettuare offerte su questo lotto."
+                )
+            )
 
         if lotto_stato == "CLOSING":
             if best is None:
@@ -26918,12 +27068,14 @@ def render_console_asta_team():
             st.caption(
                 "Nuove offerte non consentite: il Banditore ha chiuso il bidding."
             )
+        elif not vincoli_offerta.get("can_bid", False):
+            st.caption("Offerta non disponibile per i vincoli correnti.")
         else:
             b1, b2 = st.columns([1, 1.5])
 
             with b1:
                 if st.button(
-                    f"➕ OFFRI {offerta_minima:g}",
+                    f"➕ OFFRI {float(vincoli_offerta.get('minimo',offerta_minima)):g}",
                     type="primary",
                     use_container_width=True,
                     key=f"team_bid_plus_{lotto['lot_id']}"
@@ -26933,20 +27085,28 @@ def render_console_asta_team():
                             league_id,
                             lotto["lot_id"],
                             team_id,
-                            offerta_minima
+                            float(vincoli_offerta.get("minimo",offerta_minima))
                         )
                         st.session_state["team_bid_msg"] = (
-                            f"Offerta di {offerta_minima:g} crediti registrata."
+                            f"Offerta di {float(vincoli_offerta.get('minimo',offerta_minima)):g} crediti registrata."
                         )
                         st.rerun(scope="fragment")
                     except Exception as errore:
                         st.error(str(errore))
 
             with b2:
+                _min_ui = float(
+                    vincoli_offerta.get("minimo",offerta_minima)
+                )
+                _max_ui = float(
+                    vincoli_offerta.get("massimo",_min_ui)
+                )
+
                 offerta_diretta = st.number_input(
                     "Offerta diretta",
-                    min_value=float(offerta_minima),
-                    value=float(offerta_minima),
+                    min_value=_min_ui,
+                    max_value=max(_min_ui,_max_ui),
+                    value=_min_ui,
                     step=float(incremento),
                     key=f"team_bid_direct_value_{lotto['lot_id']}"
                 )
@@ -27209,6 +27369,15 @@ def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
         moltiplicatore=max(1,float(rr[3] or 1))
 
         cur.execute("""
+            SELECT COALESCE(min_portieri,0)
+            FROM league_rules
+            WHERE league_id=?
+            LIMIT 1
+        """,(league_id,))
+        _r_min_p=cur.fetchone()
+        _min_portieri=int(_r_min_p[0] or 0) if _r_min_p else 0
+
+        cur.execute("""
             SELECT COUNT(*),COALESCE(SUM(prezzo_acquisto),0)
             FROM rosters
             WHERE league_id=? AND team_id=?
@@ -27219,6 +27388,50 @@ def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
 
         if roster_count >= max_giocatori:
             raise ValueError("La rosa della squadra è già completa.")
+
+        cur.execute("""
+            SELECT
+                SUM(
+                    CASE
+                        WHEN UPPER(COALESCE(c.ruolo_classico,''))='P'
+                             OR UPPER(COALESCE(c.ruolo_mantra,'')) IN ('P','POR')
+                        THEN 1 ELSE 0
+                    END
+                )
+            FROM rosters ro
+            LEFT JOIN league_player_catalog c
+              ON c.league_id=ro.league_id
+             AND c.player_id=ro.player_id
+            WHERE ro.league_id=? AND ro.team_id=?
+        """,(league_id,team_id))
+        _r_portieri=cur.fetchone()
+        _portieri_attuali=int(_r_portieri[0] or 0) if _r_portieri else 0
+
+        cur.execute("""
+            SELECT COALESCE(ruolo_classico,''),COALESCE(ruolo_mantra,'')
+            FROM league_player_catalog
+            WHERE league_id=? AND player_id=?
+            LIMIT 1
+        """,(league_id,player_id))
+        _r_ruolo=cur.fetchone()
+
+        _is_portiere=bool(
+            _r_ruolo
+            and (
+                str(_r_ruolo[0] or "").strip().upper()=="P"
+                or str(_r_ruolo[1] or "").strip().upper() in ("P","POR")
+            )
+        )
+
+        _slot_dopo=max(0,max_giocatori-(roster_count+1))
+        _portieri_dopo=_portieri_attuali+(1 if _is_portiere else 0)
+        _portieri_mancanti=max(0,_min_portieri-_portieri_dopo)
+
+        if _slot_dopo < _portieri_mancanti:
+            raise ValueError(
+                "Assegnazione non consentita: non resterebbero abbastanza "
+                "slot per raggiungere il numero minimo di portieri."
+            )
 
         cur.execute("""
             SELECT COALESCE(budget_impostato,?)
