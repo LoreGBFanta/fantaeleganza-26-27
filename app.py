@@ -12208,7 +12208,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "3.1"
+MULTILEGA_SCHEMA_VERSION = "3.2"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -12378,6 +12378,31 @@ def inizializza_database_multilega():
         cur.execute("""
             CREATE INDEX IF NOT EXISTS ix_league_player_catalog_nome
             ON league_player_catalog(league_id, nome)
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS iqr_profiles (
+                league_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                iqr_corrente REAL NOT NULL DEFAULT 0,
+                max_giocatori INTEGER NOT NULL DEFAULT 30,
+                giocatori_rosa INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (league_id, team_id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS player_evaluations (
+                league_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                iqr_prima REAL NOT NULL DEFAULT 0,
+                iqr_dopo REAL NOT NULL DEFAULT 0,
+                delta_iqr REAL NOT NULL DEFAULT 0,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (league_id, team_id, player_id)
+            )
         """)
 
         cur.execute("""
@@ -24964,7 +24989,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 3.1 &nbsp;|&nbsp; V114 Vincoli Offerta'
+        'MULTILEGA 3.2 &nbsp;|&nbsp; V115 IQR Personalizzato'
         '</div>',
         unsafe_allow_html=True
     )
@@ -25222,6 +25247,31 @@ def inizializza_listone_lega_asta(league_id):
     conn=_portal_raw_connection()
     cur=conn.cursor()
     try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS iqr_profiles (
+                league_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                iqr_corrente REAL NOT NULL DEFAULT 0,
+                max_giocatori INTEGER NOT NULL DEFAULT 30,
+                giocatori_rosa INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (league_id, team_id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS player_evaluations (
+                league_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                iqr_prima REAL NOT NULL DEFAULT 0,
+                iqr_dopo REAL NOT NULL DEFAULT 0,
+                delta_iqr REAL NOT NULL DEFAULT 0,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (league_id, team_id, player_id)
+            )
+        """)
+
         cur.execute("""
             CREATE TABLE IF NOT EXISTS auction_assignment_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26769,6 +26819,240 @@ def gestisci_chiamata_banditore_multilega(league_id, call_id):
 
 
 
+
+def rosa_normalizzata_team_multilega(league_id, team_id):
+    """
+    Costruisce la rosa del team usando esclusivamente le tabelle normalizzate
+    autorevoli della lega.
+    """
+    league_id = int(league_id)
+    team_id = int(team_id)
+
+    conn = _portal_raw_connection()
+    try:
+        df = pd.read_sql_query("""
+            SELECT
+                c.player_id AS Id,
+                c.ruolo_classico AS R,
+                c.ruolo_mantra AS RM,
+                c.nome AS Nome,
+                c.squadra AS Squadra,
+                c.quotazione_attuale AS "Qt.A",
+                c.quotazione_iniziale AS "Qt.I",
+                c.differenza AS "Diff.",
+                c.quotazione_attuale_mantra AS "Qt.A M",
+                c.quotazione_iniziale_mantra AS "Qt.I M",
+                c.differenza_mantra AS "Diff.M",
+                c.fvm AS FVM,
+                c.fvm_mantra AS "FVM M",
+                'MIO' AS Stato,
+                ro.prezzo_acquisto AS Prezzo
+            FROM rosters ro
+            JOIN league_player_catalog c
+              ON c.league_id=ro.league_id
+             AND c.player_id=ro.player_id
+            WHERE ro.league_id=? AND ro.team_id=?
+            ORDER BY c.nome
+        """, conn, params=(league_id, team_id))
+        return df
+    finally:
+        _portal_close(conn)
+
+
+def max_giocatori_lega_multilega(league_id):
+    league_id = int(league_id)
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COALESCE(max_giocatori,30)
+            FROM league_rules
+            WHERE league_id=?
+            LIMIT 1
+        """, (league_id,))
+        r = cur.fetchone()
+        return int(r[0] or 30) if r else 30
+    finally:
+        _portal_close(conn)
+
+
+def aggiorna_iqr_team_multilega(league_id, team_id):
+    """
+    Calcola l'IQR effettivo della rosa del team sulla dimensione rosa
+    configurata nella lega e salva lo snapshot centrale.
+    """
+    league_id = int(league_id)
+    team_id = int(team_id)
+
+    df_rosa = rosa_normalizzata_team_multilega(
+        league_id, team_id
+    )
+    max_giocatori = max_giocatori_lega_multilega(league_id)
+
+    valore = float(
+        calcola_iqr(
+            df_rosa,
+            None,
+            max_giocatori=max_giocatori
+        )
+    )
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO iqr_profiles (
+                league_id,team_id,iqr_corrente,max_giocatori,
+                giocatori_rosa,updated_at
+            )
+            VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,team_id)
+            DO UPDATE SET
+                iqr_corrente=excluded.iqr_corrente,
+                max_giocatori=excluded.max_giocatori,
+                giocatori_rosa=excluded.giocatori_rosa,
+                updated_at=CURRENT_TIMESTAMP
+        """, (
+            league_id,
+            team_id,
+            valore,
+            max_giocatori,
+            len(df_rosa)
+        ))
+        conn.commit()
+    finally:
+        _portal_close(conn)
+
+    return {
+        "iqr": valore,
+        "max_giocatori": max_giocatori,
+        "giocatori": len(df_rosa),
+        "df_rosa": df_rosa,
+    }
+
+
+def valuta_iqr_giocatore_team_multilega(
+    league_id,
+    team_id,
+    player_id
+):
+    """
+    Valutazione personalizzata: quanto cambierebbe l'IQR della specifica
+    squadra se acquistasse il giocatore del lotto corrente.
+    """
+    league_id = int(league_id)
+    team_id = int(team_id)
+    player_id = int(player_id)
+
+    base = aggiorna_iqr_team_multilega(
+        league_id,
+        team_id
+    )
+    df_rosa = base["df_rosa"].copy()
+    max_giocatori = int(base["max_giocatori"])
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                player_id,
+                ruolo_classico,
+                ruolo_mantra,
+                nome,
+                squadra,
+                quotazione_attuale,
+                quotazione_iniziale,
+                differenza,
+                quotazione_attuale_mantra,
+                quotazione_iniziale_mantra,
+                differenza_mantra,
+                fvm,
+                fvm_mantra
+            FROM league_player_catalog
+            WHERE league_id=? AND player_id=?
+            LIMIT 1
+        """, (league_id, player_id))
+        r = cur.fetchone()
+
+        if not r:
+            raise ValueError(
+                "Giocatore non presente nel listone della lega."
+            )
+
+        nuova_riga = pd.DataFrame([{
+            "Id": int(r[0]),
+            "R": str(r[1] or ""),
+            "RM": str(r[2] or ""),
+            "Nome": str(r[3] or ""),
+            "Squadra": str(r[4] or ""),
+            "Qt.A": r[5],
+            "Qt.I": r[6],
+            "Diff.": r[7],
+            "Qt.A M": r[8],
+            "Qt.I M": r[9],
+            "Diff.M": r[10],
+            "FVM": r[11],
+            "FVM M": r[12],
+            "Stato": "MIO",
+            "Prezzo": None,
+        }])
+
+        if "Id" in df_rosa.columns and (
+            df_rosa["Id"].astype(int) == player_id
+        ).any():
+            iqr_dopo = float(base["iqr"])
+        else:
+            df_proiettata = pd.concat(
+                [df_rosa, nuova_riga],
+                ignore_index=True
+            )
+            iqr_dopo = float(
+                calcola_iqr(
+                    df_proiettata,
+                    None,
+                    max_giocatori=max_giocatori
+                )
+            )
+
+        iqr_prima = float(base["iqr"])
+        delta = round(iqr_dopo - iqr_prima, 1)
+
+        cur.execute("""
+            INSERT INTO player_evaluations (
+                league_id,team_id,player_id,
+                iqr_prima,iqr_dopo,delta_iqr,updated_at
+            )
+            VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,team_id,player_id)
+            DO UPDATE SET
+                iqr_prima=excluded.iqr_prima,
+                iqr_dopo=excluded.iqr_dopo,
+                delta_iqr=excluded.delta_iqr,
+                updated_at=CURRENT_TIMESTAMP
+        """, (
+            league_id,
+            team_id,
+            player_id,
+            iqr_prima,
+            iqr_dopo,
+            delta
+        ))
+        conn.commit()
+
+        return {
+            "iqr_prima": iqr_prima,
+            "iqr_dopo": iqr_dopo,
+            "delta": delta,
+            "descrizione_prima": descrizione_iqr(iqr_prima),
+            "descrizione_dopo": descrizione_iqr(iqr_dopo),
+        }
+
+    finally:
+        _portal_close(conn)
+
+
+
 def render_console_asta_team():
     if "TEAM" not in RUOLI_ATTIVI:
         st.error("Questa sezione è disponibile solo per una squadra della lega.")
@@ -26809,11 +27093,21 @@ def render_console_asta_team():
         return
 
     if team:
-        c1, c2, c3, c4 = st.columns(4)
+        try:
+            _iqr_team = aggiorna_iqr_team_multilega(
+                league_id,
+                team_id
+            )
+            _iqr_corrente = float(_iqr_team["iqr"])
+        except Exception:
+            _iqr_corrente = 0.0
+
+        c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Budget", f'{team["budget"]:g}')
         c2.metric("Spesa effettiva", f'{team["spesa_effettiva"]:g}')
         c3.metric("Residuo", f'{team["residuo"]:g}')
         c4.metric("Rosa", f'{team["giocatori"]}/{team["max_giocatori"]}')
+        c5.metric("IQR", f'{_iqr_corrente:.1f}%')
 
     render_info_modalita_asta(tipo_asta, turno_corrente)
 
@@ -26999,6 +27293,41 @@ def render_console_asta_team():
             """,
             unsafe_allow_html=True
         )
+
+        try:
+            _iqr_lotto = valuta_iqr_giocatore_team_multilega(
+                league_id,
+                team_id,
+                lotto["player_id"]
+            )
+
+            _delta_iqr = float(_iqr_lotto["delta"])
+            _segno_iqr = "+" if _delta_iqr > 0 else ""
+
+            _ic1, _ic2, _ic3 = st.columns(3)
+            _ic1.metric(
+                "IQR attuale",
+                f'{float(_iqr_lotto["iqr_prima"]):.1f}%'
+            )
+            _ic2.metric(
+                "IQR con giocatore",
+                f'{float(_iqr_lotto["iqr_dopo"]):.1f}%',
+                delta=f'{_segno_iqr}{_delta_iqr:.1f}'
+            )
+            _ic3.metric(
+                "Impatto IQR",
+                f'{_segno_iqr}{_delta_iqr:.1f}'
+            )
+
+            st.caption(
+                "Valutazione personalizzata sulla tua rosa: "
+                f'**{_iqr_lotto["descrizione_prima"]}** → '
+                f'**{_iqr_lotto["descrizione_dopo"]}**'
+            )
+        except Exception as errore:
+            st.caption(
+                "IQR personalizzato non disponibile: " + str(errore)
+            )
 
         if best is None:
             st.info(
