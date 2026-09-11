@@ -12209,7 +12209,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "3.3"
+MULTILEGA_SCHEMA_VERSION = "3.3.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -24993,7 +24993,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 3.3 &nbsp;|&nbsp; V116 Banditore Fast'
+        'MULTILEGA 3.3.1 &nbsp;|&nbsp; V117 Fix Venduti Avversari'
         '</div>',
         unsafe_allow_html=True
     )
@@ -29330,6 +29330,59 @@ def render_banditore_asta():
 # ============================================================
 
 @st.fragment
+
+def venduti_avversari_normalizzati_multilega(league_id, team_id):
+    """Fonte autorevole V117 per la pagina Venduti ad avversari."""
+    league_id = int(league_id)
+    team_id = int(team_id)
+    conn = _portal_raw_connection()
+    try:
+        df = pd.read_sql_query("""
+            SELECT
+                c.player_id AS Id,
+                c.ruolo_classico AS R,
+                c.ruolo_mantra AS RM,
+                c.nome AS Nome,
+                c.squadra AS Squadra,
+                c.quotazione_attuale AS "Qt.A",
+                c.quotazione_iniziale AS "Qt.I",
+                c.differenza AS "Diff.",
+                c.quotazione_attuale_mantra AS "Qt.A M",
+                c.quotazione_iniziale_mantra AS "Qt.I M",
+                c.differenza_mantra AS "Diff.M",
+                c.fvm AS FVM,
+                c.fvm_mantra AS "FVM M",
+                'AVVERSARIO' AS Stato,
+                lp.prezzo_assegnazione AS Prezzo,
+                COALESCE(t.nome,'') AS "Acquistato da"
+            FROM league_players lp
+            JOIN league_player_catalog c
+              ON c.league_id=lp.league_id
+             AND c.player_id=lp.player_id
+            LEFT JOIN teams t
+              ON t.league_id=lp.league_id
+             AND t.id=lp.assigned_team_id
+            WHERE lp.league_id=?
+              AND lp.stato='ASSEGNATO'
+              AND lp.assigned_team_id IS NOT NULL
+              AND lp.assigned_team_id<>?
+            ORDER BY c.nome COLLATE NOCASE
+        """, conn, params=(league_id, team_id))
+
+        colonne = [
+            "Id","R","RM","Nome","Squadra","Qt.A","Qt.I","Diff.",
+            "Qt.A M","Qt.I M","Diff.M","FVM","FVM M","Stato",
+            "Prezzo","Acquistato da"
+        ]
+        for col in colonne:
+            if col not in df.columns:
+                df[col] = pd.Series(dtype="object")
+        return df[colonne]
+    finally:
+        _portal_close(conn)
+
+
+
 def render_navigazione_e_pagina():
     # ============================================================
     # NAVBAR
@@ -30668,14 +30721,42 @@ def render_navigazione_e_pagina():
                 )
             )
 
-        avversari = (
-            df_completo[
-                df_completo["Stato"] == "AVVERSARIO"
-            ]
-            .copy()
-            .sort_values("Nome")
-            .reset_index(drop=True)
-        )
+        _league_v117 = st.session_state.get("selected_league_id")
+        _team_v117 = st.session_state.get("selected_team_id")
+
+        if _league_v117 and _team_v117:
+            try:
+                avversari = venduti_avversari_normalizzati_multilega(
+                    int(_league_v117),
+                    int(_team_v117)
+                )
+            except Exception:
+                _stato_safe = df_completo.get(
+                    "Stato",
+                    pd.Series("", index=df_completo.index, dtype="object")
+                )
+                avversari = (
+                    df_completo[_stato_safe == "AVVERSARIO"]
+                    .copy()
+                )
+        else:
+            _stato_safe = df_completo.get(
+                "Stato",
+                pd.Series("", index=df_completo.index, dtype="object")
+            )
+            avversari = (
+                df_completo[_stato_safe == "AVVERSARIO"]
+                .copy()
+            )
+
+        if "Nome" in avversari.columns:
+            avversari = (
+                avversari
+                .sort_values("Nome")
+                .reset_index(drop=True)
+            )
+        else:
+            avversari = avversari.reset_index(drop=True)
 
         if avversari.empty:
 
