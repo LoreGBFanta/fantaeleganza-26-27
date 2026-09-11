@@ -12208,7 +12208,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "2.9.2"
+MULTILEGA_SCHEMA_VERSION = "3.0"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -24964,7 +24964,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 2.9.2 &nbsp;|&nbsp; V112 Refresh Manuale e Performance'
+        'MULTILEGA 3.0 &nbsp;|&nbsp; V113 Bidding Atomico'
         '</div>',
         unsafe_allow_html=True
     )
@@ -25261,7 +25261,11 @@ def inizializza_listone_lega_asta(league_id):
                 assigned_team_id INTEGER,
                 final_price REAL,
                 closing_by_user_id INTEGER,
-                closing_at TEXT
+                closing_at TEXT,
+                current_bid REAL,
+                current_team_id INTEGER,
+                bid_count INTEGER NOT NULL DEFAULT 0,
+                version INTEGER NOT NULL DEFAULT 0
             )
         """)
 
@@ -25278,6 +25282,47 @@ def inizializza_listone_lega_asta(league_id):
             cur.execute("""
                 ALTER TABLE auction_lots
                 ADD COLUMN closing_at TEXT
+            """)
+        except Exception:
+            pass
+
+        for _sql_migrazione in (
+            "ALTER TABLE auction_lots ADD COLUMN current_bid REAL",
+            "ALTER TABLE auction_lots ADD COLUMN current_team_id INTEGER",
+            "ALTER TABLE auction_lots ADD COLUMN bid_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE auction_lots ADD COLUMN version INTEGER NOT NULL DEFAULT 0",
+        ):
+            try:
+                cur.execute(_sql_migrazione)
+            except Exception:
+                pass
+
+        # Backfill dei lotti già esistenti prendendo il miglior bid storico.
+        # Se non esistono offerte, i campi restano NULL/0.
+        try:
+            cur.execute("""
+                UPDATE auction_lots
+                SET current_bid = (
+                        SELECT MAX(b.amount)
+                        FROM bids b
+                        WHERE b.lot_id=auction_lots.id
+                          AND b.league_id=auction_lots.league_id
+                    ),
+                    current_team_id = (
+                        SELECT b2.team_id
+                        FROM bids b2
+                        WHERE b2.lot_id=auction_lots.id
+                          AND b2.league_id=auction_lots.league_id
+                        ORDER BY b2.amount DESC, b2.id ASC
+                        LIMIT 1
+                    ),
+                    bid_count = (
+                        SELECT COUNT(*)
+                        FROM bids b3
+                        WHERE b3.lot_id=auction_lots.id
+                          AND b3.league_id=auction_lots.league_id
+                    )
+                WHERE current_bid IS NULL
             """)
         except Exception:
             pass
@@ -25388,7 +25433,11 @@ def lotto_corrente_multilega(league_id):
                 COALESCE(g.ruolo_mantra,''),
                 COALESCE(g.fvm_mantra,g.fvm,0),
                 COALESCE(g.quotazione_attuale_mantra,g.quotazione_attuale,0),
-                l.closing_at
+                l.closing_at,
+                l.current_bid,
+                l.current_team_id,
+                COALESCE(l.bid_count,0),
+                COALESCE(l.version,0)
             FROM auction_sessions s
             LEFT JOIN auction_lots l ON l.id=s.current_lot_id
             LEFT JOIN league_player_catalog g ON g.player_id=l.player_id AND g.league_id=s.league_id
@@ -25411,6 +25460,10 @@ def lotto_corrente_multilega(league_id):
             "fvm": float(r[7] or 0),
             "quotazione": float(r[8] or 0),
             "closing_at": str(r[9] or ""),
+            "current_bid": float(r[10]) if r[10] is not None else None,
+            "current_team_id": int(r[11]) if r[11] is not None else None,
+            "bid_count": int(r[12] or 0),
+            "version": int(r[13] or 0),
         }
     finally:
         _portal_close(conn)
@@ -25469,9 +25522,11 @@ def apri_lotto_banditore(league_id, player_id):
         cur.execute("""
             INSERT INTO auction_lots (
                 league_id, player_id, stato,
-                opened_by_user_id, opened_at
+                opened_by_user_id, opened_at,
+                current_bid,current_team_id,bid_count,version
             )
-            VALUES (?, ?, 'OPEN', ?, CURRENT_TIMESTAMP)
+            VALUES (?, ?, 'OPEN', ?, CURRENT_TIMESTAMP,
+                    NULL,NULL,0,0)
         """, (league_id, player_id, user_id))
 
         cur.execute("SELECT last_insert_rowid()")
@@ -25669,11 +25724,13 @@ def chiudi_lotto_banditore(league_id, lot_id, motivo="CLOSED"):
             raise PermissionError("Operazione riservata a Banditore o Admin.")
 
         cur.execute("""
-            SELECT COUNT(*)
-            FROM bids
-            WHERE league_id=? AND lot_id=?
+            SELECT COALESCE(bid_count,0)
+            FROM auction_lots
+            WHERE league_id=? AND id=?
+            LIMIT 1
         """, (league_id, lot_id))
-        numero_offerte = int(cur.fetchone()[0] or 0)
+        _r_offerte = cur.fetchone()
+        numero_offerte = int(_r_offerte[0] or 0) if _r_offerte else 0
 
         if numero_offerte > 0:
             raise ValueError(
@@ -25951,6 +26008,31 @@ def stato_offerte_lotto_multilega(league_id, lot_id, limit=20):
     conn = _portal_raw_connection()
     cur = conn.cursor()
     try:
+        # Stato autorevole O(1): non ricalcola MAX(bids) a ogni refresh.
+        cur.execute("""
+            SELECT
+                l.current_bid,
+                l.current_team_id,
+                COALESCE(t.nome,''),
+                COALESCE(l.bid_count,0),
+                COALESCE(l.version,0)
+            FROM auction_lots l
+            LEFT JOIN teams t
+              ON t.id=l.current_team_id AND t.league_id=l.league_id
+            WHERE l.league_id=? AND l.id=?
+            LIMIT 1
+        """, (league_id, lot_id))
+        stato = cur.fetchone()
+
+        migliore = None
+        if stato and stato[0] is not None and stato[1] is not None:
+            migliore = {
+                "team_id": int(stato[1]),
+                "team": str(stato[2] or ""),
+                "amount": float(stato[0]),
+                "version": int(stato[4] or 0),
+            }
+
         cur.execute("""
             SELECT
                 b.id,
@@ -25965,12 +26047,11 @@ def stato_offerte_lotto_multilega(league_id, lot_id, limit=20):
               ON t.id=b.team_id AND t.league_id=b.league_id
             LEFT JOIN users u ON u.id=b.user_id
             WHERE b.league_id=? AND b.lot_id=?
-            ORDER BY b.amount DESC, b.id ASC
+            ORDER BY b.id DESC
             LIMIT ?
         """, (league_id, lot_id, int(limit)))
 
         righe = cur.fetchall() or []
-
         bids = [
             {
                 "bid_id": int(r[0]),
@@ -25984,15 +26065,15 @@ def stato_offerte_lotto_multilega(league_id, lot_id, limit=20):
             for r in righe
         ]
 
-        migliore = bids[0] if bids else None
-
         return {
             "best": migliore,
             "bids": bids,
-            "count": len(bids),
+            "count": int(stato[3] or 0) if stato else len(bids),
+            "version": int(stato[4] or 0) if stato else 0,
         }
     finally:
         _portal_close(conn)
+
 
 
 def _spesa_effettiva_regole(valore, soglia, moltiplicatore):
@@ -26184,9 +26265,11 @@ def verifica_offerta_team_multilega(
 
 def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
     """
-    Inserisce l'offerta dopo una nuova validazione immediatamente prima
-    della scrittura. Il vincolo univoco lot_id+amount impedisce due offerte
-    identiche sullo stesso lotto.
+    V113 - Bidding atomico con optimistic locking.
+
+    Il record auction_lots è la fonte autorevole:
+    current_bid + current_team_id + version.
+    Due offerte concorrenti non possono entrambe vincere la stessa versione.
     """
     league_id = int(league_id)
     lot_id = int(lot_id)
@@ -26194,63 +26277,106 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
     amount = round(float(amount), 2)
     user_id = int(st.session_state.get("auth_user_id") or 0)
 
-    # Prima validazione completa.
+    # Validazione completa di membership, budget, rosa e regole.
     info = verifica_offerta_team_multilega(
         league_id, lot_id, team_id, amount, user_id
     )
 
     conn = _portal_raw_connection()
     cur = conn.cursor()
+
     try:
-        # Ricontrollo atomico dello stato più sensibile subito prima dell'INSERT.
+        # Snapshot autorevole immediatamente prima della scrittura.
         cur.execute("""
             SELECT
-                COALESCE(MAX(b.amount),0),
+                l.stato,
+                l.current_bid,
+                l.current_team_id,
+                COALESCE(l.version,0),
                 COALESCE(r.incremento_minimo,1),
-                s.current_lot_id,
-                COALESCE(l.stato,'')
-            FROM auction_sessions s
-            LEFT JOIN auction_lots l ON l.id=s.current_lot_id
-            LEFT JOIN league_rules r ON r.league_id=s.league_id
-            LEFT JOIN bids b
-              ON b.league_id=s.league_id
-             AND b.lot_id=s.current_lot_id
-            WHERE s.league_id=?
-            GROUP BY r.incremento_minimo,s.current_lot_id,l.stato
-        """, (league_id,))
+                s.current_lot_id
+            FROM auction_lots l
+            JOIN auction_sessions s
+              ON s.league_id=l.league_id
+            LEFT JOIN league_rules r
+              ON r.league_id=l.league_id
+            WHERE l.league_id=? AND l.id=?
+            LIMIT 1
+        """, (league_id, lot_id))
         r = cur.fetchone()
 
         if (
             not r
-            or r[2] is None
-            or int(r[2]) != lot_id
-            or str(r[3] or "").upper() != "OPEN"
+            or str(r[0] or "").upper() != "OPEN"
+            or r[5] is None
+            or int(r[5]) != lot_id
         ):
             raise ValueError("Il lotto non è più aperto.")
 
-        best_now = float(r[0] or 0)
-        incremento = max(0.01, float(r[1] or 1))
-        minimo_now = 1.0 if best_now <= 0 else round(best_now + incremento, 2)
+        current_bid = float(r[1]) if r[1] is not None else 0.0
+        version = int(r[3] or 0)
+        incremento = max(0.01, float(r[4] or 1))
+        minimo = 1.0 if current_bid <= 0 else round(current_bid + incremento, 2)
 
-        if amount + 1e-9 < minimo_now:
+        if amount + 1e-9 < minimo:
             raise ValueError(
                 f"Nel frattempo è arrivata un'altra offerta. "
-                f"Nuova offerta minima: {minimo_now:g} crediti."
+                f"Nuova offerta minima: {minimo:g} crediti."
             )
 
-        try:
-            cur.execute("""
-                INSERT INTO bids (
-                    league_id,lot_id,team_id,user_id,amount,created_at
-                )
-                VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
-            """, (league_id, lot_id, team_id, user_id, amount))
-        except Exception as errore_insert:
-            # Il caso più comune è il conflitto UNIQUE su stesso importo.
+        # CAS: aggiorna solo se la versione letta è ancora quella corrente.
+        cur.execute("""
+            UPDATE auction_lots
+            SET current_bid=?,
+                current_team_id=?,
+                bid_count=COALESCE(bid_count,0)+1,
+                version=COALESCE(version,0)+1
+            WHERE id=?
+              AND league_id=?
+              AND stato='OPEN'
+              AND COALESCE(version,0)=?
+              AND (
+                    current_bid IS NULL
+                    OR current_bid<=?
+                  )
+        """, (
+            amount,
+            team_id,
+            lot_id,
+            league_id,
+            version,
+            current_bid
+        ))
+
+        # rowcount può non essere affidabile su tutti i driver: rileggiamo.
+        cur.execute("""
+            SELECT current_bid,current_team_id,COALESCE(version,0),stato
+            FROM auction_lots
+            WHERE id=? AND league_id=?
+            LIMIT 1
+        """, (lot_id, league_id))
+        check = cur.fetchone()
+
+        if (
+            not check
+            or str(check[3] or "").upper() != "OPEN"
+            or check[0] is None
+            or int(check[1] or 0) != team_id
+            or abs(float(check[0]) - amount) > 0.0001
+            or int(check[2] or 0) != version + 1
+        ):
             raise ValueError(
-                "Offerta non accettata: un'altra squadra ha appena "
-                "registrato lo stesso importo o un'offerta concorrente."
-            ) from errore_insert
+                "Offerta superata da un'altra offerta concorrente. "
+                "Premi AGGIORNA ORA e riprova."
+            )
+
+        # Solo dopo aver vinto il CAS viene registrato lo storico del bid.
+        cur.execute("""
+            INSERT INTO bids (
+                league_id,lot_id,team_id,user_id,amount,created_at
+            )
+            VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+        """, (league_id, lot_id, team_id, user_id, amount))
 
         cur.execute("""
             INSERT INTO audit_log (
@@ -26266,8 +26392,9 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             json.dumps({
                 "amount": amount,
                 "player_id": info["player_id"],
-                "best_before": info["best_before"],
-                "minimo": info["minimo"],
+                "previous_bid": current_bid,
+                "version_before": version,
+                "version_after": version + 1,
                 "riserva_minima": info["riserva_minima"],
             }, ensure_ascii=False)
         ))
@@ -26277,6 +26404,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
         return {
             **info,
             "amount": amount,
+            "version": version + 1,
         }
 
     except Exception:
@@ -26287,6 +26415,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
         raise
     finally:
         _portal_close(conn)
+
 
 
 def migliore_offerta_lotto_multilega(league_id, lot_id):
@@ -26551,7 +26680,8 @@ def render_console_asta_team():
     st.subheader("📡 Console Asta")
     st.caption(
         "Lo stato dell'asta viene aggiornato quando entri nella sezione "
-        "o quando premi «AGGIORNA ORA»."
+        "o quando premi «AGGIORNA ORA». Le offerte simultanee sono "
+        "validate atomicamente dal server."
     )
 
     try:
@@ -27037,10 +27167,9 @@ def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
             _lot_auth_state=str(_lot_auth[1] or "").upper()
 
             cur.execute("""
-                SELECT team_id,amount
-                FROM bids
-                WHERE league_id=? AND lot_id=?
-                ORDER BY amount DESC,id ASC
+                SELECT current_team_id,current_bid
+                FROM auction_lots
+                WHERE league_id=? AND id=?
                 LIMIT 1
             """,(league_id,_lot_auth_id))
             _best_auth=cur.fetchone()
