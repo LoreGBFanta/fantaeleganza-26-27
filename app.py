@@ -1,5 +1,6 @@
 # FANTAELEGANZA MULTIMODULO V3 - FILE VERIFICATO
 import html
+import time
 import io
 import json
 import math
@@ -12208,7 +12209,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "3.2"
+MULTILEGA_SCHEMA_VERSION = "3.3"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -14728,6 +14729,9 @@ def render_admin_multilega():
                         _esito_listone = importa_listone_lega_da_admin(
                             int(_league_admin_listone),
                             _df_admin_listone
+                        )
+                        invalida_inizializzazione_asta_multilega(
+                            int(_league_admin_listone)
                         )
                         st.success(
                             "✅ Listone di lega aggiornato. "
@@ -24989,7 +24993,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 3.2 &nbsp;|&nbsp; V115 IQR Personalizzato'
+        'MULTILEGA 3.3 &nbsp;|&nbsp; V116 Banditore Fast'
         '</div>',
         unsafe_allow_html=True
     )
@@ -25237,232 +25241,349 @@ st.markdown("""
 # MULTILEGA 2.0 - AUCTIONEER 1.0
 # ============================================================
 
-def inizializza_listone_lega_asta(league_id):
+def inizializza_listone_lega_asta(league_id, forza=False):
     """
-    Inizializza il catalogo di lega e le strutture operative dell'asta.
-    V102 aggiunge una cronologia autorevole delle assegnazioni, necessaria
-    per audit e annullamento controllato.
+    V116 - inizializzazione asta ottimizzata.
+
+    Evita di eseguire CREATE/ALTER/backfill/INSERT/COMMIT ad ogni lettura
+    del Banditore. Con Turso quei round-trip ripetuti erano il principale
+    collo di bottiglia.
     """
-    league_id=int(league_id)
-    conn=_portal_raw_connection()
-    cur=conn.cursor()
+    league_id = int(league_id)
+
+    _guard_key = f"_auction_schema_ready_v116_{league_id}"
+    if not forza and st.session_state.get(_guard_key):
+        return
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    _dirty = False
+
     try:
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS iqr_profiles (
-                league_id INTEGER NOT NULL,
-                team_id INTEGER NOT NULL,
-                iqr_corrente REAL NOT NULL DEFAULT 0,
-                max_giocatori INTEGER NOT NULL DEFAULT 30,
-                giocatori_rosa INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (league_id, team_id)
-            )
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table'
+              AND name IN (
+                  'iqr_profiles',
+                  'player_evaluations',
+                  'auction_assignment_history',
+                  'auction_sessions',
+                  'auction_lots',
+                  'auction_calls',
+                  'bids'
+              )
         """)
+        _presenti = {str(r[0]) for r in (cur.fetchall() or [])}
 
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS player_evaluations (
-                league_id INTEGER NOT NULL,
-                team_id INTEGER NOT NULL,
-                player_id INTEGER NOT NULL,
-                iqr_prima REAL NOT NULL DEFAULT 0,
-                iqr_dopo REAL NOT NULL DEFAULT 0,
-                delta_iqr REAL NOT NULL DEFAULT 0,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (league_id, team_id, player_id)
-            )
-        """)
+        _richieste = {
+            "iqr_profiles",
+            "player_evaluations",
+            "auction_assignment_history",
+            "auction_sessions",
+            "auction_lots",
+            "auction_calls",
+            "bids",
+        }
 
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS auction_assignment_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                league_id INTEGER NOT NULL,
-                player_id INTEGER NOT NULL,
-                team_id INTEGER NOT NULL,
-                prezzo REAL NOT NULL,
-                stato TEXT NOT NULL DEFAULT 'ACTIVE',
-                assigned_by_user_id INTEGER,
-                assigned_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                undone_by_user_id INTEGER,
-                undone_at TEXT
-            )
-        """)
+        _schema_completo = _richieste.issubset(_presenti)
 
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS auction_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                league_id INTEGER NOT NULL UNIQUE,
-                stato TEXT NOT NULL DEFAULT 'READY',
-                current_lot_id INTEGER,
-                started_by_user_id INTEGER,
-                started_at TEXT,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        if _schema_completo:
+            cur.execute("PRAGMA table_info(auction_lots)")
+            _cols_lot = {str(r[1]) for r in (cur.fetchall() or [])}
+            _schema_completo = {
+                "closing_by_user_id",
+                "closing_at",
+                "current_bid",
+                "current_team_id",
+                "bid_count",
+                "version",
+            }.issubset(_cols_lot)
 
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS auction_lots (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                league_id INTEGER NOT NULL,
-                player_id INTEGER NOT NULL,
-                stato TEXT NOT NULL DEFAULT 'OPEN',
-                opened_by_user_id INTEGER,
-                opened_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                closed_at TEXT,
-                assigned_team_id INTEGER,
-                final_price REAL,
-                closing_by_user_id INTEGER,
-                closing_at TEXT,
-                current_bid REAL,
-                current_team_id INTEGER,
-                bid_count INTEGER NOT NULL DEFAULT 0,
-                version INTEGER NOT NULL DEFAULT 0
-            )
-        """)
-
-        # V107: migrazione compatibile dei database già esistenti.
-        try:
+        if not _schema_completo:
             cur.execute("""
-                ALTER TABLE auction_lots
-                ADD COLUMN closing_by_user_id INTEGER
+                CREATE TABLE IF NOT EXISTS iqr_profiles (
+                    league_id INTEGER NOT NULL,
+                    team_id INTEGER NOT NULL,
+                    iqr_corrente REAL NOT NULL DEFAULT 0,
+                    max_giocatori INTEGER NOT NULL DEFAULT 30,
+                    giocatori_rosa INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (league_id, team_id)
+                )
             """)
-        except Exception:
-            pass
 
-        try:
             cur.execute("""
-                ALTER TABLE auction_lots
-                ADD COLUMN closing_at TEXT
+                CREATE TABLE IF NOT EXISTS player_evaluations (
+                    league_id INTEGER NOT NULL,
+                    team_id INTEGER NOT NULL,
+                    player_id INTEGER NOT NULL,
+                    iqr_prima REAL NOT NULL DEFAULT 0,
+                    iqr_dopo REAL NOT NULL DEFAULT 0,
+                    delta_iqr REAL NOT NULL DEFAULT 0,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (league_id, team_id, player_id)
+                )
             """)
-        except Exception:
-            pass
 
-        for _sql_migrazione in (
-            "ALTER TABLE auction_lots ADD COLUMN current_bid REAL",
-            "ALTER TABLE auction_lots ADD COLUMN current_team_id INTEGER",
-            "ALTER TABLE auction_lots ADD COLUMN bid_count INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE auction_lots ADD COLUMN version INTEGER NOT NULL DEFAULT 0",
-        ):
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS auction_assignment_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    league_id INTEGER NOT NULL,
+                    player_id INTEGER NOT NULL,
+                    team_id INTEGER NOT NULL,
+                    prezzo REAL NOT NULL,
+                    stato TEXT NOT NULL DEFAULT 'ACTIVE',
+                    assigned_by_user_id INTEGER,
+                    assigned_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    undone_by_user_id INTEGER,
+                    undone_at TEXT
+                )
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS auction_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    league_id INTEGER NOT NULL UNIQUE,
+                    stato TEXT NOT NULL DEFAULT 'READY',
+                    current_lot_id INTEGER,
+                    started_by_user_id INTEGER,
+                    started_at TEXT,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS auction_lots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    league_id INTEGER NOT NULL,
+                    player_id INTEGER NOT NULL,
+                    stato TEXT NOT NULL DEFAULT 'OPEN',
+                    opened_by_user_id INTEGER,
+                    opened_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    closed_at TEXT,
+                    assigned_team_id INTEGER,
+                    final_price REAL,
+                    closing_by_user_id INTEGER,
+                    closing_at TEXT,
+                    current_bid REAL,
+                    current_team_id INTEGER,
+                    bid_count INTEGER NOT NULL DEFAULT 0,
+                    version INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+
+            cur.execute("PRAGMA table_info(auction_lots)")
+            _cols_lot = {str(r[1]) for r in (cur.fetchall() or [])}
+
+            _migrazioni = {
+                "closing_by_user_id":
+                    "ALTER TABLE auction_lots ADD COLUMN closing_by_user_id INTEGER",
+                "closing_at":
+                    "ALTER TABLE auction_lots ADD COLUMN closing_at TEXT",
+                "current_bid":
+                    "ALTER TABLE auction_lots ADD COLUMN current_bid REAL",
+                "current_team_id":
+                    "ALTER TABLE auction_lots ADD COLUMN current_team_id INTEGER",
+                "bid_count":
+                    "ALTER TABLE auction_lots ADD COLUMN bid_count INTEGER NOT NULL DEFAULT 0",
+                "version":
+                    "ALTER TABLE auction_lots ADD COLUMN version INTEGER NOT NULL DEFAULT 0",
+            }
+
+            for _colonna, _sql in _migrazioni.items():
+                if _colonna not in _cols_lot:
+                    cur.execute(_sql)
+                    _dirty = True
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS auction_calls (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    league_id INTEGER NOT NULL,
+                    team_id INTEGER NOT NULL,
+                    player_id INTEGER NOT NULL,
+                    tipo_asta TEXT NOT NULL,
+                    stato TEXT NOT NULL DEFAULT 'PENDING',
+                    created_by_user_id INTEGER NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    handled_by_user_id INTEGER,
+                    handled_at TEXT
+                )
+            """)
+
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS ix_auction_calls_league_state
+                ON auction_calls(league_id, stato, id)
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS bids (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    league_id INTEGER NOT NULL,
+                    lot_id INTEGER NOT NULL,
+                    team_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    amount REAL NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            cur.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_bids_lot_amount
+                ON bids(lot_id, amount)
+            """)
+
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS ix_bids_lot_id
+                ON bids(lot_id, id)
+            """)
+
             try:
-                cur.execute(_sql_migrazione)
+                cur.execute("""
+                    UPDATE auction_lots
+                    SET current_bid = (
+                            SELECT MAX(b.amount)
+                            FROM bids b
+                            WHERE b.lot_id=auction_lots.id
+                              AND b.league_id=auction_lots.league_id
+                        ),
+                        current_team_id = (
+                            SELECT b2.team_id
+                            FROM bids b2
+                            WHERE b2.lot_id=auction_lots.id
+                              AND b2.league_id=auction_lots.league_id
+                            ORDER BY b2.amount DESC, b2.id ASC
+                            LIMIT 1
+                        ),
+                        bid_count = (
+                            SELECT COUNT(*)
+                            FROM bids b3
+                            WHERE b3.lot_id=auction_lots.id
+                              AND b3.league_id=auction_lots.league_id
+                        )
+                    WHERE current_bid IS NULL
+                      AND EXISTS (
+                          SELECT 1
+                          FROM bids bx
+                          WHERE bx.lot_id=auction_lots.id
+                            AND bx.league_id=auction_lots.league_id
+                      )
+                """)
             except Exception:
                 pass
 
-        # Backfill dei lotti già esistenti prendendo il miglior bid storico.
-        # Se non esistono offerte, i campi restano NULL/0.
-        try:
-            cur.execute("""
-                UPDATE auction_lots
-                SET current_bid = (
-                        SELECT MAX(b.amount)
-                        FROM bids b
-                        WHERE b.lot_id=auction_lots.id
-                          AND b.league_id=auction_lots.league_id
-                    ),
-                    current_team_id = (
-                        SELECT b2.team_id
-                        FROM bids b2
-                        WHERE b2.lot_id=auction_lots.id
-                          AND b2.league_id=auction_lots.league_id
-                        ORDER BY b2.amount DESC, b2.id ASC
-                        LIMIT 1
-                    ),
-                    bid_count = (
-                        SELECT COUNT(*)
-                        FROM bids b3
-                        WHERE b3.lot_id=auction_lots.id
-                          AND b3.league_id=auction_lots.league_id
-                    )
-                WHERE current_bid IS NULL
-            """)
-        except Exception:
-            pass
+            _dirty = True
 
+        # Controllo aggregato dei soli dati mancanti.
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS auction_calls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                league_id INTEGER NOT NULL,
-                team_id INTEGER NOT NULL,
-                player_id INTEGER NOT NULL,
-                tipo_asta TEXT NOT NULL,
-                stato TEXT NOT NULL DEFAULT 'PENDING',
-                created_by_user_id INTEGER NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                handled_by_user_id INTEGER,
-                handled_at TEXT
-            )
-        """)
-
-        cur.execute("""
-            CREATE INDEX IF NOT EXISTS ix_auction_calls_league_state
-            ON auction_calls(league_id, stato, id)
-        """)
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS bids (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                league_id INTEGER NOT NULL,
-                lot_id INTEGER NOT NULL,
-                team_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                amount REAL NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        cur.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS ux_bids_lot_amount
-            ON bids(lot_id, amount)
-        """)
-
-        cur.execute("""
-            CREATE INDEX IF NOT EXISTS ix_bids_lot_id
-            ON bids(lot_id, id)
-        """)
-
-        cur.execute("""
-            INSERT INTO auction_sessions (
-                league_id, stato, current_lot_id, updated_at
-            )
-            VALUES (?, 'READY', NULL, CURRENT_TIMESTAMP)
-            ON CONFLICT(league_id) DO NOTHING
-        """, (league_id,))
-        cur.execute("""
-            INSERT INTO league_players (
-                league_id, player_id, stato,
-                assigned_team_id, prezzo_assegnazione, updated_at
-            )
-            SELECT ?, c.player_id, 'DISPONIBILE', NULL, NULL, CURRENT_TIMESTAMP
-            FROM league_player_catalog c
-            WHERE c.league_id=?
-              AND NOT EXISTS (
-                SELECT 1
-                FROM league_players lp
-                WHERE lp.league_id=?
-                  AND lp.player_id=c.player_id
-            )
-        """,(league_id,league_id,league_id))
-
-        cur.execute("""
-            INSERT INTO team_budgets (
-                league_id, team_id, budget_impostato,
-                valore_acquisti, spesa_effettiva, updated_at
-            )
             SELECT
-                ?, t.id,
-                COALESCE(r.budget_iniziale,500),
-                0,0,CURRENT_TIMESTAMP
-            FROM teams t
-            LEFT JOIN league_rules r ON r.league_id=t.league_id
-            WHERE t.league_id=? AND t.is_active=1
-              AND NOT EXISTS (
-                SELECT 1 FROM team_budgets b
-                WHERE b.league_id=? AND b.team_id=t.id
-              )
-        """,(league_id,league_id,league_id))
-        conn.commit()
+                EXISTS(
+                    SELECT 1
+                    FROM auction_sessions
+                    WHERE league_id=?
+                ),
+                EXISTS(
+                    SELECT 1
+                    FROM league_player_catalog c
+                    WHERE c.league_id=?
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM league_players lp
+                          WHERE lp.league_id=c.league_id
+                            AND lp.player_id=c.player_id
+                      )
+                ),
+                EXISTS(
+                    SELECT 1
+                    FROM teams t
+                    WHERE t.league_id=?
+                      AND t.is_active=1
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM team_budgets b
+                          WHERE b.league_id=t.league_id
+                            AND b.team_id=t.id
+                      )
+                )
+        """, (league_id, league_id, league_id))
+
+        _check = cur.fetchone() or (0, 0, 0)
+        _sessione_esiste = bool(_check[0])
+        _mancano_players = bool(_check[1])
+        _mancano_budget = bool(_check[2])
+
+        if not _sessione_esiste:
+            cur.execute("""
+                INSERT INTO auction_sessions (
+                    league_id, stato, current_lot_id, updated_at
+                )
+                VALUES (?, 'READY', NULL, CURRENT_TIMESTAMP)
+                ON CONFLICT(league_id) DO NOTHING
+            """, (league_id,))
+            _dirty = True
+
+        if _mancano_players:
+            cur.execute("""
+                INSERT INTO league_players (
+                    league_id, player_id, stato,
+                    assigned_team_id, prezzo_assegnazione, updated_at
+                )
+                SELECT ?, c.player_id, 'DISPONIBILE',
+                       NULL, NULL, CURRENT_TIMESTAMP
+                FROM league_player_catalog c
+                WHERE c.league_id=?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM league_players lp
+                      WHERE lp.league_id=?
+                        AND lp.player_id=c.player_id
+                  )
+            """, (league_id, league_id, league_id))
+            _dirty = True
+
+        if _mancano_budget:
+            cur.execute("""
+                INSERT INTO team_budgets (
+                    league_id, team_id, budget_impostato,
+                    valore_acquisti, spesa_effettiva, updated_at
+                )
+                SELECT
+                    ?, t.id,
+                    COALESCE(r.budget_iniziale,500),
+                    0,0,CURRENT_TIMESTAMP
+                FROM teams t
+                LEFT JOIN league_rules r
+                  ON r.league_id=t.league_id
+                WHERE t.league_id=? AND t.is_active=1
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM team_budgets b
+                      WHERE b.league_id=?
+                        AND b.team_id=t.id
+                  )
+            """, (league_id, league_id, league_id))
+            _dirty = True
+
+        if _dirty:
+            conn.commit()
+
+        st.session_state[_guard_key] = True
+
     finally:
         _portal_close(conn)
 
+
+def invalida_inizializzazione_asta_multilega(league_id=None):
+    if league_id is None:
+        for _k in list(st.session_state.keys()):
+            if str(_k).startswith("_auction_schema_ready_v116_"):
+                st.session_state.pop(_k, None)
+        return
+
+    st.session_state.pop(
+        f"_auction_schema_ready_v116_{int(league_id)}",
+        None
+    )
 
 
 def lotto_corrente_multilega(league_id):
@@ -28550,15 +28671,34 @@ def render_banditore_asta():
     ):
         st.rerun(scope="fragment")
 
+    _perf_banditore = {}
+    _t_banditore = time.perf_counter()
+
     try:
+        _t0 = time.perf_counter()
+        inizializza_listone_lega_asta(league_id)
+        _perf_banditore["Init asta"] = time.perf_counter() - _t0
+
+        _t0 = time.perf_counter()
         giocatori=elenco_giocatori_asta_multilega(league_id)
+        _perf_banditore["Listone"] = time.perf_counter() - _t0
+
+        _t0 = time.perf_counter()
         teams=riepilogo_team_asta_multilega(league_id)
+        _perf_banditore["Squadre"] = time.perf_counter() - _t0
+
+        _t0 = time.perf_counter()
         tipo_asta=tipo_asta_lega_multilega(league_id)
+        _perf_banditore["Regole"] = time.perf_counter() - _t0
+
+        _t0 = time.perf_counter()
         turno_corrente=(
             turno_squadra_multilega(league_id,tipo_asta)
             if tipo_asta in ("CHIAMATA","DRAFT")
             else None
         )
+        _perf_banditore["Turno"] = time.perf_counter() - _t0
+
     except Exception as errore:
         st.error("Impossibile caricare la console Banditore: "+str(errore))
         return
@@ -28573,7 +28713,9 @@ def render_banditore_asta():
     m3.metric("Squadre",len(teams))
 
     try:
+        _t0 = time.perf_counter()
         lotto_aperto = lotto_corrente_multilega(league_id)
+        _perf_banditore["Lotto corrente"] = time.perf_counter() - _t0
     except Exception as errore:
         lotto_aperto = None
         st.warning("Impossibile leggere il lotto corrente: " + str(errore))
@@ -29158,6 +29300,29 @@ def render_banditore_asta():
                 )
         except Exception as errore:
             st.error("Impossibile leggere l'audit: "+str(errore))
+
+    _perf_banditore["Totale render misurato"] = (
+        time.perf_counter() - _t_banditore
+    )
+
+    if "ADMIN" in RUOLI_ATTIVI:
+        with st.expander("⏱ Diagnostica prestazioni Banditore", expanded=False):
+            st.caption(
+                "Tempi del caricamento corrente. Se una fase resta lenta, "
+                "possiamo intervenire sul round-trip specifico."
+            )
+            st.dataframe(
+                pd.DataFrame([
+                    {
+                        "Fase": _fase,
+                        "Secondi": round(float(_sec), 3),
+                    }
+                    for _fase, _sec in _perf_banditore.items()
+                ]),
+                use_container_width=True,
+                hide_index=True
+            )
+
 
 
 # ============================================================
