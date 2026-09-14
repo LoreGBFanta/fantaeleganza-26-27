@@ -26,6 +26,8 @@ import streamlit as st
 # CONFIGURAZIONE APP
 # ============================================================
 
+_ml38_full_run_start = time.perf_counter()
+
 st.set_page_config(
     page_title="FANTAELEGANZA 26/27",
     page_icon="⚽",
@@ -12123,7 +12125,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "3.7"
+MULTILEGA_SCHEMA_VERSION = "3.8"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -17529,6 +17531,7 @@ def invalida_cache_dati():
             or str(_k).startswith("_ml35_moduli_")
             or str(_k).startswith("_ml36_export_rose_")
             or str(_k).startswith("_ml37_console_workspace_ready_")
+            or str(_k).startswith("_ml38_workspace_boot_")
         ):
             st.session_state.pop(_k, None)
 
@@ -20332,7 +20335,16 @@ if not PROFILO_LEGACY_SUPPORTATO:
 
     verifica_isolamento_workspace()
 
-    inizializza_workspace_team_multilega()
+    _workspace_boot_guard = (
+        "_ml38_workspace_boot_"
+        + str(st.session_state.get("ml_league_id",""))
+        + "_"
+        + str(st.session_state.get("ml_team_id",""))
+    )
+
+    if not st.session_state.get(_workspace_boot_guard):
+        inizializza_workspace_team_multilega()
+        st.session_state[_workspace_boot_guard] = True
 
 LEGA_ATTIVA_NOME = (
     st.session_state.get(
@@ -25170,26 +25182,12 @@ with st.sidebar:
 
             elif DB_PATH.exists():
 
-                backup_profilo = (
-                    crea_backup_logico_bytes()
-                )
-
-                st.download_button(
+                if st.button(
                     "☁  Backup",
-                    data=backup_profilo,
-                    file_name=(
-                        "fantaeleganza_backup_"
-                        + PROFILO_ATTIVO
-                        .lower()
-                        .replace(
-                            " ",
-                            "_"
-                        )
-                        + ".json"
-                    ),
-                    mime="application/json",
-                    use_container_width=True
-                )
+                    use_container_width=True,
+                    key="btn_backup_locale"
+                ):
+                    gestisci_backup_cloud()
 
         menu_r2c1, menu_r2c2 = st.columns(2)
 
@@ -25255,7 +25253,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 3.7 &nbsp;|&nbsp; V121 Team Console Fast'
+        'MULTILEGA 3.8 &nbsp;|&nbsp; V122 Performance Core'
         '</div>',
         unsafe_allow_html=True
     )
@@ -29731,11 +29729,67 @@ def render_banditore_asta():
 
 
 
+
+def manutenzione_cache_performance_v122():
+    """
+    V122 - limita la crescita del session_state.
+
+    Alcune cache sono indicizzate da hash/lotto/workspace e, dopo diversi
+    aggiornamenti, possono accumulare DataFrame e strutture non più usate.
+    Manteniamo solo un numero ristretto di chiavi per prefisso.
+    """
+    limiti = {
+        "_ml35_formazioni_index_": 2,
+        "_ml35_moduli_": 3,
+        "_ml35_listone_centrale_": 2,
+        "_ml35_venduti_": 2,
+        "_ml36_export_rose_": 1,
+        "_ml37_console_workspace_ready_": 2,
+        "team_bid_direct_value_": 3,
+        "team_call_search_": 2,
+        "team_call_player_": 2,
+    }
+
+    chiavi = list(st.session_state.keys())
+
+    for prefisso, massimo in limiti.items():
+        trovate = [
+            k for k in chiavi
+            if str(k).startswith(prefisso)
+        ]
+        if len(trovate) <= massimo:
+            continue
+
+        # session_state non espone timestamp: preserviamo le ultime chiavi
+        # nell'ordine corrente e rimuoviamo l'eccesso.
+        da_rimuovere = trovate[:-massimo]
+        for k in da_rimuovere:
+            st.session_state.pop(k, None)
+
+    # Cache temporanee pesanti che non devono sopravvivere a lungo
+    # se non sono più pertinenti alla pagina corrente.
+    pagina = st.session_state.get("pagina", "DASHBOARD")
+
+    if pagina not in ("DASHBOARD", "ROSA", "MODULI", "FORMAZIONI TIPO"):
+        st.session_state.pop("_titolarita_cache", None)
+
+    if pagina != "FORMAZIONI TIPO":
+        # Manteniamo l'eventuale snapshot veloce principale, ma eliminiamo
+        # varianti obsolete se presenti.
+        for k in list(st.session_state.keys()):
+            if (
+                str(k).startswith("_formazioni_tipo_fast_cache_")
+                and str(k) != "_formazioni_tipo_fast_cache"
+            ):
+                st.session_state.pop(k, None)
+
+
+
+manutenzione_cache_performance_v122()
+
 # ============================================================
 # MULTILEGA 1.8 - NAVIGAZIONE A FRAGMENT
 # ============================================================
-
-@st.fragment
 
 def venduti_avversari_normalizzati_multilega(
     league_id,
@@ -29804,6 +29858,7 @@ def venduti_avversari_normalizzati_multilega(
 
 
 
+@st.fragment
 def render_navigazione_e_pagina():
     # ============================================================
     # NAVBAR
@@ -32215,10 +32270,22 @@ def render_navigazione_e_pagina():
     }
 
     if "ADMIN" in RUOLI_ATTIVI and _page_perf_elapsed >= 1.0:
+        _full_last = st.session_state.get(
+            "_ml38_last_full_run_seconds",
+            0
+        )
         st.caption(
             f"⏱ Apertura sezione {sezione}: "
-            f"{_page_perf_elapsed:.2f} s"
+            f"{_page_perf_elapsed:.2f} s · "
+            f"ultimo full-run {_full_last:.2f} s"
         )
 
+
+
+# V122 diagnostic: this line is reached only on a full app rerun.
+_ml38_full_run_elapsed = time.perf_counter() - _ml38_full_run_start
+st.session_state["_ml38_last_full_run_seconds"] = round(
+    float(_ml38_full_run_elapsed), 3
+)
 
 render_navigazione_e_pagina()
