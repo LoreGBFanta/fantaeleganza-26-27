@@ -26376,7 +26376,7 @@ def assicura_schema_storico_asta_v147(league_id):
     """
     Crea/aggiorna lo storico autorevole dei giocatori CHIAMATI.
 
-    V161: la verifica delle colonne strutturali viene eseguita SEMPRE sul DB,
+    V162: la verifica delle colonne strutturali viene eseguita SEMPRE sul DB,
     anche se la sessione Streamlit aveva gia' impostato il guard di schema.
     Questo evita errori dopo un hot-update del codice (es. colonna active
     introdotta mentre la sessione era gia' aperta).
@@ -26413,6 +26413,25 @@ def assicura_schema_storico_asta_v147(league_id):
                 "ADD COLUMN active INTEGER NOT NULL DEFAULT 1"
             )
             conn.commit()
+
+        # V162 - tombstone autorevole dello Storico Asta.
+        # Serve a impedire che backfill, vecchi lotti o cache possano far
+        # ricomparire un giocatore svincolato/eliminato.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auction_history_exclusions (
+                league_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                reason TEXT NOT NULL,
+                excluded_by_user_id INTEGER,
+                excluded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (league_id, player_id)
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS ix_history_exclusions_league
+            ON auction_history_exclusions(league_id, player_id)
+        """)
+        conn.commit()
 
         # Dopo avere garantito la struttura, il resto del backfill/schema puo'
         # essere evitato se gia' completato in questa sessione.
@@ -26504,6 +26523,12 @@ def assicura_schema_storico_asta_v147(league_id):
 def registra_giocatore_chiamato_v147(
     cur, league_id, player_id, fonte, lot_id=None
 ):
+    # V162 - una nuova chiamata rende nuovamente visibile il giocatore.
+    cur.execute("""
+        DELETE FROM auction_history_exclusions
+        WHERE league_id=? AND player_id=?
+    """, (int(league_id), int(player_id)))
+
     cur.execute("""
         INSERT INTO auction_called_players (
             league_id,player_id,fonte,lot_id,
@@ -26537,9 +26562,15 @@ def contatore_chiamati_v147(league_id):
             SELECT
                 (
                     SELECT COUNT(DISTINCT player_id)
-                    FROM auction_called_players
-                    WHERE league_id=?
-                      AND COALESCE(active,1)=1
+                    FROM auction_called_players cp
+                    WHERE cp.league_id=?
+                      AND COALESCE(cp.active,1)=1
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM auction_history_exclusions hx
+                          WHERE hx.league_id=cp.league_id
+                            AND hx.player_id=cp.player_id
+                      )
                 ),
                 (
                     SELECT COUNT(*)
@@ -26600,6 +26631,12 @@ def _storico_asta_db_v156(league_id):
              AND rl.rn=1
             WHERE cp.league_id=?
               AND COALESCE(cp.active,1)=1
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM auction_history_exclusions hx
+                  WHERE hx.league_id=cp.league_id
+                    AND hx.player_id=cp.player_id
+              )
             ORDER BY cp.called_at DESC, cp.id DESC
         """, conn, params=(league_id, league_id))
     finally:
@@ -27131,6 +27168,24 @@ def azione_storico_rosa_v149(league_id, player_id, azione):
             WHERE league_id=? AND player_id=?
         """, (league_id,player_id))
 
+        # V162 - esclusione persistente e autorevole dallo Storico Asta.
+        # Anche se in futuro viene rieseguito un backfill dei vecchi lotti,
+        # tabella e counter continueranno a ignorare questo giocatore finche'
+        # non viene chiamato nuovamente.
+        cur.execute("""
+            INSERT INTO auction_history_exclusions (
+                league_id, player_id, reason, excluded_by_user_id, excluded_at
+            )
+            VALUES (?,?,?,?,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,player_id)
+            DO UPDATE SET
+                reason=excluded.reason,
+                excluded_by_user_id=excluded.excluded_by_user_id,
+                excluded_at=CURRENT_TIMESTAMP
+        """, (
+            league_id, player_id, azione, user_id
+        ))
+
         _ricalcola_budget_team_v147(cur,league_id,team_id)
 
         cur.execute("""
@@ -27218,7 +27273,10 @@ def conferma_svincolo_storico_v151(
                     "Il costo resta a carico della squadra."
                 )
                 st.session_state.pop("v151_storico_error", None)
-                st.rerun()
+                try:
+                    st.rerun(scope="app")
+                except TypeError:
+                    st.rerun()
             except Exception as errore:
                 st.error(str(errore))
 
@@ -27272,7 +27330,10 @@ def conferma_elimina_storico_v151(
                     "I crediti sono stati restituiti alla squadra."
                 )
                 st.session_state.pop("v151_storico_error", None)
-                st.rerun()
+                try:
+                    st.rerun(scope="app")
+                except TypeError:
+                    st.rerun()
             except Exception as errore:
                 st.error(str(errore))
 
