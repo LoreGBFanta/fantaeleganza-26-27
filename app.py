@@ -20883,6 +20883,58 @@ if (
 
 
 # ============================================================
+# V155 - SINCRONIZZAZIONE LIVE BUDGET TRA LIVELLI DELLO STESSO PROFILO
+# SQUADRA resta l'unico livello che puo' scrivere il budget.
+# ADMIN e BANDITORE, anche in sessioni/browser differenti, rileggono
+# periodicamente il valore autorevole della squadra e aggiornano la
+# sidebar solo quando rilevano una variazione.
+# ============================================================
+@st.fragment(
+    run_every=(
+        "2s"
+        if MODALITA_ACCESSO_ATTIVA in ("ADMIN", "BANDITORE")
+        else None
+    )
+)
+def sincronizza_budget_sidebar_live_v155():
+    if MODALITA_ACCESSO_ATTIVA not in ("ADMIN", "BANDITORE"):
+        return
+
+    league_id = st.session_state.get("ml_league_id")
+    team_id = st.session_state.get("ml_sidebar_team_id")
+
+    if league_id is None or team_id is None:
+        return
+
+    try:
+        budget_db = round(
+            float(leggi_budget_squadra_autorevole(league_id, team_id)),
+            2
+        )
+    except Exception:
+        return
+
+    try:
+        budget_sessione = round(
+            float(st.session_state.get("budget_asta_corrente", SOGLIA_BASE)),
+            2
+        )
+    except Exception:
+        budget_sessione = float(SOGLIA_BASE)
+
+    if budget_db != budget_sessione:
+        st.session_state["budget_asta_corrente"] = budget_db
+        st.session_state["budget_asta_input"] = budget_db
+        st.session_state.pop("_ml16_sidebar_metrics", None)
+        # Rerun completo soltanto quando il budget e' realmente cambiato:
+        # aggiorna anche Budget rimanente e tutte le card dipendenti.
+        st.rerun()
+
+
+sincronizza_budget_sidebar_live_v155()
+
+
+# ============================================================
 # SIDEBAR PRINCIPALE
 # ============================================================
 
