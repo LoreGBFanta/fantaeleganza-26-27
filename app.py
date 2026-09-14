@@ -12125,7 +12125,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "3.8"
+MULTILEGA_SCHEMA_VERSION = "3.8.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25253,7 +25253,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 3.8 &nbsp;|&nbsp; V122 Performance Core'
+        'MULTILEGA 3.8.1 &nbsp;|&nbsp; V123 Fix Situazione Squadre'
         '</div>',
         unsafe_allow_html=True
     )
@@ -27856,56 +27856,105 @@ def elenco_giocatori_asta_multilega(league_id):
 
 
 def riepilogo_team_asta_multilega(league_id):
-    league_id=int(league_id)
+    """
+    V123 - riepilogo squadre autorevole.
+
+    Usa league_players per conteggio giocatori/prezzi assegnati.
+    Non usa rosters, che può contenere righe legacy/importate non coerenti
+    con lo stato live dell'asta.
+    """
+    league_id = int(league_id)
     inizializza_listone_lega_asta(league_id)
-    conn=_portal_raw_connection()
-    cur=conn.cursor()
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
     try:
+        cur.execute("""
+            SELECT
+                COALESCE(soglia_budget,budget_iniziale,500),
+                COALESCE(moltiplicatore_oltre_soglia,1)
+            FROM league_rules
+            WHERE league_id=?
+            LIMIT 1
+        """, (league_id,))
+        _rr = cur.fetchone() or (500,1)
+        _soglia = float(_rr[0] or 500)
+        _moltiplicatore = max(1.0, float(_rr[1] or 1))
+
         cur.execute("""
             SELECT
                 t.id,
                 t.nome,
                 COALESCE(b.budget_impostato,r.budget_iniziale,500),
-                COALESCE(b.valore_acquisti,0),
-                COALESCE(b.spesa_effettiva,0),
-                COUNT(ro.id),
-                SUM(
+                COALESCE(SUM(
                     CASE
-                        WHEN UPPER(COALESCE(g.ruolo_classico,''))='P'
-                             OR UPPER(COALESCE(g.ruolo_mantra,''))='POR'
-                             OR UPPER(COALESCE(g.ruolo_mantra,''))='P'
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=t.id
+                        THEN COALESCE(lp.prezzo_assegnazione,0)
+                        ELSE 0
+                    END
+                ),0),
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=t.id
                         THEN 1 ELSE 0
                     END
-                )
+                ),0),
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=t.id
+                         AND (
+                            UPPER(COALESCE(g.ruolo_classico,''))='P'
+                            OR UPPER(COALESCE(g.ruolo_mantra,'')) IN ('P','POR')
+                         )
+                        THEN 1 ELSE 0
+                    END
+                ),0)
             FROM teams t
-            LEFT JOIN league_rules r ON r.league_id=t.league_id
+            LEFT JOIN league_rules r
+              ON r.league_id=t.league_id
             LEFT JOIN team_budgets b
-              ON b.league_id=t.league_id AND b.team_id=t.id
-            LEFT JOIN rosters ro
-              ON ro.league_id=t.league_id AND ro.team_id=t.id
+              ON b.league_id=t.league_id
+             AND b.team_id=t.id
+            LEFT JOIN league_players lp
+              ON lp.league_id=t.league_id
+             AND lp.assigned_team_id=t.id
+             AND lp.stato='ASSEGNATO'
             LEFT JOIN league_player_catalog g
-              ON g.player_id=ro.player_id
-             AND g.league_id=ro.league_id
+              ON g.league_id=lp.league_id
+             AND g.player_id=lp.player_id
             WHERE t.league_id=? AND t.is_active=1
             GROUP BY
-                t.id,t.nome,b.budget_impostato,r.budget_iniziale,
-                b.valore_acquisti,b.spesa_effettiva
+                t.id,t.nome,t.posizione,
+                b.budget_impostato,r.budget_iniziale
             ORDER BY t.posizione,t.id
-        """,(league_id,))
-        return [
-            {
-                "team_id":int(r[0]),
-                "nome":str(r[1]),
-                "budget":float(r[2] or 0),
-                "valore_acquisti":float(r[3] or 0),
-                "spesa_effettiva":float(r[4] or 0),
-                "giocatori":int(r[5] or 0),
-                "portieri":int(r[6] or 0)
-            }
-            for r in (cur.fetchall() or [])
-        ]
+        """, (league_id,))
+
+        result = []
+        for r in (cur.fetchall() or []):
+            valore = float(r[3] or 0)
+            result.append({
+                "team_id": int(r[0]),
+                "nome": str(r[1]),
+                "budget": float(r[2] or 0),
+                "valore_acquisti": valore,
+                "spesa_effettiva": float(
+                    _spesa_effettiva_regole(
+                        valore,
+                        _soglia,
+                        _moltiplicatore
+                    )
+                ),
+                "giocatori": int(r[4] or 0),
+                "portieri": int(r[5] or 0),
+            })
+        return result
     finally:
         _portal_close(conn)
+
+
 
 
 def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
@@ -28874,12 +28923,14 @@ def snapshot_banditore_multilega(league_id):
                 COALESCE(incremento_minimo,1),
                 COALESCE(max_giocatori,30),
                 COALESCE(min_portieri,0),
-                COALESCE(budget_iniziale,500)
+                COALESCE(budget_iniziale,500),
+                COALESCE(soglia_budget,budget_iniziale,500),
+                COALESCE(moltiplicatore_oltre_soglia,1)
             FROM league_rules
             WHERE league_id=?
             LIMIT 1
         """, (league_id,))
-        rr = cur.fetchone() or ("CHIAMATA",1,30,0,500)
+        rr = cur.fetchone() or ("CHIAMATA",1,30,0,500,500,1)
 
         raw_tipo = str(rr[0] or "CHIAMATA").strip().upper()
         aliases = {
@@ -28903,47 +28954,80 @@ def snapshot_banditore_multilega(league_id):
         disponibili_count = int(rc[0] or 0)
         assegnati_count = int(rc[1] or 0)
 
+        # V123: fonte autorevole = league_players.
+        # La tabella rosters può contenere righe legacy/importate e quindi
+        # non deve essere usata per il riepilogo live del Banditore.
         cur.execute("""
             SELECT
                 t.id,
                 t.nome,
                 COALESCE(b.budget_impostato,r.budget_iniziale,500),
-                COALESCE(b.valore_acquisti,0),
-                COALESCE(b.spesa_effettiva,0),
-                COUNT(ro.id),
-                SUM(
+                COALESCE(SUM(
                     CASE
-                        WHEN UPPER(COALESCE(g.ruolo_classico,''))='P'
-                             OR UPPER(COALESCE(g.ruolo_mantra,'')) IN ('P','POR')
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=t.id
+                        THEN COALESCE(lp.prezzo_assegnazione,0)
+                        ELSE 0
+                    END
+                ),0) AS valore_acquisti_reale,
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=t.id
                         THEN 1 ELSE 0
                     END
-                )
+                ),0) AS giocatori_reali,
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=t.id
+                         AND (
+                            UPPER(COALESCE(g.ruolo_classico,''))='P'
+                            OR UPPER(COALESCE(g.ruolo_mantra,'')) IN ('P','POR')
+                         )
+                        THEN 1 ELSE 0
+                    END
+                ),0) AS portieri_reali
             FROM teams t
-            LEFT JOIN league_rules r ON r.league_id=t.league_id
+            LEFT JOIN league_rules r
+              ON r.league_id=t.league_id
             LEFT JOIN team_budgets b
-              ON b.league_id=t.league_id AND b.team_id=t.id
-            LEFT JOIN rosters ro
-              ON ro.league_id=t.league_id AND ro.team_id=t.id
+              ON b.league_id=t.league_id
+             AND b.team_id=t.id
+            LEFT JOIN league_players lp
+              ON lp.league_id=t.league_id
+             AND lp.assigned_team_id=t.id
+             AND lp.stato='ASSEGNATO'
             LEFT JOIN league_player_catalog g
-              ON g.player_id=ro.player_id AND g.league_id=ro.league_id
+              ON g.league_id=lp.league_id
+             AND g.player_id=lp.player_id
             WHERE t.league_id=? AND t.is_active=1
             GROUP BY
-                t.id,t.nome,b.budget_impostato,r.budget_iniziale,
-                b.valore_acquisti,b.spesa_effettiva,t.posizione
+                t.id,t.nome,t.posizione,
+                b.budget_impostato,r.budget_iniziale
             ORDER BY t.posizione,t.id
         """, (league_id,))
-        teams = [
-            {
-                "team_id":int(r[0]),
-                "nome":str(r[1]),
-                "budget":float(r[2] or 0),
-                "valore_acquisti":float(r[3] or 0),
-                "spesa_effettiva":float(r[4] or 0),
-                "giocatori":int(r[5] or 0),
-                "portieri":int(r[6] or 0),
-            }
-            for r in (cur.fetchall() or [])
-        ]
+
+        _soglia = float(rr[5] or rr[4] or 500)
+        _moltiplicatore = max(1.0, float(rr[6] or 1))
+
+        teams = []
+        for _r in (cur.fetchall() or []):
+            _valore = float(_r[3] or 0)
+            _spesa = _spesa_effettiva_regole(
+                _valore,
+                _soglia,
+                _moltiplicatore
+            )
+            teams.append({
+                "team_id": int(_r[0]),
+                "nome": str(_r[1]),
+                "budget": float(_r[2] or 0),
+                "valore_acquisti": _valore,
+                "spesa_effettiva": float(_spesa),
+                "giocatori": int(_r[4] or 0),
+                "portieri": int(_r[5] or 0),
+            })
 
         cur.execute("""
             SELECT
@@ -29556,6 +29640,9 @@ def render_banditore_asta():
         st.success(st.session_state.pop("auctioneer_msg"))
 
     st.markdown("#### Situazione squadre")
+    st.caption(
+        "Dati live calcolati sulle assegnazioni effettive della lega."
+    )
     df_team=pd.DataFrame([
         {
             "Nome squadra":t["nome"],
