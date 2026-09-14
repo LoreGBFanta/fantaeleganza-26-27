@@ -26382,6 +26382,15 @@ def assicura_schema_storico_asta_v147(league_id):
     introdotta mentre la sessione era gia' aperta).
     """
     league_id = int(league_id)
+
+    # V163 - schema check una sola volta per sessione/lega.
+    # Le CREATE/PRAGMA su DB remoto erano una delle principali cause di latenza
+    # dello Storico Asta. Il suffisso versione forza comunque una verifica dopo
+    # ogni aggiornamento strutturale del codice.
+    fast_guard = f"_v163_storico_schema_ready_{league_id}"
+    if st.session_state.get(fast_guard):
+        return
+
     assicura_schema_movimenti_rosa_v149(league_id)
     guard = f"_v147_storico_schema_{league_id}"
 
@@ -26436,6 +26445,7 @@ def assicura_schema_storico_asta_v147(league_id):
         # Dopo avere garantito la struttura, il resto del backfill/schema puo'
         # essere evitato se gia' completato in questa sessione.
         if st.session_state.get(guard):
+            st.session_state[fast_guard] = True
             return
 
         cur.execute("""
@@ -26516,6 +26526,7 @@ def assicura_schema_storico_asta_v147(league_id):
 
         conn.commit()
         st.session_state[guard] = True
+        st.session_state[fast_guard] = True
     finally:
         _portal_close(conn)
 
@@ -27056,17 +27067,15 @@ def azione_storico_rosa_v149(league_id, player_id, azione):
     cur = conn.cursor()
 
     try:
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM league_members
-            WHERE league_id=? AND user_id=? AND is_active=1
-              AND (is_auctioneer=1 OR is_admin=1)
-        """, (league_id,user_id))
-        if int((cur.fetchone() or [0])[0] or 0) <= 0:
-            raise PermissionError("Operazione riservata al Banditore/Admin.")
-
+        # V163 - un solo round-trip remoto per autorizzazione + stato giocatore.
         cur.execute("""
             SELECT
+                EXISTS(
+                    SELECT 1
+                    FROM league_members lm
+                    WHERE lm.league_id=? AND lm.user_id=? AND lm.is_active=1
+                      AND (lm.is_auctioneer=1 OR lm.is_admin=1)
+                ) AS allowed,
                 lp.assigned_team_id,
                 lp.prezzo_assegnazione,
                 COALESCE(t.nome,'')
@@ -27078,15 +27087,17 @@ def azione_storico_rosa_v149(league_id, player_id, azione):
               AND lp.player_id=?
               AND lp.stato='ASSEGNATO'
             LIMIT 1
-        """, (league_id,player_id))
+        """, (league_id,user_id,league_id,player_id))
         old = cur.fetchone()
 
-        if not old or old[0] is None:
+        if not old:
             raise ValueError("Il giocatore non risulta attualmente assegnato.")
+        if not bool(old[0]):
+            raise PermissionError("Operazione riservata al Banditore/Admin.")
 
-        team_id = int(old[0])
-        prezzo = float(old[1] or 0)
-        team_nome = str(old[2] or "")
+        team_id = int(old[1])
+        prezzo = float(old[2] or 0)
+        team_nome = str(old[3] or "")
 
         # Rimuove la proiezione rosa.
         cur.execute("""
@@ -27143,30 +27154,10 @@ def azione_storico_rosa_v149(league_id, player_id, azione):
             user_id,league_id,player_id
         ))
 
-        # Manteniamo il lotto storico chiuso ma non più assegnato correntemente.
-        cur.execute("""
-            UPDATE auction_lots
-            SET assigned_team_id=NULL,
-                final_price=NULL
-            WHERE id=(
-                SELECT id
-                FROM auction_lots
-                WHERE league_id=? AND player_id=?
-                ORDER BY id DESC
-                LIMIT 1
-            )
-        """, (league_id,player_id))
-
-        # V160 - SVINCOLA ed ELIMINA rimuovono il giocatore anche dallo
-        # Storico Asta. Non cancelliamo fisicamente la chiamata: la rendiamo
-        # inattiva, cosi' i backfill storici non possono farla ricomparire.
-        # Una futura nuova chiamata la riattivera' tramite
-        # registra_giocatore_chiamato_v147().
-        cur.execute("""
-            UPDATE auction_called_players
-            SET active=0, updated_at=CURRENT_TIMESTAMP
-            WHERE league_id=? AND player_id=?
-        """, (league_id,player_id))
+        # V163 - non tocchiamo più auction_lots né active della chiamata qui.
+        # L'esclusione autorevole sottostante è sufficiente a rimuovere subito
+        # il giocatore da tabella e counter; una nuova chiamata cancella
+        # l'esclusione e lo rende nuovamente visibile. Due scritture remote in meno.
 
         # V162 - esclusione persistente e autorevole dallo Storico Asta.
         # Anche se in futuro viene rieseguito un backfill dei vecchi lotti,
@@ -27207,12 +27198,34 @@ def azione_storico_rosa_v149(league_id, player_id, azione):
 
         conn.commit()
 
-        # V160 - forza l'aggiornamento immediato di tabella e counter.
-        try:
-            invalida_cache_banditore_v156(league_id)
-        except Exception:
-            st.session_state.pop(f"_v156_history_{league_id}", None)
-            st.session_state.pop(f"_v156_counter_{league_id}", None)
+        # V163 - aggiorna in RAM Storico e counter senza rileggerli dal DB.
+        # Il database è già stato commit-tato; questa patch evita due round-trip
+        # remoti subito dopo SVINCOLA/ELIMINA.
+        _hk = f"_v156_history_{league_id}"
+        _hc = st.session_state.get(_hk)
+        if isinstance(_hc, dict) and isinstance(_hc.get("df"), pd.DataFrame):
+            _hdf = _hc["df"].copy()
+            if "__PLAYER_ID" in _hdf.columns:
+                _hdf = _hdf[_hdf["__PLAYER_ID"] != int(player_id)].copy()
+            st.session_state[_hk] = {"ts": time.monotonic(), "df": _hdf}
+
+        _ck = f"_v156_counter_{league_id}"
+        _cc = st.session_state.get(_ck)
+        if isinstance(_cc, dict) and isinstance(_cc.get("value"), tuple):
+            try:
+                _ch, _tot, _pct = _cc["value"]
+                _ch = max(0, int(_ch) - 1)
+                _pct = round((_ch / int(_tot)) * 100, 1) if int(_tot) > 0 else 0.0
+                st.session_state[_ck] = {
+                    "ts": time.monotonic(),
+                    "value": (_ch, int(_tot), _pct),
+                }
+            except Exception:
+                st.session_state.pop(_ck, None)
+
+        # In Gestione Asta il giocatore è nuovamente disponibile: invalida solo
+        # lo snapshot idle, non lo Storico appena aggiornato localmente.
+        st.session_state.pop(f"_v156_idle_{league_id}", None)
 
         return {
             "team": team_nome,
@@ -30387,48 +30400,57 @@ def reset_spese_squadra_asta_v153(league_id, team_id):
     cur = conn.cursor()
 
     try:
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM league_members
-            WHERE league_id=? AND user_id=? AND is_active=1
-              AND (is_auctioneer=1 OR is_admin=1)
-        """, (league_id, user_id))
-        if int((cur.fetchone() or [0])[0] or 0) <= 0:
-            raise PermissionError("Operazione riservata al Banditore/Admin.")
-
-        cur.execute("""
-            SELECT nome
-            FROM teams
-            WHERE league_id=? AND id=? AND is_active=1
-            LIMIT 1
-        """, (league_id, team_id))
-        rt = cur.fetchone()
-        if not rt:
-            raise ValueError("Squadra non valida o non attiva.")
-        team_nome = str(rt[0] or "")
-
-        # Fotografia pre-reset per audit.
+        # V163 - autorizzazione, squadra e fotografia pre-reset in un'unica query.
         cur.execute("""
             SELECT
-                COUNT(*),
-                COALESCE(SUM(COALESCE(prezzo_assegnazione,0)),0)
-            FROM league_players
-            WHERE league_id=?
-              AND assigned_team_id=?
-              AND stato='ASSEGNATO'
-        """, (league_id, team_id))
-        pre = cur.fetchone() or (0, 0)
-        giocatori_attivi = int(pre[0] or 0)
-        valore_attivi_prima = float(pre[1] or 0)
+                EXISTS(
+                    SELECT 1 FROM league_members lm
+                    WHERE lm.league_id=? AND lm.user_id=? AND lm.is_active=1
+                      AND (lm.is_auctioneer=1 OR lm.is_admin=1)
+                ),
+                t.nome,
+                COALESCE((
+                    SELECT COUNT(*) FROM league_players lp
+                    WHERE lp.league_id=? AND lp.assigned_team_id=?
+                      AND lp.stato='ASSEGNATO'
+                ),0),
+                COALESCE((
+                    SELECT SUM(COALESCE(lp.prezzo_assegnazione,0))
+                    FROM league_players lp
+                    WHERE lp.league_id=? AND lp.assigned_team_id=?
+                      AND lp.stato='ASSEGNATO'
+                ),0),
+                COALESCE((
+                    SELECT SUM(COALESCE(rc.costo,0))
+                    FROM auction_release_costs rc
+                    WHERE rc.league_id=? AND rc.team_id=? AND rc.active=1
+                ),0),
+                COALESCE((
+                    SELECT COUNT(*) FROM auction_release_costs rc
+                    WHERE rc.league_id=? AND rc.team_id=? AND rc.active=1
+                ),0)
+            FROM teams t
+            WHERE t.league_id=? AND t.id=? AND t.is_active=1
+            LIMIT 1
+        """, (
+            league_id,user_id,
+            league_id,team_id,
+            league_id,team_id,
+            league_id,team_id,
+            league_id,team_id,
+            league_id,team_id
+        ))
+        pre = cur.fetchone()
+        if not pre:
+            raise ValueError("Squadra non valida o non attiva.")
+        if not bool(pre[0]):
+            raise PermissionError("Operazione riservata al Banditore/Admin.")
 
-        cur.execute("""
-            SELECT COALESCE(SUM(COALESCE(costo,0)),0), COUNT(*)
-            FROM auction_release_costs
-            WHERE league_id=? AND team_id=? AND active=1
-        """, (league_id, team_id))
-        rr = cur.fetchone() or (0, 0)
-        costo_svincoli_prima = float(rr[0] or 0)
-        svincoli_attivi = int(rr[1] or 0)
+        team_nome = str(pre[1] or "")
+        giocatori_attivi = int(pre[2] or 0)
+        valore_attivi_prima = float(pre[3] or 0)
+        costo_svincoli_prima = float(pre[4] or 0)
+        svincoli_attivi = int(pre[5] or 0)
 
         # I giocatori restano assegnati ma non generano più spesa.
         cur.execute("""
@@ -30440,11 +30462,8 @@ def reset_spese_squadra_asta_v153(league_id, team_id):
               AND stato='ASSEGNATO'
         """, (league_id, team_id))
 
-        cur.execute("""
-            UPDATE rosters
-            SET prezzo_acquisto=0
-            WHERE league_id=? AND team_id=?
-        """, (league_id, team_id))
+        # V163 - rosters è una proiezione legacy: la Rosa legge league_players.
+        # Evitiamo una scrittura remota non necessaria nel percorso critico.
 
         # Gli svincoli pregressi non devono più consumare crediti.
         cur.execute("""
@@ -30463,17 +30482,8 @@ def reset_spese_squadra_asta_v153(league_id, team_id):
               AND stato='ACTIVE'
         """, (league_id, team_id))
 
-        # Allinea anche l'eventuale workspace operativo legacy della squadra.
-        tab_team = "giocatori_ml_l" + str(league_id) + "_t" + str(team_id)
-        try:
-            cur.execute(
-                f"""UPDATE {tab_team}
-                    SET prezzo_acquisto=0,
-                        ultimo_aggiornamento=CURRENT_TIMESTAMP
-                    WHERE stato='ASSEGNATO'"""
-            )
-        except Exception:
-            pass
+        # V163 - nessun update del workspace legacy nel percorso critico.
+        # Tutte le viste correnti derivano dallo stato centrale league_players.
 
         _ricalcola_budget_team_v147(cur, league_id, team_id)
 
@@ -30597,9 +30607,21 @@ def dialog_reset_spese_asta_v153(league_id):
         ):
             try:
                 esito = reset_spese_squadra_asta_v153(league_id, team_id)
-                invalida_cache_dati()
-                st.session_state.pop("_titolarita_cache", None)
-                st.session_state.pop("_formazioni_tipo_fast_cache", None)
+                # V163 - aggiorna direttamente la tabella Storico già in RAM:
+                # i giocatori restano assegnati, ma il prezzo diventa 0.
+                _hk = f"_v156_history_{league_id}"
+                _hc = st.session_state.get(_hk)
+                if isinstance(_hc, dict) and isinstance(_hc.get("df"), pd.DataFrame):
+                    _hdf = _hc["df"].copy()
+                    if "ASSEGNATO A" in _hdf.columns and "PREZZO" in _hdf.columns:
+                        _hdf.loc[
+                            _hdf["ASSEGNATO A"].fillna("").astype(str) == str(esito["team"]),
+                            "PREZZO"
+                        ] = 0.0
+                    st.session_state[_hk] = {"ts": time.monotonic(), "df": _hdf}
+
+                st.session_state.pop("_ultime_operazioni_sessione", None)
+                st.session_state.pop("_costi_svincoli_sessione", None)
                 st.session_state["v154_storico_reset_msg"] = (
                     f'♻️ Spese di {esito["team"]} azzerate. '
                     f'Riassegnati {formatta_crediti(esito["crediti_riassegnati"])} crediti.'
@@ -34747,7 +34769,14 @@ def render_controlli_top_admin_banditore_v154():
             st.session_state.get("ml_modalita_accesso") == "SQUADRA"
             and st.session_state.get("pagina") == "ASTA"
         )
-        else None
+        else (
+            "2s"
+            if (
+                st.session_state.get("ml_modalita_accesso") == "SQUADRA"
+                and st.session_state.get("pagina") == "ROSA"
+            )
+            else None
+        )
     )
 )
 def render_navigazione_e_pagina():
