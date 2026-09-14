@@ -13376,6 +13376,37 @@ def applica_accesso_multilega(accesso):
     st.session_state["ml_ruoli_autorizzati"] = list(ruoli_autorizzati)
     st.session_state["ml_modalita_accesso"] = modalita_accesso
 
+    # V153 - la sidebar appartiene sempre alla SQUADRA dell'utente.
+    # Conserviamo quindi il riferimento alla squadra anche quando il contesto
+    # operativo ADMIN/BANDITORE azzera volutamente ml_team_id.
+    _sidebar_team_id = accesso.get("team_id")
+    _sidebar_team_nome = str(accesso.get("team_nome") or "")
+
+    if _sidebar_team_id is None:
+        # Fallback robusto: cerca la squadra posseduta dall'utente nella lega.
+        _conn_sidebar = _portal_raw_connection()
+        _cur_sidebar = _conn_sidebar.cursor()
+        try:
+            _cur_sidebar.execute("""
+                SELECT id, COALESCE(nome,'')
+                FROM teams
+                WHERE league_id=?
+                  AND owner_user_id=?
+                  AND is_active=1
+                ORDER BY posizione, id
+                LIMIT 1
+            """, (int(accesso["league_id"]), int(accesso["user_id"])))
+            _r_sidebar = _cur_sidebar.fetchone()
+            if _r_sidebar:
+                _sidebar_team_id = int(_r_sidebar[0])
+                _sidebar_team_nome = str(_r_sidebar[1] or "")
+        finally:
+            _portal_close(_conn_sidebar)
+
+    if _sidebar_team_id is not None:
+        st.session_state["ml_sidebar_team_id"] = int(_sidebar_team_id)
+        st.session_state["ml_sidebar_team_nome"] = _sidebar_team_nome
+
     # RUOLI_ATTIVI deve contenere esclusivamente il ruolo della pagina corrente.
     if modalita_accesso == "SQUADRA":
         st.session_state["ml_ruoli"] = ["TEAM"]
@@ -20689,6 +20720,106 @@ else:
 
 
 # ============================================================
+# V153 - SIDEBAR SQUADRA VISIBILE E AGGIORNATA SU TUTTI I LIVELLI
+# La pagina centrale mantiene il proprio contesto ADMIN/BANDITORE/SQUADRA,
+# mentre la sidebar legge SEMPRE la squadra associata allo stesso utente.
+# ============================================================
+_sidebar_team_id = st.session_state.get("ml_sidebar_team_id")
+_sidebar_team_nome = str(st.session_state.get("ml_sidebar_team_nome") or TEAM_ATTIVO_NOME or "")
+_sidebar_league_id = st.session_state.get("ml_league_id")
+
+if (
+    MODALITA_ACCESSO_ATTIVA != "SQUADRA"
+    and _sidebar_league_id is not None
+    and _sidebar_team_id is not None
+):
+    _sid_lid = int(_sidebar_league_id)
+    _sid_tid = int(_sidebar_team_id)
+    _conn_sid = _portal_raw_connection()
+    try:
+        # Catalogo completo di lega necessario per il calcolo IQR.
+        df_completo = pd.read_sql_query("""
+            SELECT
+                c.player_id AS Id,
+                c.ruolo_classico AS R,
+                c.ruolo_mantra AS RM,
+                c.nome AS Nome,
+                c.squadra AS Squadra,
+                c.quotazione_attuale AS "Qt.A",
+                c.quotazione_iniziale AS "Qt.I",
+                c.differenza AS "Diff.",
+                c.quotazione_attuale_mantra AS "Qt.A M",
+                c.quotazione_iniziale_mantra AS "Qt.I M",
+                c.differenza_mantra AS "Diff.M",
+                c.fvm AS FVM,
+                c.fvm_mantra AS "FVM M",
+                CASE
+                    WHEN lp.stato='ASSEGNATO' AND lp.assigned_team_id=? THEN 'MIO'
+                    WHEN lp.stato='ASSEGNATO' THEN 'VENDUTO'
+                    ELSE 'DISPONIBILE'
+                END AS Stato,
+                CASE
+                    WHEN lp.stato='ASSEGNATO' AND lp.assigned_team_id=?
+                    THEN lp.prezzo_assegnazione
+                    ELSE NULL
+                END AS Prezzo
+            FROM league_player_catalog c
+            LEFT JOIN league_players lp
+              ON lp.league_id=c.league_id
+             AND lp.player_id=c.player_id
+            WHERE c.league_id=?
+        """, _conn_sid, params=(_sid_tid, _sid_tid, _sid_lid))
+
+        df_rosa_globale = df_completo[df_completo["Stato"] == "MIO"].copy()
+        _prezzi_sidebar = pd.to_numeric(
+            df_rosa_globale.get("Prezzo", pd.Series(dtype=float)),
+            errors="coerce"
+        ).fillna(0)
+        valore_attivi = round(float(_prezzi_sidebar.sum()), 2)
+        numero_rosa = int(len(df_rosa_globale))
+        numero_portieri = conta_portieri(df_rosa_globale)
+        slot_liberi = max(0, MAX_GIOCATORI - numero_rosa)
+        iqr = calcola_iqr(df_rosa_globale, df_completo, MAX_GIOCATORI)
+
+        _cur_sid = _conn_sid.cursor()
+        _cur_sid.execute("""
+            SELECT
+                COALESCE(tb.budget_impostato, r.budget_iniziale, ?),
+                COALESCE(tb.valore_acquisti, 0),
+                COALESCE(tb.spesa_effettiva, 0),
+                COALESCE(r.soglia_budget, r.budget_iniziale, ?)
+            FROM teams t
+            LEFT JOIN league_rules r ON r.league_id=t.league_id
+            LEFT JOIN team_budgets tb
+              ON tb.league_id=t.league_id AND tb.team_id=t.id
+            WHERE t.league_id=? AND t.id=?
+            LIMIT 1
+        """, (SOGLIA_BASE, SOGLIA_BASE, _sid_lid, _sid_tid))
+        _r_sid = _cur_sid.fetchone()
+
+        if _r_sid:
+            budget_asta = float(_r_sid[0] if _r_sid[0] is not None else SOGLIA_BASE)
+            valore_acquisti = float(_r_sid[1] if _r_sid[1] is not None else valore_attivi)
+            spesa_effettiva = float(_r_sid[2] if _r_sid[2] is not None else valore_acquisti)
+            _soglia_sid = float(_r_sid[3] if _r_sid[3] is not None else SOGLIA_BASE)
+        else:
+            budget_asta = float(SOGLIA_BASE)
+            valore_acquisti = float(valore_attivi)
+            spesa_effettiva = float(valore_acquisti)
+            _soglia_sid = float(SOGLIA_BASE)
+
+        costi_svincoli = round(max(0.0, valore_acquisti - valore_attivi), 2)
+        oltre_soglia = round(max(0.0, valore_acquisti - _soglia_sid), 2)
+        budget_rimanente = round(budget_asta - spesa_effettiva, 2)
+
+        # Il widget Budget viene mostrato in sola lettura fuori dal livello Squadra.
+        st.session_state["budget_asta_corrente"] = budget_asta
+        st.session_state["budget_asta_input"] = budget_asta
+    finally:
+        _portal_close(_conn_sid)
+
+
+# ============================================================
 # SIDEBAR PRINCIPALE
 # ============================================================
 
@@ -25110,24 +25241,16 @@ with st.sidebar:
 
     if not PROFILO_LEGACY_SUPPORTATO:
         st.caption(
-            "🔒 Dati isolati per lega e livello di accesso"
+            "🔒 Area operativa isolata · sidebar sincronizzata con la tua squadra"
         )
 
     _sidebar_mode = str(
         st.session_state.get("ml_modalita_accesso") or "SQUADRA"
     ).upper()
 
-    _sidebar_subtitle = {
-        "SQUADRA": "Gestione rosa e asta",
-        "BANDITORE": "Controllo e gestione asta",
-        "ADMIN": "Amministrazione lega",
-    }.get(_sidebar_mode, "Gestione lega")
-
-    _sidebar_context_label = {
-        "SQUADRA": TEAM_ATTIVO_NOME or "Squadra non associata",
-        "BANDITORE": "Livello BANDITORE",
-        "ADMIN": "Livello ADMIN",
-    }.get(_sidebar_mode, _sidebar_mode)
+    # V153 - il livello operativo cambia la pagina centrale, non la sidebar.
+    _sidebar_subtitle = "Controllo squadra"
+    _sidebar_context_label = _sidebar_team_nome or TEAM_ATTIVO_NOME or "Squadra non associata"
 
     header_html = (
         '<div class="fanta-header">'
@@ -25212,10 +25335,11 @@ with st.sidebar:
 
 
     # --------------------------------------------------------
-    # V152 - BARRA LATERALE SPECIFICA PER LIVELLO
-    # Ogni livello dello stesso utente ha il proprio contesto UI.
+    # V153 - BARRA LATERALE SEMPRE DELLA SQUADRA
+    # È visibile in tutti i livelli; fuori da SQUADRA i controlli gestionali
+    # sono in sola lettura ma i dati restano aggiornati dal DB autorevole.
     # --------------------------------------------------------
-    if _sidebar_mode == "SQUADRA":
+    if _sidebar_team_id is not None:
         with st.container(
             key="sidebar_budget_card"
         ):
@@ -25236,9 +25360,10 @@ with st.sidebar:
                 step=10.0,
                 format="%.2f",
                 key="budget_asta_input",
-                on_change=aggiorna_budget_da_widget,
+                on_change=aggiorna_budget_da_widget if _sidebar_mode == "SQUADRA" else None,
+                disabled=(_sidebar_mode != "SQUADRA"),
                 help=(
-                    "Budget totale che hai deciso di destinare all'asta."
+                    "Budget totale della squadra. Modificabile esclusivamente dal livello SQUADRA."
                 )
             )
 
@@ -25322,51 +25447,11 @@ with st.sidebar:
             )
 
 
-    elif _sidebar_mode == "BANDITORE":
-        st.markdown(
-            f"""
-            <div class="fe-side-card">
-                <div>
-                    <div class="fe-card-label">Livello operativo</div>
-                    <div class="fe-card-value">BANDITORE</div>
-                </div>
-            </div>
-            <div class="fe-side-card">
-                <div>
-                    <div class="fe-card-label">Lega</div>
-                    <div class="fe-card-value" style="font-size:18px;white-space:normal;">{html.escape(LEGA_ATTIVA_NOME)}</div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        st.caption(
-            "La barra laterale è sincronizzata con il livello BANDITORE. "
-            "Budget, rosa e IQR personali non vengono riutilizzati da altri livelli."
+    else:
+        st.warning(
+            "Nessuna squadra associata all’utente: impossibile mostrare la barra laterale di controllo."
         )
 
-    elif _sidebar_mode == "ADMIN":
-        st.markdown(
-            f"""
-            <div class="fe-side-card">
-                <div>
-                    <div class="fe-card-label">Livello operativo</div>
-                    <div class="fe-card-value">ADMIN</div>
-                </div>
-            </div>
-            <div class="fe-side-card">
-                <div>
-                    <div class="fe-card-label">Lega amministrata</div>
-                    <div class="fe-card-value" style="font-size:18px;white-space:normal;">{html.escape(LEGA_ATTIVA_NOME)}</div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        st.caption(
-            "La barra laterale è sincronizzata con il livello ADMIN. "
-            "Nessun dato economico della Squadra viene mantenuto in questa vista."
-        )
 
     with st.expander(
         "☰  MENU",
