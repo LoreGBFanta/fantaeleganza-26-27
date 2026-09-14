@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.2.4"
+MULTILEGA_SCHEMA_VERSION = "5.2.5"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -14974,11 +14974,6 @@ def render_admin_multilega():
         st.error("Accedi con il livello ADMIN per usare Gestione Lega.")
         return
 
-    """
-    MULTILEGA 0.3:
-    creazione lega, regolamento e squadre.
-    """
-
     if "ADMIN" not in RUOLI_ATTIVI:
 
         st.error(
@@ -14989,12 +14984,6 @@ def render_admin_multilega():
     st.subheader(
         "⚙️ Gestione lega"
     )
-
-    st.caption(
-        "MULTILEGA 0.5 · La creazione di nuove leghe è stata spostata "
-        "nel portale iniziale. Qui l'Admin gestisce le leghe esistenti."
-    )
-
 
     # ========================================================
     # V110 · LISTONE CENTRALIZZATO DI LEGA
@@ -25435,7 +25424,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.2.4 &nbsp;|&nbsp; V144 UI Pulita Ruoli'
+        'MULTILEGA 5.2.5 &nbsp;|&nbsp; V145 UI Admin Pulita'
         '</div>',
         unsafe_allow_html=True
     )
