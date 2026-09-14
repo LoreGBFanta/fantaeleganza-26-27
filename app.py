@@ -26967,6 +26967,14 @@ def render_storico_asta_v147():
 
     st.subheader("📜 Storico asta")
 
+    if st.button(
+        "⟳ AGGIORNA",
+        use_container_width=True,
+        key=f"v152_refresh_storico_asta_{league_id}"
+    ):
+        invalida_cache_dati()
+        st.rerun()
+
     if st.session_state.get("v151_storico_msg"):
         st.success(
             st.session_state.pop("v151_storico_msg")
@@ -34327,6 +34335,24 @@ def render_navigazione_e_pagina():
         st.subheader(
             "👕 La mia rosa"
         )
+
+        _rosa_refresh_league_id = st.session_state.get("ml_league_id")
+        _rosa_refresh_team_id = st.session_state.get("ml_team_id")
+
+        if st.button(
+            "⟳ AGGIORNA",
+            use_container_width=True,
+            key=(
+                "v152_refresh_rosa_"
+                + str(_rosa_refresh_league_id)
+                + "_"
+                + str(_rosa_refresh_team_id)
+            )
+        ):
+            invalida_cache_dati()
+            st.session_state.pop("_titolarita_cache", None)
+            st.session_state.pop("_formazioni_tipo_fast_cache", None)
+            st.rerun()
 
         if "messaggio_reset_rosa" in st.session_state:
             st.success(
