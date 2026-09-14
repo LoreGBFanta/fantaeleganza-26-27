@@ -27207,13 +27207,27 @@ def render_storico_asta_v147():
 
     st.subheader("📜 Storico asta")
 
-    if st.button(
-        "⟳ AGGIORNA",
-        use_container_width=True,
-        key=f"v152_refresh_storico_asta_{league_id}"
-    ):
-        invalida_cache_dati()
-        st.rerun()
+    _storico_ctrl1, _storico_ctrl2 = st.columns(2)
+    with _storico_ctrl1:
+        if st.button(
+            "⟳ AGGIORNA",
+            use_container_width=True,
+            key=f"v152_refresh_storico_asta_{league_id}"
+        ):
+            invalida_cache_dati()
+            st.rerun()
+
+    with _storico_ctrl2:
+        if st.button(
+            "♻️ RESET SPESE",
+            use_container_width=True,
+            key=f"v154_reset_expenses_history_open_{league_id}",
+            help="Scegli la squadra e, dopo conferma esplicita, restituisci tutti i crediti spesi compresi quelli legati agli svincoli."
+        ):
+            dialog_reset_spese_asta_v153(league_id)
+
+    if st.session_state.get("v154_storico_reset_msg"):
+        st.success(st.session_state.pop("v154_storico_reset_msg"))
 
     if st.session_state.get("v151_storico_msg"):
         st.success(
@@ -30359,10 +30373,15 @@ def dialog_reset_spese_asta_v153(league_id):
     _by_name = {x["nome"]: int(x["team_id"]) for x in teams}
 
     scelta = st.selectbox(
-        "Squadra da resettare",
-        _nomi,
+        "Per quale squadra vuoi resettare le spese?",
+        ["— Seleziona una squadra —"] + _nomi,
+        index=0,
         key=f"v153_reset_expenses_team_{league_id}"
     )
+
+    if scelta == "— Seleziona una squadra —":
+        st.info("Seleziona la squadra da resettare. Nessuna operazione verrà eseguita senza conferma.")
+        return
 
     team_id = _by_name[scelta]
 
@@ -30393,7 +30412,7 @@ def dialog_reset_spese_asta_v153(league_id):
     )
 
     conferma = st.checkbox(
-        f"Confermo il reset completo delle spese di {scelta}",
+        f"Confermo di voler resettare le spese della squadra {scelta}",
         key=f"v153_reset_expenses_confirm_{league_id}_{team_id}"
     )
 
@@ -30411,7 +30430,7 @@ def dialog_reset_spese_asta_v153(league_id):
                 invalida_cache_dati()
                 st.session_state.pop("_titolarita_cache", None)
                 st.session_state.pop("_formazioni_tipo_fast_cache", None)
-                st.session_state["auctioneer_msg"] = (
+                st.session_state["v154_storico_reset_msg"] = (
                     f'♻️ Spese di {esito["team"]} azzerate. '
                     f'Riassegnati {formatta_crediti(esito["crediti_riassegnati"])} crediti.'
                 )
@@ -32845,24 +32864,13 @@ def render_banditore_asta():
 
     st.subheader("🔨 Gestione asta")
 
-    _mgmt1, _mgmt2 = st.columns(2)
-    with _mgmt1:
-        if st.button(
-            "♻️ RESET SPESE",
-            use_container_width=True,
-            key=f"v153_reset_expenses_open_{league_id}",
-            help="Restituisce tutti i crediti alla squadra scelta, compresi i costi degli svincoli, senza cancellare la rosa."
-        ):
-            dialog_reset_spese_asta_v153(league_id)
-
-    with _mgmt2:
-        if st.button(
-            "↩️ UNDO",
-            use_container_width=True,
-            key=f"v153_undo_auction_open_{league_id}",
-            help="Annulla una delle ultime 10 aggiudicazioni registrate nell'asta."
-        ):
-            dialog_undo_asta_v153(league_id)
+    if st.button(
+        "↩️ UNDO",
+        use_container_width=True,
+        key=f"v153_undo_auction_open_{league_id}",
+        help="Annulla una delle ultime 10 aggiudicazioni registrate nell'asta."
+    ):
+        dialog_undo_asta_v153(league_id)
 
     try:
         _chiamati, _totale, _pct = contatore_chiamati_v147(league_id)
