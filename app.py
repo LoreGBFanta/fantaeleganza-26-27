@@ -26374,19 +26374,22 @@ def assicura_schema_movimenti_rosa_v149(league_id):
 
 def assicura_schema_storico_asta_v147(league_id):
     """
-    Crea una sola volta per sessione lo storico autorevole dei giocatori CHIAMATI.
-    Lo storico è separato dalle assegnazioni: un giocatore può essere chiamato
-    anche senza essere venduto.
+    Crea/aggiorna lo storico autorevole dei giocatori CHIAMATI.
+
+    V161: la verifica delle colonne strutturali viene eseguita SEMPRE sul DB,
+    anche se la sessione Streamlit aveva gia' impostato il guard di schema.
+    Questo evita errori dopo un hot-update del codice (es. colonna active
+    introdotta mentre la sessione era gia' aperta).
     """
     league_id = int(league_id)
     assicura_schema_movimenti_rosa_v149(league_id)
     guard = f"_v147_storico_schema_{league_id}"
-    if st.session_state.get(guard):
-        return
 
     conn = _portal_raw_connection()
     cur = conn.cursor()
     try:
+        # Questa parte NON va mai saltata dal guard: e' una migrazione
+        # idempotente e deve poter riparare DB creati con versioni precedenti.
         cur.execute("""
             CREATE TABLE IF NOT EXISTS auction_called_players (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26402,9 +26405,6 @@ def assicura_schema_storico_asta_v147(league_id):
             )
         """)
 
-        # V160 - Un giocatore svincolato/eliminato non deve piu' comparire
-        # nello Storico Asta ne' nel contatore. La colonna active permette di
-        # conservarne la traccia tecnica senza farlo ricomparire nei backfill.
         cur.execute("PRAGMA table_info(auction_called_players)")
         _called_cols = {str(_r[1]) for _r in (cur.fetchall() or [])}
         if "active" not in _called_cols:
@@ -26412,6 +26412,12 @@ def assicura_schema_storico_asta_v147(league_id):
                 "ALTER TABLE auction_called_players "
                 "ADD COLUMN active INTEGER NOT NULL DEFAULT 1"
             )
+            conn.commit()
+
+        # Dopo avere garantito la struttura, il resto del backfill/schema puo'
+        # essere evitato se gia' completato in questa sessione.
+        if st.session_state.get(guard):
+            return
 
         cur.execute("""
             CREATE INDEX IF NOT EXISTS ix_called_players_league_called
