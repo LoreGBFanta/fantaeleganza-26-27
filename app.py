@@ -12212,7 +12212,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.0.1"
+MULTILEGA_SCHEMA_VERSION = "5.0.2"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -12669,6 +12669,190 @@ def migra_profili_legacy_in_multilega():
         chiudi_connessione(
             conn
         )
+
+
+
+def assegna_ruoli_utenti_esistenti_v138():
+    """
+    V138 - migrazione idempotente richiesta per gli utenti già esistenti.
+
+    GOSTOBAR:
+      - SQUADRA
+
+    IBBINI IDIOTA:
+      - SQUADRA
+      - BANDITORE
+      - ADMIN
+
+    Non crea nuovi account e non modifica password.
+    Opera solo sulle leghe in cui l'utente è già presente o possiede
+    una squadra esistente.
+    """
+    guard = "_v138_existing_roles_done"
+    if st.session_state.get(guard):
+        return
+
+    configurazione = {
+        "GOSTOBAR": {
+            "admin": 0,
+            "auctioneer": 0,
+            "team": 1,
+        },
+        "IBBINI IDIOTA": {
+            "admin": 1,
+            "auctioneer": 1,
+            "team": 1,
+        },
+    }
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+        for username, permessi in configurazione.items():
+            cur.execute("""
+                SELECT id
+                FROM users
+                WHERE LOWER(username)=LOWER(?)
+                  AND is_active=1
+                LIMIT 1
+            """, (username,))
+            r_user = cur.fetchone()
+            if not r_user:
+                continue
+
+            user_id = int(r_user[0])
+
+            # Tutte le leghe dove l'utente è già presente tramite membership
+            # oppure possiede/ha una squadra con il proprio nome.
+            cur.execute("""
+                SELECT DISTINCT league_id
+                FROM (
+                    SELECT league_id
+                    FROM league_members
+                    WHERE user_id=?
+
+                    UNION
+
+                    SELECT league_id
+                    FROM teams
+                    WHERE owner_user_id=?
+                       OR LOWER(nome)=LOWER(?)
+                )
+            """, (user_id, user_id, username))
+
+            league_ids = [
+                int(r[0])
+                for r in (cur.fetchall() or [])
+                if r[0] is not None
+            ]
+
+            for league_id in league_ids:
+                # Identifica la squadra reale dell'utente.
+                cur.execute("""
+                    SELECT id
+                    FROM teams
+                    WHERE league_id=?
+                      AND is_active=1
+                      AND (
+                          owner_user_id=?
+                          OR LOWER(nome)=LOWER(?)
+                      )
+                    ORDER BY
+                        CASE WHEN owner_user_id=? THEN 0 ELSE 1 END,
+                        id
+                    LIMIT 1
+                """, (
+                    league_id,
+                    user_id,
+                    username,
+                    user_id
+                ))
+                r_team = cur.fetchone()
+                team_id = int(r_team[0]) if r_team else None
+
+                # Normalizza eventuali membership già esistenti.
+                # GOSTOBAR non deve risultare Admin/Banditore.
+                # IBBINI mantiene Admin/Banditore su tutte le membership.
+                cur.execute("""
+                    UPDATE league_members
+                    SET is_admin=?,
+                        is_auctioneer=?,
+                        is_active=1
+                    WHERE league_id=?
+                      AND user_id=?
+                """, (
+                    int(permessi["admin"]),
+                    int(permessi["auctioneer"]),
+                    league_id,
+                    user_id
+                ))
+
+                if team_id is not None:
+                    # La membership di squadra è quella che abilita SQUADRA.
+                    cur.execute("""
+                        INSERT INTO league_members (
+                            league_id,
+                            user_id,
+                            team_id,
+                            is_admin,
+                            is_auctioneer,
+                            is_team_member,
+                            is_active,
+                            joined_at
+                        )
+                        VALUES (?,?,?,?,?,1,1,CURRENT_TIMESTAMP)
+                        ON CONFLICT(league_id,user_id,team_id)
+                        DO UPDATE SET
+                            is_admin=excluded.is_admin,
+                            is_auctioneer=excluded.is_auctioneer,
+                            is_team_member=1,
+                            is_active=1
+                    """, (
+                        league_id,
+                        user_id,
+                        team_id,
+                        int(permessi["admin"]),
+                        int(permessi["auctioneer"])
+                    ))
+
+                    # Mantiene ownership coerente.
+                    cur.execute("""
+                        UPDATE teams
+                        SET owner_user_id=?,
+                            updated_at=CURRENT_TIMESTAMP
+                        WHERE league_id=?
+                          AND id=?
+                    """, (
+                        user_id,
+                        league_id,
+                        team_id
+                    ))
+
+                # Membership senza team: mai qualificata come SQUADRA.
+                cur.execute("""
+                    UPDATE league_members
+                    SET is_team_member=0
+                    WHERE league_id=?
+                      AND user_id=?
+                      AND team_id IS NULL
+                """, (
+                    league_id,
+                    user_id
+                ))
+
+        conn.commit()
+        st.session_state[guard] = True
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
 
 
 def sincronizza_legacy_in_multilega():
@@ -13146,9 +13330,9 @@ def applica_accesso_multilega(accesso):
     if modalita_accesso not in ("SQUADRA", "BANDITORE", "ADMIN"):
         # Compatibilità con vecchi accessi salvati in sessione.
         ruoli = [str(x).upper() for x in accesso.get("ruoli", [])]
-        if "TEAM" in ruoli and accesso.get("team_id") is not None:
+        if "SQUADRA" in ruoli and accesso.get("team_id") is not None:
             modalita_accesso = "SQUADRA"
-        elif "AUCTIONEER" in ruoli:
+        elif "BANDITORE" in ruoli:
             modalita_accesso = "BANDITORE"
         elif "ADMIN" in ruoli:
             modalita_accesso = "ADMIN"
@@ -13161,8 +13345,8 @@ def applica_accesso_multilega(accesso):
     ]
 
     richiesto_db = {
-        "SQUADRA": "TEAM",
-        "BANDITORE": "AUCTIONEER",
+        "SQUADRA": "SQUADRA",
+        "BANDITORE": "BANDITORE",
         "ADMIN": "ADMIN",
     }[modalita_accesso]
 
@@ -13321,7 +13505,7 @@ def schermata_le_mie_leghe(accessi):
 
         # SQUADRA deve usare la membership che contiene davvero team_id.
         if (
-            "TEAM" in ruoli_riga
+            "SQUADRA" in ruoli_riga
             and accesso.get("team_id") is not None
             and gruppo["SQUADRA"] is None
         ):
@@ -13329,7 +13513,7 @@ def schermata_le_mie_leghe(accessi):
 
         # BANDITORE/ADMIN possono essere membership senza team.
         if (
-            "AUCTIONEER" in ruoli_riga
+            "BANDITORE" in ruoli_riga
             and gruppo["BANDITORE"] is None
         ):
             gruppo["BANDITORE"] = dict(accesso)
@@ -20270,9 +20454,20 @@ if not st.session_state.get(
         )
 
 
+# V138 - allinea i livelli di accesso degli utenti legacy/esistenti
+# prima di costruire la schermata di scelta ruolo.
+assegna_ruoli_utenti_esistenti_v138()
+
 # Gli accessi vengono letti dal DB solo quando servono.
 # Una volta selezionata la lega, la membership validata è mantenuta
 # nel session_state server-side e non viene ri-queryata a ogni click.
+_v138_access_reset_key = "_v138_access_context_reset"
+if not st.session_state.get(_v138_access_reset_key):
+    st.session_state.pop("ml_accesso_validato", None)
+    st.session_state.pop("ml_modalita_accesso", None)
+    st.session_state.pop("ml_ruoli", None)
+    st.session_state[_v138_access_reset_key] = True
+
 ACCESSO_MULTILEGA_ATTIVO = (
     st.session_state.get(
         "ml_accesso_validato"
@@ -25281,7 +25476,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.0.1 &nbsp;|&nbsp; V137 Fix Accessi Ruoli'
+        'MULTILEGA 5.0.2 &nbsp;|&nbsp; V138 Ruoli Utenti Esistenti'
         '</div>',
         unsafe_allow_html=True
     )
