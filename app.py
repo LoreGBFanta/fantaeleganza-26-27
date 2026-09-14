@@ -2412,19 +2412,19 @@ except Exception as errore_migrazione_auth:
     st.stop()
 
 
-if not st.session_state.get(
-    "auth_ok",
-    False
+if (
+    not st.session_state.get("auth_ok", False)
+    or not st.session_state.get("profilo_attivo")
 ):
+    # Sessione autenticata incompleta: forza il ritorno al login.
+    if st.session_state.get("auth_ok", False):
+        logout_completo_v143()
 
     render_portale_iniziale()
-
     st.stop()
 
 
-PROFILO_ATTIVO = st.session_state[
-    "profilo_attivo"
-]
+PROFILO_ATTIVO = st.session_state["profilo_attivo"]
 
 SUFFIX_PROFILO = (
     ""
@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.2.2"
+MULTILEGA_SCHEMA_VERSION = "5.2.3"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -13392,6 +13392,38 @@ def applica_accesso_multilega(accesso):
 
 
 
+
+def logout_completo_v143():
+    """
+    Torna davvero alla schermata login.
+
+    Pulisce sia il contesto multilega sia lo stato di autenticazione.
+    """
+    azzera_contesto_multilega()
+
+    chiavi_logout = [
+        "profilo_attivo",
+        "profilo_login_select",
+        "auth_user_id",
+        "auth_ok",
+        "auth_username",
+        "ml_accesso_validato",
+        "ml_modalita_accesso",
+        "ml_ruoli",
+        "ml_ruoli_autorizzati",
+        "pagina",
+    ]
+
+    for chiave in chiavi_logout:
+        st.session_state.pop(chiave, None)
+
+    # Pulisce anche la cache accessi della sessione precedente.
+    for chiave in list(st.session_state.keys()):
+        if str(chiave).startswith("_v139_accessi_"):
+            st.session_state.pop(chiave, None)
+
+
+
 def azzera_contesto_multilega():
     """
     Torna alla schermata LE MIE LEGHE senza scollegare l'utente.
@@ -13474,9 +13506,7 @@ def schermata_le_mie_leghe(accessi):
     if not accessi:
         st.error("Questo utente non è associato ad alcuna lega attiva.")
         if st.button("← CAMBIA UTENTE", key="ml136_logout_empty"):
-            azzera_contesto_multilega()
-            st.session_state.pop("profilo_attivo", None)
-            st.session_state.pop("profilo_login_select", None)
+            logout_completo_v143()
             st.rerun()
         st.stop()
 
@@ -13637,9 +13667,7 @@ def schermata_le_mie_leghe(accessi):
         use_container_width=False,
         key="ml136_cambia_utente"
     ):
-        azzera_contesto_multilega()
-        st.session_state.pop("profilo_attivo", None)
-        st.session_state.pop("profilo_login_select", None)
+        logout_completo_v143()
         st.rerun()
 
     st.stop()
@@ -25407,7 +25435,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.2.2 &nbsp;|&nbsp; V142 Fix Testo Accesso'
+        'MULTILEGA 5.2.3 &nbsp;|&nbsp; V143 Fix Cambia Utente'
         '</div>',
         unsafe_allow_html=True
     )
