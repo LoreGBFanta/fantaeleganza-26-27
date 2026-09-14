@@ -27253,7 +27253,6 @@ def render_storico_asta_v147():
     league_id = int(st.session_state.get("ml_league_id"))
     assicura_schema_storico_asta_v147(league_id)
 
-    st.subheader("📜 Storico asta")
 
     _storico_ctrl1, _storico_ctrl2 = st.columns(2)
     with _storico_ctrl1:
@@ -33142,7 +33141,6 @@ def render_banditore_asta():
     if st.session_state.get("auctioneer_error"):
         st.error(st.session_state.pop("auctioneer_error"))
 
-    st.subheader("🔨 Gestione asta")
 
     if st.button(
         "↩️ UNDO",
