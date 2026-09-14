@@ -27287,6 +27287,26 @@ def render_storico_asta_v147():
             st.session_state.pop("v151_storico_error")
         )
 
+    # V159 - Il contatore avanzamento asta appartiene allo Storico Asta.
+    try:
+        _chiamati, _totale, _pct = contatore_chiamati_fast_v156(league_id)
+        _cc1, _cc2 = st.columns([1.2, 3.8])
+        with _cc1:
+            st.metric(
+                "CHIAMATI / TOTALE",
+                f"{_chiamati} / {_totale}"
+            )
+        with _cc2:
+            st.markdown(
+                f"**Chiamata completa al {_pct:g}%**"
+            )
+            st.progress(
+                min(1.0, max(0.0, _pct / 100.0))
+            )
+    except Exception:
+        # Nessun elemento UI aggiuntivo nel Banditore in caso di errore del contatore.
+        pass
+
     try:
         storico = storico_asta_v147(league_id)
         teams = squadre_storico_v147(league_id)
@@ -33149,24 +33169,6 @@ def render_banditore_asta():
         help="Annulla una delle ultime 10 aggiudicazioni registrate nell'asta."
     ):
         dialog_undo_asta_v153(league_id)
-
-    try:
-        _chiamati, _totale, _pct = contatore_chiamati_fast_v156(league_id)
-        _cc1, _cc2 = st.columns([1.2, 3.8])
-        with _cc1:
-            st.metric(
-                "CHIAMATI / TOTALE",
-                f"{_chiamati} / {_totale}"
-            )
-        with _cc2:
-            st.markdown(
-                f"**Chiamata completa al {_pct:g}%**"
-            )
-            st.progress(
-                min(1.0, max(0.0, _pct / 100.0))
-            )
-    except Exception as _err_counter:
-        st.caption("Contatore chiamata non disponibile.")
 
     # Il pulsante stesso provoca un solo rerender del fragment.
     st.button(
