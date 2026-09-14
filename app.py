@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.6.1"
+MULTILEGA_SCHEMA_VERSION = "5.6.2"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25424,7 +25424,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.6.1 &nbsp;|&nbsp; V150 Fix Rosa + Filtri Storico'
+        'MULTILEGA 5.6.2 &nbsp;|&nbsp; V151 Conferma Svincolo/Elimina'
         '</div>',
         unsafe_allow_html=True
     )
@@ -26847,6 +26847,116 @@ def azione_storico_rosa_v149(league_id, player_id, azione):
 
 
 
+
+@st.dialog("Conferma svincolo")
+def conferma_svincolo_storico_v151(
+    league_id,
+    player_id,
+    nome_giocatore,
+    squadra_nome,
+    prezzo
+):
+    prezzo = float(prezzo or 0)
+
+    st.write(
+        f'Vuoi svincolare **{nome_giocatore}** '
+        f'dalla rosa di **{squadra_nome}**?'
+    )
+
+    st.warning(
+        f"Il giocatore tornerà disponibile, ma i "
+        f"**{formatta_crediti(prezzo)}** spesi "
+        f"resteranno conteggiati alla squadra."
+    )
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        if st.button(
+            "CONFERMA SVINCOLO",
+            type="primary",
+            use_container_width=True,
+            key=f"v151_confirm_release_{league_id}_{player_id}"
+        ):
+            try:
+                azione_storico_rosa_v149(
+                    int(league_id),
+                    int(player_id),
+                    "SVINCOLA"
+                )
+                st.session_state["v151_storico_msg"] = (
+                    f"{nome_giocatore} svincolato. "
+                    "Il costo resta a carico della squadra."
+                )
+                st.session_state.pop("v151_storico_error", None)
+                st.rerun()
+            except Exception as errore:
+                st.error(str(errore))
+
+    with c2:
+        if st.button(
+            "ANNULLA",
+            use_container_width=True,
+            key=f"v151_cancel_release_{league_id}_{player_id}"
+        ):
+            st.rerun()
+
+
+@st.dialog("Conferma eliminazione")
+def conferma_elimina_storico_v151(
+    league_id,
+    player_id,
+    nome_giocatore,
+    squadra_nome,
+    prezzo
+):
+    prezzo = float(prezzo or 0)
+
+    st.write(
+        f'Vuoi eliminare **{nome_giocatore}** '
+        f'dalla rosa di **{squadra_nome}**?'
+    )
+
+    st.warning(
+        f"Il giocatore tornerà disponibile e i "
+        f"**{formatta_crediti(prezzo)}** spesi "
+        f"verranno restituiti integralmente alla squadra."
+    )
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        if st.button(
+            "CONFERMA ELIMINAZIONE",
+            type="primary",
+            use_container_width=True,
+            key=f"v151_confirm_delete_{league_id}_{player_id}"
+        ):
+            try:
+                azione_storico_rosa_v149(
+                    int(league_id),
+                    int(player_id),
+                    "ELIMINA"
+                )
+                st.session_state["v151_storico_msg"] = (
+                    f"{nome_giocatore} eliminato. "
+                    "I crediti sono stati restituiti alla squadra."
+                )
+                st.session_state.pop("v151_storico_error", None)
+                st.rerun()
+            except Exception as errore:
+                st.error(str(errore))
+
+    with c2:
+        if st.button(
+            "ANNULLA",
+            use_container_width=True,
+            key=f"v151_cancel_delete_{league_id}_{player_id}"
+        ):
+            st.rerun()
+
+
+
 def render_storico_asta_v147():
     if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
         st.error("Accedi come BANDITORE per visualizzare lo storico asta.")
@@ -26856,6 +26966,16 @@ def render_storico_asta_v147():
     assicura_schema_storico_asta_v147(league_id)
 
     st.subheader("📜 Storico asta")
+
+    if st.session_state.get("v151_storico_msg"):
+        st.success(
+            st.session_state.pop("v151_storico_msg")
+        )
+
+    if st.session_state.get("v151_storico_error"):
+        st.error(
+            st.session_state.pop("v151_storico_error")
+        )
 
     try:
         storico = storico_asta_v147(league_id)
@@ -27080,40 +27200,34 @@ def render_storico_asta_v147():
         with cols[6]:
             if st.button(
                 "🔓",
-                key=f"v149_release_{league_id}_{player_id}",
+                key=f"v151_release_{league_id}_{player_id}",
                 help="Svincola: rimuove dalla rosa senza restituire i crediti",
                 disabled=not assegnato,
                 use_container_width=True
             ):
-                try:
-                    azione_storico_rosa_v149(
-                        league_id,player_id,"SVINCOLA"
-                    )
-                    st.success(
-                        f"{nome} svincolato: il costo resta a carico della squadra."
-                    )
-                    st.rerun()
-                except Exception as errore:
-                    st.error(f"{nome}: {errore}")
+                conferma_svincolo_storico_v151(
+                    league_id,
+                    player_id,
+                    nome,
+                    team_corrente,
+                    float(prezzo or 0)
+                )
 
         with cols[7]:
             if st.button(
                 "🗑️",
-                key=f"v149_delete_{league_id}_{player_id}",
+                key=f"v151_delete_{league_id}_{player_id}",
                 help="Elimina: rimuove dalla rosa e restituisce i crediti",
                 disabled=not assegnato,
                 use_container_width=True
             ):
-                try:
-                    azione_storico_rosa_v149(
-                        league_id,player_id,"ELIMINA"
-                    )
-                    st.success(
-                        f"{nome} eliminato: i crediti sono stati restituiti."
-                    )
-                    st.rerun()
-                except Exception as errore:
-                    st.error(f"{nome}: {errore}")
+                conferma_elimina_storico_v151(
+                    league_id,
+                    player_id,
+                    nome,
+                    team_corrente,
+                    float(prezzo or 0)
+                )
 
 
 
