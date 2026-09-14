@@ -12125,7 +12125,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "4.1"
+MULTILEGA_SCHEMA_VERSION = "4.1.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25253,7 +25253,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 4.1 &nbsp;|&nbsp; V126 Bidding in Asta Fast'
+        'MULTILEGA 4.1.1 &nbsp;|&nbsp; V127 Fix HTML Asta Live'
         '</div>',
         unsafe_allow_html=True
     )
@@ -30338,46 +30338,46 @@ def render_bidding_inline_asta_v126():
             "🟠 OFFERTE CHIUSE · assegnazione in corso"
         )
 
+    _html_asta_live = (
+        '<div style="'
+        'background:#071a2f;'
+        'border:2px solid #f5b51b;'
+        'border-radius:14px;'
+        'padding:18px 22px;'
+        'margin:6px 0 14px 0;'
+        'color:#fff;'
+        '">'
+        '<div style="'
+        'font-size:12px;'
+        'color:#94a3b8;'
+        'font-weight:800;'
+        'letter-spacing:.4px;'
+        '">'
+        'GIOCATORE IN ASTA'
+        '</div>'
+        '<div style="'
+        'font-size:30px;'
+        'font-weight:950;'
+        'margin-top:3px;'
+        '">'
+        + html.escape(stato["nome"])
+        + '</div>'
+        '<div style="'
+        'font-size:16px;'
+        'color:#dbeafe;'
+        'margin-top:4px;'
+        '">'
+        + html.escape(stato["squadra"])
+        + '&nbsp;·&nbsp;'
+        + html.escape(stato["ruolo_mantra"])
+        + '&nbsp;·&nbsp; FVM '
+        + f'{stato["fvm"]:g}'
+        + '</div>'
+        '</div>'
+    )
+
     st.markdown(
-        f"""
-        <div style="
-            background:#071a2f;
-            border:2px solid #f5b51b;
-            border-radius:14px;
-            padding:18px 22px;
-            margin:6px 0 14px 0;
-            color:#fff;
-        ">
-            <div style="
-                font-size:12px;
-                color:#94a3b8;
-                font-weight:800;
-                letter-spacing:.4px;
-            ">
-                GIOCATORE IN ASTA
-            </div>
-
-            <div style="
-                font-size:30px;
-                font-weight:950;
-                margin-top:3px;
-            ">
-                {html.escape(stato["nome"])}
-            </div>
-
-            <div style="
-                font-size:16px;
-                color:#dbeafe;
-                margin-top:4px;
-            ">
-                {html.escape(stato["squadra"])}
-                &nbsp;·&nbsp;
-                {html.escape(stato["ruolo_mantra"])}
-                &nbsp;·&nbsp;
-                FVM {stato["fvm"]:g}
-            </div>
-        </div>
-        """,
+        _html_asta_live,
         unsafe_allow_html=True
     )
 
