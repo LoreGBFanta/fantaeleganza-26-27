@@ -20793,7 +20793,8 @@ _sidebar_team_nome = str(st.session_state.get("ml_sidebar_team_nome") or TEAM_AT
 _sidebar_league_id = st.session_state.get("ml_league_id")
 
 if (
-    _sidebar_league_id is not None
+    MODALITA_ACCESSO_ATTIVA == "SQUADRA"
+    and _sidebar_league_id is not None
     and _sidebar_team_id is not None
 ):
     _sid_lid = int(_sidebar_league_id)
@@ -20883,55 +20884,13 @@ if (
 
 
 # ============================================================
-# V155 - SINCRONIZZAZIONE LIVE BUDGET TRA LIVELLI DELLO STESSO PROFILO
-# SQUADRA resta l'unico livello che puo' scrivere il budget.
-# ADMIN e BANDITORE, anche in sessioni/browser differenti, rileggono
-# periodicamente il valore autorevole della squadra e aggiornano la
-# sidebar solo quando rilevano una variazione.
+# V156 - ADMIN/BANDITORE SENZA SIDEBAR: NESSUN POLLING BUDGET
+# La sincronizzazione live del budget era necessaria soltanto quando la
+# sidebar Squadra veniva mostrata anche negli altri livelli. Ora genererebbe
+# query e rerun inutili, quindi e' completamente disattivata.
 # ============================================================
-@st.fragment(
-    run_every=(
-        "2s"
-        if MODALITA_ACCESSO_ATTIVA in ("ADMIN", "BANDITORE")
-        else None
-    )
-)
 def sincronizza_budget_sidebar_live_v155():
-    if MODALITA_ACCESSO_ATTIVA not in ("ADMIN", "BANDITORE"):
-        return
-
-    league_id = st.session_state.get("ml_league_id")
-    team_id = st.session_state.get("ml_sidebar_team_id")
-
-    if league_id is None or team_id is None:
-        return
-
-    try:
-        budget_db = round(
-            float(leggi_budget_squadra_autorevole(league_id, team_id)),
-            2
-        )
-    except Exception:
-        return
-
-    try:
-        budget_sessione = round(
-            float(st.session_state.get("budget_asta_corrente", SOGLIA_BASE)),
-            2
-        )
-    except Exception:
-        budget_sessione = float(SOGLIA_BASE)
-
-    if budget_db != budget_sessione:
-        st.session_state["budget_asta_corrente"] = budget_db
-        st.session_state["budget_asta_input"] = budget_db
-        st.session_state.pop("_ml16_sidebar_metrics", None)
-        # Rerun completo soltanto quando il budget e' realmente cambiato:
-        # aggiorna anche Budget rimanente e tutte le card dipendenti.
-        st.rerun()
-
-
-sincronizza_budget_sidebar_live_v155()
+    return
 
 
 # ============================================================
@@ -26446,6 +26405,10 @@ def assicura_schema_storico_asta_v147(league_id):
             CREATE INDEX IF NOT EXISTS ix_called_players_league_called
             ON auction_called_players(league_id, called_at, id)
         """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS ix_auction_lots_league_player_id
+            ON auction_lots(league_id, player_id, id)
+        """)
 
         # Backfill: tutti i lotti già aperti in passato sono giocatori chiamati.
         cur.execute("""
@@ -26575,13 +26538,23 @@ def contatore_chiamati_v147(league_id):
         _portal_close(conn)
 
 
-def storico_asta_v147(league_id):
+def _storico_asta_db_v156(league_id):
     league_id = int(league_id)
     assicura_schema_storico_asta_v147(league_id)
 
     conn = _portal_raw_connection()
     try:
         df = pd.read_sql_query("""
+            WITH ranked_lots AS (
+                SELECT
+                    league_id,player_id,UPPER(COALESCE(stato,'')) AS stato,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY league_id,player_id
+                        ORDER BY id DESC
+                    ) AS rn
+                FROM auction_lots
+                WHERE league_id=?
+            )
             SELECT
                 cp.player_id AS "__PLAYER_ID",
                 c.nome AS "NOME GIOCATORE",
@@ -26589,14 +26562,7 @@ def storico_asta_v147(league_id):
                 c.squadra AS "SQUADRA",
                 lp.prezzo_assegnazione AS "PREZZO",
                 COALESCE(t.nome,'—') AS "ASSEGNATO A",
-                COALESCE((
-                    SELECT UPPER(COALESCE(l.stato,''))
-                    FROM auction_lots l
-                    WHERE l.league_id=cp.league_id
-                      AND l.player_id=cp.player_id
-                    ORDER BY l.id DESC
-                    LIMIT 1
-                ),'') AS "__LOT_STATE"
+                COALESCE(rl.stato,'') AS "__LOT_STATE"
             FROM auction_called_players cp
             JOIN league_player_catalog c
               ON c.league_id=cp.league_id
@@ -26607,16 +26573,20 @@ def storico_asta_v147(league_id):
             LEFT JOIN teams t
               ON t.league_id=cp.league_id
              AND t.id=lp.assigned_team_id
+            LEFT JOIN ranked_lots rl
+              ON rl.league_id=cp.league_id
+             AND rl.player_id=cp.player_id
+             AND rl.rn=1
             WHERE cp.league_id=?
             ORDER BY cp.called_at DESC, cp.id DESC
-        """, conn, params=(league_id,))
+        """, conn, params=(league_id, league_id))
     finally:
         _portal_close(conn)
 
     return df
 
 
-def squadre_storico_v147(league_id):
+def _squadre_storico_db_v156(league_id):
     league_id = int(league_id)
     conn = _portal_raw_connection()
     cur = conn.cursor()
@@ -26634,6 +26604,31 @@ def squadre_storico_v147(league_id):
         ]
     finally:
         _portal_close(conn)
+
+
+
+def storico_asta_v147(league_id, ttl=4.0):
+    league_id = int(league_id)
+    key = f"_v156_history_{league_id}"
+    now = time.monotonic()
+    cached = st.session_state.get(key)
+    if isinstance(cached, dict) and now - float(cached.get("ts", 0)) < float(ttl):
+        return cached["df"].copy()
+    df = _storico_asta_db_v156(league_id)
+    st.session_state[key] = {"ts": now, "df": df.copy()}
+    return df
+
+
+def squadre_storico_v147(league_id, ttl=30.0):
+    league_id = int(league_id)
+    key = f"_v156_history_teams_{league_id}"
+    now = time.monotonic()
+    cached = st.session_state.get(key)
+    if isinstance(cached, dict) and now - float(cached.get("ts", 0)) < float(ttl):
+        return list(cached["value"])
+    value = _squadre_storico_db_v156(league_id)
+    st.session_state[key] = {"ts": now, "value": list(value)}
+    return value
 
 
 def _ricalcola_budget_team_v147(cur, league_id, team_id):
@@ -27268,6 +27263,7 @@ def render_storico_asta_v147():
             key=f"v152_refresh_storico_asta_{league_id}"
         ):
             invalida_cache_dati()
+            invalida_cache_banditore_v156(league_id)
             st.rerun()
 
     with _storico_ctrl2:
@@ -27406,7 +27402,7 @@ def render_storico_asta_v147():
         return
 
     # Paginazione applicata DOPO ricerca e filtri.
-    page_size = 25
+    page_size = 15
     totale_righe = len(storico_filtrato)
     totale_pagine = max(1, (totale_righe + page_size - 1) // page_size)
 
@@ -32071,6 +32067,7 @@ def callback_apri_lotto_v133(league_id, player_id, nome):
             int(league_id),
             int(player_id)
         )
+        invalida_cache_banditore_v156(league_id)
         st.session_state["auctioneer_msg"] = (
             f"Asta aperta su {nome}."
         )
@@ -32091,6 +32088,7 @@ def callback_chiudi_vuoto_v133(
             int(lot_id),
             int(player_id)
         )
+        invalida_cache_banditore_v156(league_id)
         st.session_state["auctioneer_msg"] = (
             f"Lotto di {nome} chiuso senza assegnazione."
         )
@@ -32576,6 +32574,7 @@ def callback_prossimo_giocatore_v135(
         prossimo_giocatore_senza_lotto_v135(
             league_id, player_id, tipo_asta, call_id
         )
+        invalida_cache_banditore_v156(league_id)
         st.session_state["auctioneer_msg"] = (
             f"{nome} saltato. Passaggio al prossimo giocatore."
         )
@@ -32849,6 +32848,7 @@ def callback_chiudi_assegna_v133(
         # ROSA e VENDUTI leggono già lo stato centrale autorevole.
         st.session_state.pop("_df_giocatori_sessione", None)
         st.session_state.pop("_ml16_sidebar_metrics", None)
+        invalida_cache_banditore_v156(league_id)
 
         st.session_state["auctioneer_msg"] = (
             f'✅ {nome} assegnato a {esito["team"]} '
@@ -32896,6 +32896,233 @@ def render_card_giocatore_live_v140(live):
     )
 
 
+
+# ============================================================
+# V156 - BANDITORE FAST PATH
+# ============================================================
+def invalida_cache_banditore_v156(league_id):
+    league_id = int(league_id)
+    for _k in (
+        f"_v156_counter_{league_id}",
+        f"_v156_idle_{league_id}",
+        f"_v156_history_{league_id}",
+        f"_v156_history_teams_{league_id}",
+    ):
+        st.session_state.pop(_k, None)
+
+
+def contatore_chiamati_fast_v156(league_id, ttl=1.5):
+    """Contatore con micro-cache: evita una query remota a ogni click/rerender."""
+    league_id = int(league_id)
+    key = f"_v156_counter_{league_id}"
+    now = time.monotonic()
+    cached = st.session_state.get(key)
+    if isinstance(cached, dict) and now - float(cached.get("ts", 0)) < float(ttl):
+        return cached["value"]
+
+    value = contatore_chiamati_v147(league_id)
+    st.session_state[key] = {"ts": now, "value": value}
+    return value
+
+
+def snapshot_banditore_idle_v156(league_id):
+    """
+    Snapshot minimale quando NON esiste un lotto aperto.
+    Evita il vecchio riepilogo pesante di budget/rose/portieri per tutte le squadre.
+    Recupera soltanto modalita', disponibilita', turno/chiamata e UN solo prossimo
+    giocatore per RANDOM/ALFABETICO.
+    """
+    league_id = int(league_id)
+    inizializza_listone_lega_asta(league_id)
+    inizializza_stato_modalita_asta(league_id)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COALESCE(tipo_asta,'CHIAMATA')
+            FROM league_rules
+            WHERE league_id=?
+            LIMIT 1
+        """, (league_id,))
+        r = cur.fetchone()
+        raw_tipo = str((r[0] if r else "CHIAMATA") or "CHIAMATA").strip().upper()
+        aliases = {
+            "A CHIAMATA":"CHIAMATA", "CHIAMATA":"CHIAMATA",
+            "ALFABETICO":"ALFABETICO", "RANDOM":"RANDOM",
+            "CASUALE":"RANDOM", "DRAFT":"DRAFT",
+        }
+        tipo_asta = aliases.get(raw_tipo, raw_tipo)
+
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_players
+            WHERE league_id=? AND stato='DISPONIBILE'
+        """, (league_id,))
+        disponibili_count = int((cur.fetchone() or (0,))[0] or 0)
+
+        out = {
+            "tipo_asta": tipo_asta,
+            "disponibili_count": disponibili_count,
+            "turno": None,
+            "pending": None,
+            "prossimo": None,
+        }
+
+        if disponibili_count <= 0:
+            return out
+
+        if tipo_asta in ("CHIAMATA", "DRAFT"):
+            cur.execute("""
+                SELECT id,nome
+                FROM teams
+                WHERE league_id=? AND is_active=1
+                ORDER BY posizione,id
+            """, (league_id,))
+            teams = cur.fetchall() or []
+
+            if teams:
+                campo = "draft_turn_index" if tipo_asta == "DRAFT" else "call_turn_index"
+                cur.execute(
+                    f"SELECT COALESCE({campo},0) FROM auction_mode_state WHERE league_id=? LIMIT 1",
+                    (league_id,)
+                )
+                rr = cur.fetchone()
+                turn_index = int(rr[0] or 0) if rr else 0
+                idx_team = turn_index % len(teams)
+                out["turno"] = {
+                    "team_id": int(teams[idx_team][0]),
+                    "nome": str(teams[idx_team][1] or ""),
+                    "index": idx_team,
+                    "totale": len(teams),
+                }
+
+            cur.execute("""
+                SELECT
+                    c.id,c.team_id,COALESCE(t.nome,''),c.player_id,
+                    COALESCE(g.nome,''),COALESCE(g.squadra,''),
+                    COALESCE(g.ruolo_mantra,''),c.tipo_asta,c.stato,c.created_at
+                FROM auction_calls c
+                LEFT JOIN teams t
+                  ON t.id=c.team_id AND t.league_id=c.league_id
+                LEFT JOIN league_player_catalog g
+                  ON g.player_id=c.player_id AND g.league_id=c.league_id
+                WHERE c.league_id=? AND c.stato='PENDING'
+                ORDER BY c.id
+                LIMIT 1
+            """, (league_id,))
+            p = cur.fetchone()
+            if p:
+                out["pending"] = {
+                    "call_id": int(p[0]), "team_id": int(p[1]),
+                    "team": str(p[2] or ""), "player_id": int(p[3]),
+                    "player": str(p[4] or ""), "squadra_reale": str(p[5] or ""),
+                    "ruolo_mantra": str(p[6] or ""), "tipo_asta": str(p[7] or "").upper(),
+                    "stato": str(p[8] or ""), "created_at": str(p[9] or ""),
+                }
+            return out
+
+        # Stato di scansione RANDOM / ALFABETICO in una singola lettura.
+        cur.execute("""
+            SELECT
+                COALESCE(skipped_players_json,'[]'),
+                COALESCE(random_queue_json,'[]')
+            FROM auction_mode_state
+            WHERE league_id=?
+            LIMIT 1
+        """, (league_id,))
+        state = cur.fetchone() or ('[]','[]')
+        try:
+            skipped = {int(x) for x in json.loads(state[0] or '[]')}
+        except Exception:
+            skipped = set()
+        try:
+            random_queue = [int(x) for x in json.loads(state[1] or '[]')]
+        except Exception:
+            random_queue = []
+
+        if tipo_asta == "ALFABETICO":
+            cur.execute("""
+                SELECT
+                    g.player_id,COALESCE(g.nome,''),COALESCE(g.squadra,''),
+                    COALESCE(g.ruolo_mantra,''),COALESCE(g.fvm_mantra,g.fvm,0)
+                FROM league_players lp
+                JOIN league_player_catalog g
+                  ON g.league_id=lp.league_id AND g.player_id=lp.player_id
+                WHERE lp.league_id=? AND lp.stato='DISPONIBILE'
+                ORDER BY g.nome COLLATE NOCASE,g.player_id
+            """, (league_id,))
+            for row in (cur.fetchall() or []):
+                pid = int(row[0])
+                if pid in skipped:
+                    continue
+                out["prossimo"] = {
+                    "player_id": pid, "nome": str(row[1] or ""),
+                    "squadra": str(row[2] or ""), "ruolo_mantra": str(row[3] or ""),
+                    "fvm": float(row[4] or 0),
+                }
+                break
+            return out
+
+        if tipo_asta == "RANDOM":
+            # Trasferiamo soltanto gli ID disponibili, non tutto il catalogo.
+            cur.execute("""
+                SELECT player_id
+                FROM league_players
+                WHERE league_id=? AND stato='DISPONIBILE'
+            """, (league_id,))
+            available_ids = [int(x[0]) for x in (cur.fetchall() or [])]
+            candidates = [pid for pid in available_ids if pid not in skipped]
+            if not candidates:
+                return out
+
+            candidate_set = set(candidates)
+            selected = next((pid for pid in random_queue if pid in candidate_set), None)
+
+            if selected is None:
+                import random
+                new_ids = list(candidates)
+                random.shuffle(new_ids)
+                random_queue = new_ids
+                selected = random_queue[0] if random_queue else None
+                cur.execute("""
+                    UPDATE auction_mode_state
+                    SET random_queue_json=?,random_index=0,updated_at=CURRENT_TIMESTAMP
+                    WHERE league_id=?
+                """, (json.dumps(random_queue), league_id))
+                conn.commit()
+
+            if selected is not None:
+                cur.execute("""
+                    SELECT
+                        player_id,COALESCE(nome,''),COALESCE(squadra,''),
+                        COALESCE(ruolo_mantra,''),COALESCE(fvm_mantra,fvm,0)
+                    FROM league_player_catalog
+                    WHERE league_id=? AND player_id=?
+                    LIMIT 1
+                """, (league_id, int(selected)))
+                row = cur.fetchone()
+                if row:
+                    out["prossimo"] = {
+                        "player_id": int(row[0]), "nome": str(row[1] or ""),
+                        "squadra": str(row[2] or ""), "ruolo_mantra": str(row[3] or ""),
+                        "fvm": float(row[4] or 0),
+                    }
+            return out
+
+        return out
+    finally:
+        _portal_close(conn)
+
+
+def rerun_banditore_fragment_v156():
+    """Preferisce il rerun del solo fragment; fallback al rerun standard."""
+    try:
+        st.rerun(scope="fragment")
+    except TypeError:
+        st.rerun()
+
+
 def render_banditore_asta():
     if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
         st.error("Accedi con il livello BANDITORE per usare Gestione Asta.")
@@ -32926,7 +33153,7 @@ def render_banditore_asta():
         dialog_undo_asta_v153(league_id)
 
     try:
-        _chiamati, _totale, _pct = contatore_chiamati_v147(league_id)
+        _chiamati, _totale, _pct = contatore_chiamati_fast_v156(league_id)
         _cc1, _cc2 = st.columns([1.2, 3.8])
         with _cc1:
             st.metric(
@@ -33018,14 +33245,13 @@ def render_banditore_asta():
 
     # Nessun lotto attivo: carica solo ciò che serve al prossimo.
     try:
-        snap = snapshot_banditore_multilega(league_id)
+        snap = snapshot_banditore_idle_v156(league_id)
     except Exception as errore:
         st.error("Impossibile preparare il prossimo lotto: " + str(errore))
         return
 
     tipo_asta = snap["tipo_asta"]
     turno = snap["turno"]
-    disponibili = snap["disponibili"]
 
     render_info_modalita_asta(tipo_asta, turno)
 
@@ -33034,11 +33260,7 @@ def render_banditore_asta():
         return
 
     if tipo_asta in ("RANDOM","ALFABETICO"):
-        g = prossimo_giocatore_automatico_multilega(
-            league_id,
-            disponibili,
-            tipo_asta
-        )
+        g = snap.get("prossimo")
         if g is None:
             st.info("Nessun altro giocatore da proporre.")
             return
@@ -33065,19 +33287,24 @@ def render_banditore_asta():
             )
 
         with _next_col:
-            st.button(
+            if st.button(
                 "⏭ PROSSIMO GIOCATORE",
                 use_container_width=True,
-                key=f"v135_next_{g['player_id']}",
-                on_click=callback_prossimo_giocatore_v135,
-                args=(
-                    league_id,
-                    g["player_id"],
-                    tipo_asta,
-                    g["nome"],
-                    None
-                )
-            )
+                key=f"v156_next_{g['player_id']}"
+            ):
+                try:
+                    prossimo_giocatore_senza_lotto_v135(
+                        league_id, g["player_id"], tipo_asta, None
+                    )
+                    invalida_cache_banditore_v156(league_id)
+                    st.session_state["auctioneer_msg"] = (
+                        f'{g["nome"]} saltato. Passaggio al prossimo giocatore.'
+                    )
+                    st.session_state.pop("auctioneer_error", None)
+                    rerun_banditore_fragment_v156()
+                except Exception as errore:
+                    st.session_state["auctioneer_error"] = str(errore)
+                    rerun_banditore_fragment_v156()
 
         st.caption(
             "Se non arriva alcuna offerta verbale, usa PROSSIMO GIOCATORE: "
@@ -33085,7 +33312,7 @@ def render_banditore_asta():
         )
         return
 
-    pending = chiamata_pendente_multilega(league_id)
+    pending = snap.get("pending")
 
     if pending is None:
         nome_turno = turno["nome"] if turno else "squadra di turno"
@@ -33124,6 +33351,7 @@ def render_banditore_asta():
                     pending["call_id"]
                 )
                 invalida_cache_dati()
+                invalida_cache_banditore_v156(league_id)
                 if esito["azione"] == "OPENED":
                     st.session_state["auctioneer_msg"] = (
                         f'Asta aperta su {pending["player"]}.'
@@ -33133,25 +33361,31 @@ def render_banditore_asta():
                         f'{pending["player"]} assegnato in Draft '
                         f'a {pending["team"]}.'
                     )
-                st.rerun()
+                rerun_banditore_fragment_v156()
             except Exception as errore:
-                st.error(str(errore))
+                st.session_state["auctioneer_error"] = str(errore)
+                rerun_banditore_fragment_v156()
 
     with _call_next_col:
         if tipo_asta == "CHIAMATA":
-            st.button(
+            if st.button(
                 "⏭ PROSSIMO GIOCATORE / TURNO",
                 use_container_width=True,
-                key=f"v135_skip_call_{pending['call_id']}",
-                on_click=callback_prossimo_giocatore_v135,
-                args=(
-                    league_id,
-                    pending["player_id"],
-                    tipo_asta,
-                    pending["player"],
-                    pending["call_id"]
-                )
-            )
+                key=f"v156_skip_call_{pending['call_id']}"
+            ):
+                try:
+                    prossimo_giocatore_senza_lotto_v135(
+                        league_id, pending["player_id"], tipo_asta, pending["call_id"]
+                    )
+                    invalida_cache_banditore_v156(league_id)
+                    st.session_state["auctioneer_msg"] = (
+                        f'{pending["player"]} saltato. Passaggio al turno successivo.'
+                    )
+                    st.session_state.pop("auctioneer_error", None)
+                    rerun_banditore_fragment_v156()
+                except Exception as errore:
+                    st.session_state["auctioneer_error"] = str(errore)
+                    rerun_banditore_fragment_v156()
 
 
 
@@ -34400,7 +34634,7 @@ def render_controlli_top_admin_banditore_v154():
 
         st.markdown(
             '<div style="color:#5f8db5;font-size:11px;padding:4px 3px 2px 3px;letter-spacing:.2px;">'
-            'MULTILEGA 5.6.2 &nbsp;|&nbsp; V154 Admin/Banditore senza sidebar'
+            'MULTILEGA 5.6.3 &nbsp;|&nbsp; V156 Banditore ottimizzato'
             '</div>',
             unsafe_allow_html=True,
         )
