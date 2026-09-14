@@ -10021,6 +10021,53 @@ def _alias_nome_listone(
     )
 
 
+def _indice_formazioni_listone():
+    """
+    V119: indice O(1)/per-squadra per il matching delle Formazioni Tipo.
+    Prima ogni nome scansionava l'intero listone più volte.
+    """
+    if (
+        "df_completo" not in globals()
+        or df_completo is None
+        or df_completo.empty
+        or "Nome" not in df_completo.columns
+    ):
+        return {}, {}
+
+    sig = (
+        _workspace_runtime_key if "_workspace_runtime_key" in globals() else "",
+        len(df_completo),
+        tuple(
+            pd.to_numeric(
+                df_completo.get("Id", pd.Series(dtype=int)),
+                errors="coerce"
+            ).fillna(-1).astype(int).tolist()
+        )
+    )
+    chiave = "_ml35_formazioni_index_" + str(hash(sig))
+
+    cached = st.session_state.get(chiave)
+    if isinstance(cached, tuple) and len(cached) == 2:
+        return cached
+
+    esatti = {}
+    per_squadra = {}
+
+    for _, riga in df_completo.iterrows():
+        nome_norm = _normalizza_nome_goal(riga.get("Nome", ""))
+        squadra_norm = _normalizza_nome_goal(riga.get("Squadra", ""))
+        if not nome_norm:
+            continue
+
+        esatti[(squadra_norm, nome_norm)] = riga
+        per_squadra.setdefault(squadra_norm, []).append(
+            (nome_norm, riga)
+        )
+
+    st.session_state[chiave] = (esatti, per_squadra)
+    return esatti, per_squadra
+
+
 def _trova_giocatore_listone(
     nome_goal,
     squadra_goal=""
@@ -10033,233 +10080,100 @@ def _trova_giocatore_listone(
     ):
         return None
 
-    target = _normalizza_nome_goal(
-        nome_goal
-    )
-
-    squadra_target = _normalizza_nome_goal(
-        squadra_goal
-    )
+    target = _normalizza_nome_goal(nome_goal)
+    squadra_target = _normalizza_nome_goal(squadra_goal)
 
     if not target:
         return None
 
-    # 1) Alias espliciti: soluzione prioritaria e sicura per i
-    # nomi editoriali che non condividono token col listone
-    # (es. Lautaro -> Martinez L.).
+    esatti, per_squadra = _indice_formazioni_listone()
+
     alias_esatto = _alias_nome_listone(
         nome_goal,
         squadra_goal
     )
 
     if alias_esatto:
+        alias_norm = _normalizza_nome_goal(alias_esatto)
+        riga = esatti.get((squadra_target, alias_norm))
+        if riga is not None:
+            return riga
 
-        alias_norm = _normalizza_nome_goal(
-            alias_esatto
-        )
+    riga = esatti.get((squadra_target, target))
+    if riga is not None:
+        return riga
 
-        for _, riga in df_completo.iterrows():
-
-            if (
-                _normalizza_nome_goal(
-                    riga.get(
-                        "Squadra",
-                        ""
-                    )
-                ) == squadra_target
-                and _normalizza_nome_goal(
-                    riga.get(
-                        "Nome",
-                        ""
-                    )
-                ) == alias_norm
-            ):
-                return riga
-
-    candidati = []
-
-    for _, riga in df_completo.iterrows():
-
-        nome_listone = str(
-            riga.get(
-                "Nome",
-                ""
-            )
-        )
-
-        squadra_listone = str(
-            riga.get(
-                "Squadra",
-                ""
-            )
-        )
-
-        normalizzato = _normalizza_nome_goal(
-            nome_listone
-        )
-
-        squadra_norm = _normalizza_nome_goal(
-            squadra_listone
-        )
-
-        if not normalizzato:
-            continue
-
+    # Se la squadra è nota, analizziamo solo i ~25-30 giocatori di quella
+    # squadra invece dell'intero listone.
+    if squadra_target:
+        candidati_base = per_squadra.get(squadra_target, [])
+        if not candidati_base:
+            candidati_base = [
+                item
+                for sq, righe in per_squadra.items()
+                if squadra_target in sq or sq in squadra_target
+                for item in righe
+            ]
+        bonus_squadra = 30
+    else:
+        candidati_base = [
+            item
+            for righe in per_squadra.values()
+            for item in righe
+        ]
         bonus_squadra = 0
 
-        if squadra_target:
+    token_target = set(target.split())
+    candidati = []
 
-            if squadra_norm == squadra_target:
-                bonus_squadra = 30
-
-            elif (
-                squadra_target in squadra_norm
-                or squadra_norm in squadra_target
-            ):
-                bonus_squadra = 20
-
-            else:
-                continue
-
+    for normalizzato, riga in candidati_base:
         if normalizzato == target:
             return riga
 
-        token_target = set(
-            target.split()
-        )
-
-        token_listone = set(
-            normalizzato.split()
-        )
-
-        intersezione = (
-            token_target
-            & token_listone
-        )
+        token_listone = set(normalizzato.split())
+        intersezione = token_target & token_listone
 
         if intersezione:
-
             punteggio = (
                 bonus_squadra
-                + len(
-                    intersezione
-                ) * 10
-                - abs(
-                    len(
-                        token_target
-                    )
-                    - len(
-                        token_listone
-                    )
-                )
+                + len(intersezione) * 10
+                - abs(len(token_target) - len(token_listone))
             )
-
-            if (
-                target in normalizzato
-                or normalizzato in target
-            ):
+            if target in normalizzato or normalizzato in target:
                 punteggio += 8
+            candidati.append((punteggio, riga))
 
-            candidati.append(
-                (
-                    punteggio,
-                    riga
-                )
-            )
+    if candidati:
+        candidati.sort(key=lambda x: x[0], reverse=True)
+        soglia = 20 if squadra_target else 9
+        if candidati[0][0] >= soglia:
+            return candidati[0][1]
 
-    if not candidati:
+    # Fallback fuzzy prudente, ancora limitato alla squadra quando nota.
+    import difflib
 
-        # 3) Fallback fuzzy molto prudente, solo nella stessa squadra.
-        # Si attiva esclusivamente se esiste un candidato nettamente
-        # simile (>= 0.84) e non ambiguo.
-        import difflib
+    fuzzy = []
+    for nome_norm, riga in candidati_base:
+        similarita = difflib.SequenceMatcher(
+            None,
+            target,
+            nome_norm
+        ).ratio()
 
-        fuzzy = []
+        if similarita >= 0.84:
+            fuzzy.append((similarita, riga))
 
-        for _, riga in df_completo.iterrows():
+    fuzzy.sort(key=lambda x: x[0], reverse=True)
 
-            squadra_norm = _normalizza_nome_goal(
-                riga.get(
-                    "Squadra",
-                    ""
-                )
-            )
+    if fuzzy:
+        migliore = fuzzy[0]
+        secondo = fuzzy[1][0] if len(fuzzy) > 1 else 0
+        if migliore[0] >= 0.84 and (migliore[0] - secondo) >= 0.05:
+            return migliore[1]
 
-            if (
-                squadra_target
-                and squadra_norm != squadra_target
-            ):
-                continue
+    return None
 
-            nome_norm = _normalizza_nome_goal(
-                riga.get(
-                    "Nome",
-                    ""
-                )
-            )
 
-            if not nome_norm:
-                continue
-
-            similarita = difflib.SequenceMatcher(
-                None,
-                target,
-                nome_norm
-            ).ratio()
-
-            if similarita >= 0.84:
-
-                fuzzy.append(
-                    (
-                        similarita,
-                        riga
-                    )
-                )
-
-        fuzzy.sort(
-            key=lambda x: x[0],
-            reverse=True
-        )
-
-        if fuzzy:
-
-            migliore = fuzzy[0]
-
-            secondo = (
-                fuzzy[1][0]
-                if len(
-                    fuzzy
-                ) > 1
-                else 0
-            )
-
-            # Richiede un margine minimo dal secondo candidato.
-            if (
-                migliore[0] >= 0.84
-                and (
-                    migliore[0]
-                    - secondo
-                ) >= 0.05
-            ):
-                return migliore[1]
-
-        return None
-
-    candidati.sort(
-        key=lambda x: x[0],
-        reverse=True
-    )
-
-    soglia = (
-        20
-        if squadra_target
-        else 9
-    )
-
-    if candidati[0][0] < soglia:
-        return None
-
-    return candidati[0][1]
 
 
 def diagnostica_nomi_formazioni_senza_riscontro():
@@ -12209,7 +12123,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "3.4"
+MULTILEGA_SCHEMA_VERSION = "3.5"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -14733,6 +14647,10 @@ def render_admin_multilega():
                         invalida_inizializzazione_asta_multilega(
                             int(_league_admin_listone)
                         )
+                        st.session_state.pop(
+                            f"_ml35_listone_centrale_{int(_league_admin_listone)}",
+                            None
+                        )
                         st.success(
                             "✅ Listone di lega aggiornato. "
                             f"Totale: {_esito_listone['totale']} · "
@@ -15842,8 +15760,20 @@ def importa_listone_lega_da_admin(league_id, df):
     }
 
 
-def carica_listone_centrale_lega(league_id):
+def carica_listone_centrale_lega(league_id, forza=False):
+    """
+    V119: cache di sessione del listone centrale.
+    Evita un round-trip Turso ogni volta che si entra/esce da LISTONE.
+    Le operazioni di scrittura invalidano la cache.
+    """
     league_id = int(league_id)
+    chiave = f"_ml35_listone_centrale_{league_id}"
+
+    if not forza:
+        cached = st.session_state.get(chiave)
+        if isinstance(cached, pd.DataFrame):
+            return cached
+
     conn = _portal_raw_connection()
     try:
         df = pd.read_sql_query("""
@@ -15870,9 +15800,13 @@ def carica_listone_centrale_lega(league_id):
             WHERE c.league_id=?
             ORDER BY c.nome
         """, conn, params=(league_id,))
-        return df
     finally:
         _portal_close(conn)
+
+    st.session_state[chiave] = df
+    return df
+
+
 
 
 def sincronizza_listone_lega_nel_workspace(league_id, team_id):
@@ -17314,6 +17248,16 @@ def invalida_cache_dati():
         "_ml16_sidebar_metrics"
     ]
 
+    # Cache V119 derivate da dati di lega/team.
+    for _k in list(st.session_state.keys()):
+        if (
+            str(_k).startswith("_ml35_listone_centrale_")
+            or str(_k).startswith("_ml35_venduti_")
+            or str(_k).startswith("_ml35_formazioni_index_")
+            or str(_k).startswith("_ml35_moduli_")
+        ):
+            st.session_state.pop(_k, None)
+
     for chiave in chiavi_sessione:
 
         if chiave in st.session_state:
@@ -17882,7 +17826,7 @@ def genera_pdf_rosa_e_moduli(
     )
 
     classifica = (
-        classifica_moduli(
+        classifica_moduli_fast(
             df_rosa
         )
     )
@@ -18790,6 +18734,38 @@ def classifica_moduli(
         )
 
     return risultati
+
+
+def classifica_moduli_fast(df_rosa):
+    """V119 - memoizzazione di sessione della classifica moduli."""
+    if df_rosa is None:
+        return []
+
+    ids = tuple(
+        sorted(
+            int(x)
+            for x in pd.to_numeric(
+                df_rosa.get("Id", pd.Series(dtype=int)),
+                errors="coerce"
+            ).dropna().tolist()
+        )
+    )
+    sig = (
+        _workspace_runtime_key if "_workspace_runtime_key" in globals() else "",
+        ids,
+        len(df_rosa),
+    )
+    chiave = "_ml35_moduli_" + str(hash(sig))
+
+    cached = st.session_state.get(chiave)
+    if cached is not None:
+        return cached
+
+    valore = classifica_moduli(df_rosa)
+    st.session_state[chiave] = valore
+    return valore
+
+
 
 
 
@@ -20146,7 +20122,19 @@ if (
         )
 
 SEZIONE_PRE_NAV = st.session_state.get("pagina", "DASHBOARD")
-SEZIONE_OPERATIVA = SEZIONE_PRE_NAV not in ("GESTIONE LEGA", "PROFILO", "BANDITORE", "CONSOLE ASTA")
+
+# V119 PERFORMANCE:
+# il dataframe legacy completo viene preparato soltanto per le sezioni che
+# lo usano realmente. LISTONE e VENDUTI leggono già dalle tabelle
+# normalizzate; Profilo/Admin/Banditore/Console non ne hanno bisogno.
+_SEZIONI_CON_DF_LEGACY = {
+    "DASHBOARD",
+    "ASTA",
+    "ROSA",
+    "MODULI",
+    "FORMAZIONI TIPO",
+}
+SEZIONE_OPERATIVA = SEZIONE_PRE_NAV in _SEZIONI_CON_DF_LEGACY
 
 if SEZIONE_OPERATIVA:
     if "budget_asta_corrente" not in st.session_state:
@@ -24993,7 +24981,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 3.4 &nbsp;|&nbsp; V118 Banditore Ultra Fast'
+        'MULTILEGA 3.5 &nbsp;|&nbsp; V119 Global Fast Navigation'
         '</div>',
         unsafe_allow_html=True
     )
@@ -29528,10 +29516,21 @@ def render_banditore_asta():
 
 @st.fragment
 
-def venduti_avversari_normalizzati_multilega(league_id, team_id):
-    """Fonte autorevole V117 per la pagina Venduti ad avversari."""
+def venduti_avversari_normalizzati_multilega(
+    league_id,
+    team_id,
+    forza=False
+):
+    """V119 - cache di sessione della pagina Venduti ad avversari."""
     league_id = int(league_id)
     team_id = int(team_id)
+    chiave = f"_ml35_venduti_{league_id}_{team_id}"
+
+    if not forza:
+        cached = st.session_state.get(chiave)
+        if isinstance(cached, pd.DataFrame):
+            return cached
+
     conn = _portal_raw_connection()
     try:
         df = pd.read_sql_query("""
@@ -29574,9 +29573,13 @@ def venduti_avversari_normalizzati_multilega(league_id, team_id):
         for col in colonne:
             if col not in df.columns:
                 df[col] = pd.Series(dtype="object")
-        return df[colonne]
+        df = df[colonne]
     finally:
         _portal_close(conn)
+
+    st.session_state[chiave] = df
+    return df
+
 
 
 
@@ -29644,13 +29647,18 @@ def render_navigazione_e_pagina():
             )
 
     sezione = st.session_state.pagina
+    _page_perf_start = time.perf_counter()
 
 
     # ============================================================
     # TOOLBAR UNDO COMPATTA
     # ============================================================
 
-    if sezione not in ("GESTIONE LEGA", "PROFILO", "BANDITORE", "CONSOLE ASTA"):
+    # V119: la toolbar UNDO non interroga più il database entrando in
+    # pagine puramente consultive. Viene caricata soltanto dove serve.
+    _SEZIONI_CON_UNDO = {"DASHBOARD", "ASTA", "ROSA"}
+
+    if sezione in _SEZIONI_CON_UNDO:
 
         operazioni_undo = carica_ultime_operazioni()
 
@@ -30068,7 +30076,7 @@ def render_navigazione_e_pagina():
                 )
 
                 classifica = (
-                    classifica_moduli(
+                    classifica_moduli_fast(
                         df_rosa_globale
                     )
                 )
@@ -31644,7 +31652,7 @@ def render_navigazione_e_pagina():
         )
 
         classifica_moduli_corrente = (
-            classifica_moduli(
+            classifica_moduli_fast(
                 df_rosa
             )
         )
@@ -31978,5 +31986,18 @@ def render_navigazione_e_pagina():
         footer_html,
         unsafe_allow_html=True
     )
+
+    _page_perf_elapsed = time.perf_counter() - _page_perf_start
+    st.session_state["_ml35_last_page_perf"] = {
+        "sezione": sezione,
+        "secondi": round(float(_page_perf_elapsed), 3),
+    }
+
+    if "ADMIN" in RUOLI_ATTIVI and _page_perf_elapsed >= 1.0:
+        st.caption(
+            f"⏱ Apertura sezione {sezione}: "
+            f"{_page_perf_elapsed:.2f} s"
+        )
+
 
 render_navigazione_e_pagina()
