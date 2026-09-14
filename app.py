@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.2.3"
+MULTILEGA_SCHEMA_VERSION = "5.2.4"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25435,7 +25435,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.2.3 &nbsp;|&nbsp; V143 Fix Cambia Utente'
+        'MULTILEGA 5.2.4 &nbsp;|&nbsp; V144 UI Pulita Ruoli'
         '</div>',
         unsafe_allow_html=True
     )
@@ -30691,11 +30691,6 @@ def render_banditore_asta():
         st.error("Accedi con il livello BANDITORE per usare Gestione Asta.")
         return
 
-    """
-    V133 - nessun refresh automatico.
-    Entrata/refresh del Banditore: fast snapshot dedicato.
-    Le azioni usano callback per evitare il doppio rerender.
-    """
     if not any(r in RUOLI_ATTIVI for r in ("AUCTIONEER","ADMIN")):
         st.error("Questa sezione è riservata a Banditore o Admin.")
         return
