@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.3"
+MULTILEGA_SCHEMA_VERSION = "5.4"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25424,7 +25424,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.3 &nbsp;|&nbsp; V146 Assegnazione Autorevole'
+        'MULTILEGA 5.4 &nbsp;|&nbsp; V147 Storico Asta + Counter'
         '</div>',
         unsafe_allow_html=True
     )
@@ -26081,6 +26081,674 @@ def lotto_corrente_multilega(league_id):
         _portal_close(conn)
 
 
+
+def assicura_schema_storico_asta_v147(league_id):
+    """
+    Crea una sola volta per sessione lo storico autorevole dei giocatori CHIAMATI.
+    Lo storico è separato dalle assegnazioni: un giocatore può essere chiamato
+    anche senza essere venduto.
+    """
+    league_id = int(league_id)
+    guard = f"_v147_storico_schema_{league_id}"
+    if st.session_state.get(guard):
+        return
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auction_called_players (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                league_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                fonte TEXT NOT NULL DEFAULT 'LOT',
+                lot_id INTEGER,
+                called_by_user_id INTEGER,
+                called_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(league_id, player_id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS ix_called_players_league_called
+            ON auction_called_players(league_id, called_at, id)
+        """)
+
+        # Backfill: tutti i lotti già aperti in passato sono giocatori chiamati.
+        cur.execute("""
+            INSERT INTO auction_called_players (
+                league_id,player_id,fonte,lot_id,
+                called_by_user_id,called_at,updated_at
+            )
+            SELECT
+                l.league_id,l.player_id,'LOT',l.id,
+                l.opened_by_user_id,
+                COALESCE(l.opened_at,CURRENT_TIMESTAMP),
+                CURRENT_TIMESTAMP
+            FROM auction_lots l
+            WHERE l.league_id=?
+            ON CONFLICT(league_id,player_id)
+            DO NOTHING
+        """, (league_id,))
+
+        # Backfill chiamate team gestite/saltate.
+        cur.execute("""
+            INSERT INTO auction_called_players (
+                league_id,player_id,fonte,lot_id,
+                called_by_user_id,called_at,updated_at
+            )
+            SELECT
+                c.league_id,c.player_id,'CALL',NULL,
+                COALESCE(c.handled_by_user_id,c.created_by_user_id),
+                COALESCE(c.handled_at,c.created_at,CURRENT_TIMESTAMP),
+                CURRENT_TIMESTAMP
+            FROM auction_calls c
+            WHERE c.league_id=?
+              AND UPPER(COALESCE(c.stato,'')) IN
+                  ('OPENED','ASSIGNED','SKIPPED')
+            ON CONFLICT(league_id,player_id)
+            DO NOTHING
+        """, (league_id,))
+
+        # Backfill dei "PROSSIMO GIOCATORE" RANDOM/ALFABETICO precedenti a V147.
+        try:
+            cur.execute("""
+                SELECT COALESCE(skipped_players_json,'[]')
+                FROM auction_mode_state
+                WHERE league_id=?
+                LIMIT 1
+            """, (league_id,))
+            r = cur.fetchone()
+            skipped = json.loads(r[0] if r and r[0] else "[]")
+            for pid in skipped:
+                try:
+                    pid = int(pid)
+                except Exception:
+                    continue
+                cur.execute("""
+                    INSERT INTO auction_called_players (
+                        league_id,player_id,fonte,lot_id,
+                        called_by_user_id,called_at,updated_at
+                    )
+                    VALUES (?,?,'SKIPPED',NULL,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                    ON CONFLICT(league_id,player_id)
+                    DO NOTHING
+                """, (
+                    league_id,
+                    pid,
+                    int(st.session_state.get("auth_user_id") or 0)
+                ))
+        except Exception:
+            pass
+
+        conn.commit()
+        st.session_state[guard] = True
+    finally:
+        _portal_close(conn)
+
+
+def registra_giocatore_chiamato_v147(
+    cur, league_id, player_id, fonte, lot_id=None
+):
+    cur.execute("""
+        INSERT INTO auction_called_players (
+            league_id,player_id,fonte,lot_id,
+            called_by_user_id,called_at,updated_at
+        )
+        VALUES (?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        ON CONFLICT(league_id,player_id)
+        DO UPDATE SET
+            fonte=excluded.fonte,
+            lot_id=COALESCE(excluded.lot_id,auction_called_players.lot_id),
+            updated_at=CURRENT_TIMESTAMP
+    """, (
+        int(league_id),
+        int(player_id),
+        str(fonte),
+        int(lot_id) if lot_id is not None else None,
+        int(st.session_state.get("auth_user_id") or 0)
+    ))
+
+
+def contatore_chiamati_v147(league_id):
+    league_id = int(league_id)
+    assicura_schema_storico_asta_v147(league_id)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                (
+                    SELECT COUNT(DISTINCT player_id)
+                    FROM auction_called_players
+                    WHERE league_id=?
+                ),
+                (
+                    SELECT COUNT(*)
+                    FROM league_player_catalog
+                    WHERE league_id=?
+                )
+        """, (league_id, league_id))
+        r = cur.fetchone() or (0,0)
+        chiamati = int(r[0] or 0)
+        totale = int(r[1] or 0)
+        percentuale = (
+            round((chiamati / totale) * 100, 1)
+            if totale > 0 else 0.0
+        )
+        return chiamati, totale, percentuale
+    finally:
+        _portal_close(conn)
+
+
+def storico_asta_v147(league_id):
+    league_id = int(league_id)
+    assicura_schema_storico_asta_v147(league_id)
+
+    conn = _portal_raw_connection()
+    try:
+        df = pd.read_sql_query("""
+            SELECT
+                cp.player_id AS "__PLAYER_ID",
+                c.nome AS "NOME GIOCATORE",
+                c.ruolo_mantra AS "RUOLO",
+                c.squadra AS "SQUADRA",
+                lp.prezzo_assegnazione AS "PREZZO",
+                COALESCE(t.nome,'—') AS "ASSEGNATO A",
+                COALESCE((
+                    SELECT UPPER(COALESCE(l.stato,''))
+                    FROM auction_lots l
+                    WHERE l.league_id=cp.league_id
+                      AND l.player_id=cp.player_id
+                    ORDER BY l.id DESC
+                    LIMIT 1
+                ),'') AS "__LOT_STATE"
+            FROM auction_called_players cp
+            JOIN league_player_catalog c
+              ON c.league_id=cp.league_id
+             AND c.player_id=cp.player_id
+            LEFT JOIN league_players lp
+              ON lp.league_id=cp.league_id
+             AND lp.player_id=cp.player_id
+            LEFT JOIN teams t
+              ON t.league_id=cp.league_id
+             AND t.id=lp.assigned_team_id
+            WHERE cp.league_id=?
+            ORDER BY cp.called_at DESC, cp.id DESC
+        """, conn, params=(league_id,))
+    finally:
+        _portal_close(conn)
+
+    return df
+
+
+def squadre_storico_v147(league_id):
+    league_id = int(league_id)
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id,nome
+            FROM teams
+            WHERE league_id=? AND is_active=1
+            ORDER BY posizione,id
+        """, (league_id,))
+        rows = cur.fetchall() or []
+        return [
+            {"team_id": int(r[0]), "nome": str(r[1] or "")}
+            for r in rows
+        ]
+    finally:
+        _portal_close(conn)
+
+
+def _ricalcola_budget_team_v147(cur, league_id, team_id):
+    cur.execute("""
+        SELECT
+            COALESCE(tb.budget_impostato,r.budget_iniziale,500),
+            COALESCE(r.soglia_budget,r.budget_iniziale,500),
+            COALESCE(r.moltiplicatore_oltre_soglia,1),
+            COALESCE(SUM(
+                CASE WHEN lp.stato='ASSEGNATO'
+                      AND lp.assigned_team_id=?
+                     THEN COALESCE(lp.prezzo_assegnazione,0)
+                     ELSE 0 END
+            ),0)
+        FROM teams t
+        LEFT JOIN league_rules r
+          ON r.league_id=t.league_id
+        LEFT JOIN team_budgets tb
+          ON tb.league_id=t.league_id
+         AND tb.team_id=t.id
+        LEFT JOIN league_players lp
+          ON lp.league_id=t.league_id
+        WHERE t.league_id=? AND t.id=?
+        GROUP BY
+            tb.budget_impostato,r.budget_iniziale,
+            r.soglia_budget,r.moltiplicatore_oltre_soglia
+        LIMIT 1
+    """, (team_id, league_id, team_id))
+    r = cur.fetchone()
+    if not r:
+        return
+
+    budget = float(r[0] or 0)
+    soglia = float(r[1] or budget)
+    moltiplicatore = max(1.0, float(r[2] or 1))
+    valore = float(r[3] or 0)
+    spesa = float(_spesa_effettiva_regole(
+        valore, soglia, moltiplicatore
+    ))
+
+    cur.execute("""
+        INSERT INTO team_budgets (
+            league_id,team_id,budget_impostato,
+            valore_acquisti,spesa_effettiva,updated_at
+        )
+        VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(league_id,team_id)
+        DO UPDATE SET
+            valore_acquisti=excluded.valore_acquisti,
+            spesa_effettiva=excluded.spesa_effettiva,
+            updated_at=CURRENT_TIMESTAMP
+    """, (
+        league_id,team_id,budget,valore,spesa
+    ))
+
+
+def modifica_assegnazione_storico_v147(
+    league_id, player_id, nuovo_team_nome, nuovo_prezzo
+):
+    """
+    Corregge squadra/prezzo dallo STORICO ASTA.
+    Le viste ROSA e VENDUTI AD AVVERSARI si aggiornano automaticamente
+    perché leggono dallo stesso league_players autorevole.
+    """
+    league_id = int(league_id)
+    player_id = int(player_id)
+    user_id = int(st.session_state.get("auth_user_id") or 0)
+    team_nome = str(nuovo_team_nome or "—").strip()
+    prezzo = (
+        None
+        if nuovo_prezzo is None or pd.isna(nuovo_prezzo)
+        else float(nuovo_prezzo)
+    )
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=? AND user_id=? AND is_active=1
+              AND (is_auctioneer=1 OR is_admin=1)
+        """, (league_id,user_id))
+        if int((cur.fetchone() or [0])[0] or 0) <= 0:
+            raise PermissionError("Operazione riservata al Banditore/Admin.")
+
+        cur.execute("""
+            SELECT 1
+            FROM auction_called_players
+            WHERE league_id=? AND player_id=?
+            LIMIT 1
+        """, (league_id,player_id))
+        if not cur.fetchone():
+            raise ValueError("Giocatore non presente nello storico asta.")
+
+        # Non correggere un lotto ancora aperto.
+        cur.execute("""
+            SELECT UPPER(COALESCE(stato,''))
+            FROM auction_lots
+            WHERE league_id=? AND player_id=?
+            ORDER BY id DESC
+            LIMIT 1
+        """, (league_id,player_id))
+        rlot = cur.fetchone()
+        if rlot and str(rlot[0] or "") in ("OPEN","CLOSING"):
+            raise ValueError(
+                "Il lotto è ancora aperto: chiudilo prima di modificare lo storico."
+            )
+
+        cur.execute("""
+            SELECT assigned_team_id,prezzo_assegnazione
+            FROM league_players
+            WHERE league_id=? AND player_id=?
+            LIMIT 1
+        """, (league_id,player_id))
+        old = cur.fetchone()
+        old_team_id = int(old[0]) if old and old[0] is not None else None
+        old_prezzo = float(old[1]) if old and old[1] is not None else None
+
+        new_team_id = None
+        if team_nome not in ("", "—", "-", "NESSUNO"):
+            cur.execute("""
+                SELECT id
+                FROM teams
+                WHERE league_id=? AND is_active=1 AND nome=?
+                LIMIT 1
+            """, (league_id,team_nome))
+            rt = cur.fetchone()
+            if not rt:
+                raise ValueError("Squadra selezionata non valida.")
+            new_team_id = int(rt[0])
+
+            if prezzo is None or prezzo < 0:
+                raise ValueError("Inserisci un prezzo valido.")
+
+            # Controlli essenziali sul nuovo destinatario.
+            cur.execute("""
+                SELECT
+                    COALESCE(r.max_giocatori,30),
+                    COALESCE(tb.budget_impostato,r.budget_iniziale,500),
+                    COALESCE(r.soglia_budget,r.budget_iniziale,500),
+                    COALESCE(r.moltiplicatore_oltre_soglia,1),
+                    COALESCE((
+                        SELECT COUNT(*)
+                        FROM league_players lp
+                        WHERE lp.league_id=t.league_id
+                          AND lp.stato='ASSEGNATO'
+                          AND lp.assigned_team_id=t.id
+                          AND lp.player_id<>?
+                    ),0),
+                    COALESCE((
+                        SELECT SUM(COALESCE(lp.prezzo_assegnazione,0))
+                        FROM league_players lp
+                        WHERE lp.league_id=t.league_id
+                          AND lp.stato='ASSEGNATO'
+                          AND lp.assigned_team_id=t.id
+                          AND lp.player_id<>?
+                    ),0)
+                FROM teams t
+                LEFT JOIN league_rules r ON r.league_id=t.league_id
+                LEFT JOIN team_budgets tb
+                  ON tb.league_id=t.league_id AND tb.team_id=t.id
+                WHERE t.league_id=? AND t.id=?
+                LIMIT 1
+            """, (
+                player_id,player_id,league_id,new_team_id
+            ))
+            vr = cur.fetchone()
+            if not vr:
+                raise ValueError("Squadra non valida.")
+            max_giocatori = int(vr[0] or 30)
+            budget = float(vr[1] or 0)
+            soglia = float(vr[2] or budget)
+            moltiplicatore = max(1.0,float(vr[3] or 1))
+            altri = int(vr[4] or 0)
+            valore_altri = float(vr[5] or 0)
+
+            if altri >= max_giocatori:
+                raise ValueError("La rosa della squadra selezionata è completa.")
+
+            nuova_spesa = float(_spesa_effettiva_regole(
+                valore_altri + prezzo,
+                soglia,
+                moltiplicatore
+            ))
+            if nuova_spesa > budget + 1e-9:
+                raise ValueError("Budget insufficiente per la correzione.")
+
+        # Rimuove eventuale roster precedente.
+        cur.execute("""
+            DELETE FROM rosters
+            WHERE league_id=? AND player_id=?
+        """, (league_id,player_id))
+
+        if new_team_id is None:
+            cur.execute("""
+                INSERT INTO league_players (
+                    league_id,player_id,stato,
+                    assigned_team_id,prezzo_assegnazione,updated_at
+                )
+                VALUES (?,?,'DISPONIBILE',NULL,NULL,CURRENT_TIMESTAMP)
+                ON CONFLICT(league_id,player_id)
+                DO UPDATE SET
+                    stato='DISPONIBILE',
+                    assigned_team_id=NULL,
+                    prezzo_assegnazione=NULL,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (league_id,player_id))
+        else:
+            cur.execute("""
+                INSERT INTO league_players (
+                    league_id,player_id,stato,
+                    assigned_team_id,prezzo_assegnazione,updated_at
+                )
+                VALUES (?,?,'ASSEGNATO',?,?,CURRENT_TIMESTAMP)
+                ON CONFLICT(league_id,player_id)
+                DO UPDATE SET
+                    stato='ASSEGNATO',
+                    assigned_team_id=excluded.assigned_team_id,
+                    prezzo_assegnazione=excluded.prezzo_assegnazione,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (
+                league_id,player_id,new_team_id,prezzo
+            ))
+
+            cur.execute("""
+                INSERT INTO rosters (
+                    league_id,team_id,player_id,prezzo_acquisto,
+                    fonte,assigned_at,updated_at
+                )
+                VALUES (?,?,?,?,'AUCTION_HISTORY_EDIT',
+                        CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                ON CONFLICT(league_id,team_id,player_id)
+                DO UPDATE SET
+                    prezzo_acquisto=excluded.prezzo_acquisto,
+                    fonte='AUCTION_HISTORY_EDIT',
+                    updated_at=CURRENT_TIMESTAMP
+            """, (
+                league_id,new_team_id,player_id,prezzo
+            ))
+
+        # Aggiorna l'ultimo lotto storico del giocatore.
+        cur.execute("""
+            SELECT id
+            FROM auction_lots
+            WHERE league_id=? AND player_id=?
+            ORDER BY id DESC
+            LIMIT 1
+        """, (league_id,player_id))
+        lr = cur.fetchone()
+        if lr:
+            latest_lot_id = int(lr[0])
+            if new_team_id is None:
+                cur.execute("""
+                    UPDATE auction_lots
+                    SET stato='CLOSED',
+                        assigned_team_id=NULL,
+                        final_price=NULL,
+                        closed_at=COALESCE(closed_at,CURRENT_TIMESTAMP)
+                    WHERE id=? AND league_id=?
+                """, (latest_lot_id,league_id))
+            else:
+                cur.execute("""
+                    UPDATE auction_lots
+                    SET stato='ASSIGNED',
+                        assigned_team_id=?,
+                        final_price=?,
+                        closed_at=COALESCE(closed_at,CURRENT_TIMESTAMP)
+                    WHERE id=? AND league_id=?
+                """, (
+                    new_team_id,prezzo,latest_lot_id,league_id
+                ))
+
+        # Storico assegnazioni: chiude i record precedenti e crea la correzione.
+        cur.execute("""
+            UPDATE auction_assignment_history
+            SET stato='CORRECTED',
+                undone_by_user_id=?,
+                undone_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND player_id=? AND stato='ACTIVE'
+        """, (user_id,league_id,player_id))
+
+        if new_team_id is not None:
+            cur.execute("""
+                INSERT INTO auction_assignment_history (
+                    league_id,player_id,team_id,prezzo,stato,
+                    assigned_by_user_id,assigned_at
+                )
+                VALUES (?,?,?,?,'ACTIVE',?,CURRENT_TIMESTAMP)
+            """, (
+                league_id,player_id,new_team_id,prezzo,user_id
+            ))
+
+        # Ricalcola budget delle squadre coinvolte.
+        team_da_ricalcolare = {
+            x for x in (old_team_id,new_team_id)
+            if x is not None
+        }
+        for tid in team_da_ricalcolare:
+            _ricalcola_budget_team_v147(cur,league_id,tid)
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,team_id,azione,
+                entita,entita_id,dettagli_json,created_at
+            )
+            VALUES (?,?,?,'AUCTION_HISTORY_EDIT','PLAYER',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,user_id,new_team_id,str(player_id),
+            json.dumps({
+                "old_team_id": old_team_id,
+                "old_price": old_prezzo,
+                "new_team_id": new_team_id,
+                "new_price": prezzo,
+            }, ensure_ascii=False)
+        ))
+
+        conn.commit()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def render_storico_asta_v147():
+    if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
+        st.error("Accedi come BANDITORE per visualizzare lo storico asta.")
+        return
+
+    league_id = int(st.session_state.get("ml_league_id"))
+    assicura_schema_storico_asta_v147(league_id)
+
+    st.subheader("📜 Storico asta")
+
+    try:
+        storico = storico_asta_v147(league_id)
+        teams = squadre_storico_v147(league_id)
+    except Exception as errore:
+        st.error("Impossibile caricare lo storico asta: " + str(errore))
+        return
+
+    if storico.empty:
+        st.info("Nessun giocatore ancora chiamato.")
+        return
+
+    nomi_team = ["—"] + [x["nome"] for x in teams]
+
+    visible = storico[
+        ["NOME GIOCATORE","RUOLO","SQUADRA","PREZZO","ASSEGNATO A"]
+    ].copy()
+
+    edited = st.data_editor(
+        visible,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="fixed",
+        disabled=["NOME GIOCATORE","RUOLO","SQUADRA"],
+        column_config={
+            "PREZZO": st.column_config.NumberColumn(
+                "PREZZO",
+                min_value=0.0,
+                step=1.0,
+                format="%.0f"
+            ),
+            "ASSEGNATO A": st.column_config.SelectboxColumn(
+                "ASSEGNATO A",
+                options=nomi_team,
+                required=True
+            ),
+        },
+        key=f"v147_editor_storico_{league_id}"
+    )
+
+    if st.button(
+        "💾 SALVA MODIFICHE STORICO",
+        type="primary",
+        use_container_width=True,
+        key=f"v147_save_history_{league_id}"
+    ):
+        modifiche = 0
+        errori = []
+
+        for idx in range(len(storico)):
+            prima_team = str(
+                storico.iloc[idx]["ASSEGNATO A"]
+                if pd.notna(storico.iloc[idx]["ASSEGNATO A"])
+                else "—"
+            )
+            dopo_team = str(
+                edited.iloc[idx]["ASSEGNATO A"]
+                if pd.notna(edited.iloc[idx]["ASSEGNATO A"])
+                else "—"
+            )
+
+            prima_prezzo = storico.iloc[idx]["PREZZO"]
+            dopo_prezzo = edited.iloc[idx]["PREZZO"]
+
+            p1 = None if pd.isna(prima_prezzo) else float(prima_prezzo)
+            p2 = None if pd.isna(dopo_prezzo) else float(dopo_prezzo)
+
+            changed = (
+                prima_team != dopo_team
+                or (
+                    (p1 is None) != (p2 is None)
+                    or (
+                        p1 is not None and p2 is not None
+                        and abs(p1-p2) > 0.0001
+                    )
+                )
+            )
+            if not changed:
+                continue
+
+            try:
+                modifica_assegnazione_storico_v147(
+                    league_id,
+                    int(storico.iloc[idx]["__PLAYER_ID"]),
+                    dopo_team,
+                    p2
+                )
+                modifiche += 1
+            except Exception as errore:
+                errori.append(
+                    f'{storico.iloc[idx]["NOME GIOCATORE"]}: {errore}'
+                )
+
+        invalida_cache_dati()
+
+        if modifiche:
+            st.success(
+                f"✅ Modifiche salvate: {modifiche}. "
+                "ROSA e VENDUTI AD AVVERSARI sono stati riallineati."
+            )
+        if errori:
+            for err in errori:
+                st.error(err)
+
+        if modifiche and not errori:
+            st.rerun()
+
+
+
 def apri_lotto_banditore(league_id, player_id):
     """V125 - apertura lotto ottimizzata per DB remoto."""
     league_id=int(league_id); player_id=int(player_id)
@@ -26133,6 +26801,10 @@ def apri_lotto_banditore(league_id, player_id):
         if not row:
             raise RuntimeError("Impossibile creare il lotto.")
         lot_id=int(row[0])
+
+        registra_giocatore_chiamato_v147(
+            cur, league_id, player_id, "LOT", lot_id
+        )
 
         cur.execute("""
             INSERT INTO auction_sessions (
@@ -27341,6 +28013,18 @@ def gestisci_chiamata_banditore_multilega(league_id, call_id):
         }
 
     if tipo_asta == "DRAFT":
+        # Il giocatore è stato chiamato anche se il Draft lo assegna direttamente.
+        assicura_schema_storico_asta_v147(league_id)
+        _conn_call = _portal_raw_connection()
+        _cur_call = _conn_call.cursor()
+        try:
+            registra_giocatore_chiamato_v147(
+                _cur_call, league_id, call["player_id"], "DRAFT", None
+            )
+            _conn_call.commit()
+        finally:
+            _portal_close(_conn_call)
+
         risultato = assegna_giocatore_banditore(
             league_id,
             call["player_id"],
@@ -30688,6 +31372,10 @@ def prossimo_giocatore_senza_lotto_v135(
     conn = _portal_raw_connection()
     cur = conn.cursor()
     try:
+        registra_giocatore_chiamato_v147(
+            cur, league_id, player_id, "SKIPPED", None
+        )
+
         if tipo_asta in ("RANDOM","ALFABETICO"):
             cur.execute("""
                 SELECT COALESCE(skipped_players_json,'[]')
@@ -30832,6 +31520,7 @@ def render_banditore_asta():
         return
 
     league_id = int(st.session_state.get("ml_league_id"))
+    assicura_schema_storico_asta_v147(league_id)
     t0 = time.perf_counter()
 
     if st.session_state.get("auctioneer_msg"):
@@ -30840,7 +31529,25 @@ def render_banditore_asta():
     if st.session_state.get("auctioneer_error"):
         st.error(st.session_state.pop("auctioneer_error"))
 
-    st.subheader("🔨 Banditore")
+    st.subheader("🔨 Gestione asta")
+
+    try:
+        _chiamati, _totale, _pct = contatore_chiamati_v147(league_id)
+        _cc1, _cc2 = st.columns([1.2, 3.8])
+        with _cc1:
+            st.metric(
+                "CHIAMATI / TOTALE",
+                f"{_chiamati} / {_totale}"
+            )
+        with _cc2:
+            st.markdown(
+                f"**Chiamata completa al {_pct:g}%**"
+            )
+            st.progress(
+                min(1.0, max(0.0, _pct / 100.0))
+            )
+    except Exception as _err_counter:
+        st.caption("Contatore chiamata non disponibile.")
 
     # Il pulsante stesso provoca un solo rerender del fragment.
     st.button(
@@ -32147,6 +32854,7 @@ def render_navigazione_e_pagina():
     elif MODALITA_ACCESSO_ATTIVA == "BANDITORE":
         PAGINE = [
             ("🔨", "GESTIONE ASTA"),
+            ("📜", "STORICO ASTA"),
         ]
     else:
         PAGINE = [
@@ -32359,6 +33067,11 @@ def render_navigazione_e_pagina():
                 f"⏱ Apertura Banditore: "
                 f"{_banditore_route_elapsed:.2f} s"
             )
+
+    elif sezione == "STORICO ASTA":
+
+        render_storico_asta_v147()
+
 
     # ============================================================
     # DASHBOARD
