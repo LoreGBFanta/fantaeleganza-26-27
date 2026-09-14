@@ -33136,8 +33136,8 @@ def render_banditore_asta():
     assicura_schema_storico_asta_v147(league_id)
     t0 = time.perf_counter()
 
-    if st.session_state.get("auctioneer_msg"):
-        st.success(st.session_state.pop("auctioneer_msg"))
+    # V157 - nel livello BANDITORE non mostriamo messaggi verdi di transizione.
+    st.session_state.pop("auctioneer_msg", None)
 
     if st.session_state.get("auctioneer_error"):
         st.error(st.session_state.pop("auctioneer_error"))
@@ -33253,7 +33253,7 @@ def render_banditore_asta():
     tipo_asta = snap["tipo_asta"]
     turno = snap["turno"]
 
-    render_info_modalita_asta(tipo_asta, turno)
+    # V157 - banner descrittivo della modalità rimosso dal livello BANDITORE.
 
     if int(snap["disponibili_count"]) <= 0:
         st.success("Non ci sono più giocatori disponibili.")
@@ -33306,10 +33306,6 @@ def render_banditore_asta():
                     st.session_state["auctioneer_error"] = str(errore)
                     rerun_banditore_fragment_v156()
 
-        st.caption(
-            "Se non arriva alcuna offerta verbale, usa PROSSIMO GIOCATORE: "
-            "non viene aperto né chiuso alcun lotto."
-        )
         return
 
     pending = snap.get("pending")
@@ -34632,12 +34628,14 @@ def render_controlli_top_admin_banditore_v154():
                     st.session_state.dark_mode = nuovo_dark_top
                     st.rerun()
 
-        st.markdown(
-            '<div style="color:#5f8db5;font-size:11px;padding:4px 3px 2px 3px;letter-spacing:.2px;">'
-            'MULTILEGA 5.6.3 &nbsp;|&nbsp; V156 Banditore ottimizzato'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        # V157 - nel livello BANDITORE non mostriamo la dicitura/versione.
+        if st.session_state.get("ml_modalita_accesso") == "ADMIN":
+            st.markdown(
+                '<div style="color:#5f8db5;font-size:11px;padding:4px 3px 2px 3px;letter-spacing:.2px;">'
+                'MULTILEGA 5.6.3'
+                '</div>',
+                unsafe_allow_html=True,
+            )
 
 
 @st.fragment(
