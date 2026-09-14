@@ -12212,7 +12212,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "4.2.3"
+MULTILEGA_SCHEMA_VERSION = "4.3"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25340,7 +25340,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 4.2.3 &nbsp;|&nbsp; V131 Fix Rules Schema Refresh'
+        'MULTILEGA 4.3 &nbsp;|&nbsp; V132 Asta Live Semplificata Fast'
         '</div>',
         unsafe_allow_html=True
     )
@@ -26960,9 +26960,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             SET current_bid=?,
                 current_team_id=?,
                 bid_count=COALESCE(bid_count,0)+1,
-                version=COALESCE(version,0)+1,
-                bid_deadline_ts=CAST(strftime('%s','now') AS REAL)+10,
-                auto_assign_claimed=0
+                version=COALESCE(version,0)+1
             WHERE id=?
               AND league_id=?
               AND stato='OPEN'
@@ -29286,282 +29284,581 @@ def snapshot_banditore_multilega(league_id):
 
 
 
-@st.fragment(run_every="2s")
+
+
+def snapshot_lotto_live_v132(league_id, team_id=None):
+    """
+    V132 - snapshot LIVE ottimizzato.
+
+    Una sola query remota restituisce:
+    - lotto e giocatore corrente;
+    - miglior offerta;
+    - ultima/massima offerta di ogni squadra;
+    - per la squadra corrente: budget/rosa e limiti di offerta.
+
+    Durante un lotto OPEN questa è la sola query periodica del fragment.
+    """
+    league_id = int(league_id)
+    team_id = int(team_id) if team_id is not None else None
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            WITH current_lot AS (
+                SELECT
+                    l.id AS lot_id,
+                    l.player_id,
+                    l.stato,
+                    l.current_bid,
+                    l.current_team_id,
+                    COALESCE(l.bid_count,0) AS bid_count,
+                    COALESCE(l.version,0) AS version
+                FROM auction_sessions s
+                JOIN auction_lots l
+                  ON l.id=s.current_lot_id
+                 AND l.league_id=s.league_id
+                WHERE s.league_id=?
+                  AND l.stato IN ('OPEN','CLOSING')
+                LIMIT 1
+            ),
+            team_bids AS (
+                SELECT
+                    b.team_id,
+                    MAX(b.amount) AS amount
+                FROM bids b
+                JOIN current_lot cl
+                  ON cl.lot_id=b.lot_id
+                WHERE b.league_id=?
+                GROUP BY b.team_id
+            ),
+            roster_stats AS (
+                SELECT
+                    t.id AS team_id,
+                    COALESCE(tb.budget_impostato,lr.budget_iniziale,500) AS budget,
+                    COALESCE(SUM(
+                        CASE WHEN lp.stato='ASSEGNATO'
+                              AND lp.assigned_team_id=t.id
+                             THEN COALESCE(lp.prezzo_assegnazione,0)
+                             ELSE 0 END
+                    ),0) AS valore_acquisti,
+                    COALESCE(SUM(
+                        CASE WHEN lp.stato='ASSEGNATO'
+                              AND lp.assigned_team_id=t.id
+                             THEN 1 ELSE 0 END
+                    ),0) AS numero_rosa,
+                    COALESCE(SUM(
+                        CASE WHEN lp.stato='ASSEGNATO'
+                              AND lp.assigned_team_id=t.id
+                              AND (
+                                  UPPER(COALESCE(pc.ruolo_classico,''))='P'
+                                  OR UPPER(COALESCE(pc.ruolo_mantra,'')) IN ('P','POR')
+                              )
+                             THEN 1 ELSE 0 END
+                    ),0) AS portieri
+                FROM teams t
+                LEFT JOIN league_rules lr
+                  ON lr.league_id=t.league_id
+                LEFT JOIN team_budgets tb
+                  ON tb.league_id=t.league_id
+                 AND tb.team_id=t.id
+                LEFT JOIN league_players lp
+                  ON lp.league_id=t.league_id
+                 AND lp.assigned_team_id=t.id
+                 AND lp.stato='ASSEGNATO'
+                LEFT JOIN league_player_catalog pc
+                  ON pc.league_id=lp.league_id
+                 AND pc.player_id=lp.player_id
+                WHERE t.league_id=?
+                  AND t.is_active=1
+                GROUP BY
+                    t.id,tb.budget_impostato,lr.budget_iniziale
+            )
+            SELECT
+                cl.lot_id,
+                cl.player_id,
+                cl.stato,
+                cl.current_bid,
+                cl.current_team_id,
+                cl.bid_count,
+                cl.version,
+
+                COALESCE(pc.nome,''),
+                COALESCE(pc.squadra,''),
+                COALESCE(pc.ruolo_classico,''),
+                COALESCE(pc.ruolo_mantra,''),
+                COALESCE(pc.fvm_mantra,pc.fvm,0),
+                COALESCE(
+                    pc.quotazione_attuale_mantra,
+                    pc.quotazione_attuale,
+                    0
+                ),
+
+                t.id,
+                COALESCE(t.nome,''),
+                tbid.amount,
+
+                COALESCE(lr.incremento_minimo,1),
+                COALESCE(lr.max_giocatori,30),
+                COALESCE(lr.min_portieri,0),
+                COALESCE(lr.budget_iniziale,500),
+                COALESCE(lr.soglia_budget,lr.budget_iniziale,500),
+                COALESCE(lr.moltiplicatore_oltre_soglia,1),
+
+                COALESCE(rs.budget,lr.budget_iniziale,500),
+                COALESCE(rs.valore_acquisti,0),
+                COALESCE(rs.numero_rosa,0),
+                COALESCE(rs.portieri,0)
+
+            FROM current_lot cl
+            JOIN league_player_catalog pc
+              ON pc.league_id=?
+             AND pc.player_id=cl.player_id
+            JOIN teams t
+              ON t.league_id=?
+             AND t.is_active=1
+            LEFT JOIN team_bids tbid
+              ON tbid.team_id=t.id
+            LEFT JOIN league_rules lr
+              ON lr.league_id=?
+            LEFT JOIN roster_stats rs
+              ON rs.team_id=t.id
+            ORDER BY
+                CASE WHEN tbid.amount IS NULL THEN 1 ELSE 0 END,
+                tbid.amount DESC,
+                t.posizione,
+                t.id
+        """, (
+            league_id,
+            league_id,
+            league_id,
+            league_id,
+            league_id,
+            league_id
+        ))
+        rows = cur.fetchall() or []
+        if not rows:
+            return None
+
+        r0 = rows[0]
+        current_team_id = int(r0[4]) if r0[4] is not None else None
+
+        offerte = []
+        current_team_name = ""
+        team_row = None
+
+        for r in rows:
+            tid = int(r[13])
+            nome_team = str(r[14] or "")
+            amount = float(r[15]) if r[15] is not None else None
+            offerte.append({
+                "team_id": tid,
+                "Squadra": nome_team,
+                "Offerta": amount,
+                "Migliore": (
+                    "🏆" if current_team_id is not None
+                    and tid == current_team_id else ""
+                ),
+            })
+            if current_team_id is not None and tid == current_team_id:
+                current_team_name = nome_team
+            if team_id is not None and tid == team_id:
+                team_row = r
+
+        out = {
+            "lot_id": int(r0[0]),
+            "player_id": int(r0[1]),
+            "stato": str(r0[2] or "").upper(),
+            "current_bid": float(r0[3]) if r0[3] is not None else None,
+            "current_team_id": current_team_id,
+            "current_team": current_team_name,
+            "bid_count": int(r0[5] or 0),
+            "version": int(r0[6] or 0),
+
+            "nome": str(r0[7] or ""),
+            "squadra": str(r0[8] or ""),
+            "ruolo_classico": str(r0[9] or ""),
+            "ruolo_mantra": str(r0[10] or ""),
+            "fvm": float(r0[11] or 0),
+            "quotazione": float(r0[12] or 0),
+            "offerte": offerte,
+        }
+
+        if team_row is not None:
+            incremento = max(0.01, float(team_row[16] or 1))
+            max_giocatori = int(team_row[17] or 30)
+            min_portieri = int(team_row[18] or 0)
+            budget_default = float(team_row[19] or 500)
+            soglia = float(team_row[20] or budget_default)
+            moltiplicatore = max(1.0, float(team_row[21] or 1))
+            budget = float(team_row[22] or budget_default)
+            valore = float(team_row[23] or 0)
+            numero_rosa = int(team_row[24] or 0)
+            portieri = int(team_row[25] or 0)
+
+            minimo = (
+                1.0
+                if out["current_bid"] is None
+                else round(out["current_bid"] + incremento, 2)
+            )
+
+            is_portiere = (
+                out["ruolo_classico"].strip().upper() == "P"
+                or out["ruolo_mantra"].strip().upper() in ("P","POR")
+            )
+            slot_dopo = max(0, max_giocatori - (numero_rosa + 1))
+            portieri_dopo = portieri + (1 if is_portiere else 0)
+            portieri_mancanti = max(0, min_portieri - portieri_dopo)
+
+            # Conserva almeno 1 credito per ogni slot successivo.
+            riserva = float(slot_dopo)
+
+            if budget <= soglia:
+                valore_totale_massimo = budget
+            else:
+                valore_totale_massimo = (
+                    soglia + (budget - soglia) / moltiplicatore
+                )
+
+            massimo = max(
+                0.0,
+                float(int(
+                    (valore_totale_massimo - valore - riserva)
+                    * 100 + 1e-9
+                )) / 100.0
+            )
+
+            spesa = float(
+                _spesa_effettiva_regole(
+                    valore,
+                    soglia,
+                    moltiplicatore
+                )
+            )
+
+            can_bid = True
+            motivo = ""
+
+            if out["stato"] != "OPEN":
+                can_bid = False
+                motivo = "Le offerte sono chiuse."
+            elif out["current_team_id"] == team_id:
+                can_bid = False
+                motivo = "Sei già il miglior offerente."
+            elif numero_rosa >= max_giocatori:
+                can_bid = False
+                motivo = "La rosa è già completa."
+            elif slot_dopo < portieri_mancanti:
+                can_bid = False
+                motivo = (
+                    "L'acquisto non lascerebbe abbastanza slot "
+                    "per raggiungere il minimo di portieri."
+                )
+            elif massimo + 1e-9 < minimo:
+                can_bid = False
+                motivo = "Budget disponibile insufficiente per rilanciare."
+
+            out["team"] = {
+                "team_id": team_id,
+                "budget": budget,
+                "valore_acquisti": valore,
+                "spesa_effettiva": spesa,
+                "residuo": round(budget - spesa, 2),
+                "numero_rosa": numero_rosa,
+                "max_giocatori": max_giocatori,
+                "portieri": portieri,
+                "min_portieri": min_portieri,
+                "incremento": incremento,
+                "offerta_minima": minimo,
+                "offerta_massima": massimo,
+                "can_bid": can_bid,
+                "motivo": motivo,
+            }
+
+        return out
+    finally:
+        _portal_close(conn)
+
+
+def _tabella_offerte_live_v132(stato):
+    righe = []
+    for x in stato.get("offerte", []):
+        righe.append({
+            "Squadra": x["Squadra"],
+            "Offerta": (
+                x["Offerta"]
+                if x["Offerta"] is not None
+                else "—"
+            ),
+            "": x["Migliore"],
+        })
+    return pd.DataFrame(righe)
+
+
+def chiudi_e_assegna_migliore_v132(league_id, lot_id):
+    """
+    Il Banditore chiude le offerte. Il server congela il lotto e assegna
+    esclusivamente current_team_id/current_bid, mai valori scelti dalla UI.
+    """
+    league_id = int(league_id)
+    lot_id = int(lot_id)
+    user_id = int(st.session_state.get("auth_user_id") or 0)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE auction_lots
+            SET stato='CLOSING',
+                closing_by_user_id=?,
+                closing_at=CURRENT_TIMESTAMP
+            WHERE id=? AND league_id=?
+              AND stato='OPEN'
+              AND current_team_id IS NOT NULL
+              AND current_bid IS NOT NULL
+              AND EXISTS (
+                  SELECT 1
+                  FROM league_members
+                  WHERE league_id=?
+                    AND user_id=?
+                    AND is_active=1
+                    AND (is_auctioneer=1 OR is_admin=1)
+              )
+            RETURNING player_id,current_team_id,current_bid
+        """, (
+            user_id, lot_id, league_id,
+            league_id, user_id
+        ))
+        claimed = cur.fetchone()
+        if not claimed:
+            raise ValueError(
+                "Il lotto non è più aperto oppure non contiene offerte."
+            )
+        player_id = int(claimed[0])
+        team_id = int(claimed[1])
+        prezzo = float(claimed[2])
+        conn.commit()
+    finally:
+        _portal_close(conn)
+
+    try:
+        risultato = assegna_giocatore_banditore(
+            league_id,
+            player_id,
+            team_id,
+            prezzo
+        )
+    except Exception:
+        # Se l'assegnazione fallisce per un controllo di budget/rosa,
+        # riapriamo il lotto: nessun blocco permanente.
+        conn = _portal_raw_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                UPDATE auction_lots
+                SET stato='OPEN',
+                    closing_by_user_id=NULL,
+                    closing_at=NULL
+                WHERE id=? AND league_id=? AND stato='CLOSING'
+            """, (lot_id, league_id))
+            conn.commit()
+        finally:
+            _portal_close(conn)
+        raise
+
+    # In A CHIAMATA il turno avanza solo dopo assegnazione riuscita.
+    try:
+        tipo = tipo_asta_lega_multilega(league_id)
+        if tipo == "CHIAMATA":
+            avanza_turno_squadra_multilega(
+                league_id,
+                "CHIAMATA"
+            )
+    except Exception:
+        pass
+
+    invalida_cache_dati()
+
+    # La pagina Venduti ad avversari non deve conservare copie stale.
+    for k in list(st.session_state.keys()):
+        if str(k).startswith(f"_ml35_venduti_{league_id}_"):
+            st.session_state.pop(k, None)
+
+    return {
+        "player_id": player_id,
+        "team_id": team_id,
+        "prezzo": prezzo,
+        "team": risultato.get("team", ""),
+    }
+
+
+def render_card_giocatore_live_v132(stato):
+    card = (
+        '<div style="background:#071a2f;border:2px solid #f5b51b;'
+        'border-radius:14px;padding:18px 22px;margin:6px 0 14px 0;color:#fff;">'
+        '<div style="font-size:12px;color:#94a3b8;font-weight:800;'
+        'letter-spacing:.4px;">GIOCATORE IN ASTA</div>'
+        '<div style="font-size:30px;font-weight:950;margin-top:3px;">'
+        + html.escape(stato["nome"]) +
+        '</div><div style="font-size:16px;color:#dbeafe;margin-top:4px;">'
+        + html.escape(stato["squadra"])
+        + '&nbsp;·&nbsp;'
+        + html.escape(stato["ruolo_mantra"])
+        + '&nbsp;·&nbsp; FVM '
+        + f'{stato["fvm"]:g}'
+        + '&nbsp;·&nbsp; Quot. '
+        + f'{stato["quotazione"]:g}'
+        + '</div></div>'
+    )
+    st.markdown(card, unsafe_allow_html=True)
+
+
+@st.fragment(run_every="1s")
 def render_banditore_asta():
+    """
+    V132 - Banditore ottimizzato.
+    Con lotto attivo esegue solo snapshot_lotto_live_v132().
+    Le query più pesanti per modalità/squadre/listone vengono eseguite
+    esclusivamente quando non esiste un lotto attivo.
+    """
     if not any(r in RUOLI_ATTIVI for r in ("AUCTIONEER","ADMIN")):
         st.error("Questa sezione è riservata a Banditore o Admin.")
         return
 
-    league_id=int(st.session_state.get("ml_league_id"))
+    league_id = int(st.session_state.get("ml_league_id"))
+    t0 = time.perf_counter()
 
-    try:
-        assicura_schema_timer_v129(league_id)
-    except Exception as _schema_error_banditore:
-        st.error(
-            "Impossibile aggiornare lo schema timer dell'asta: "
-            + str(_schema_error_banditore)
-        )
-        return
-
-    try:
-        _auto_esito_banditore = auto_finalizza_lotto_scaduto_multilega(
-            league_id
-        )
-        if _auto_esito_banditore:
-            st.session_state["auctioneer_msg"] = (
-                f'⏱ Assegnazione automatica: '
-                f'{_auto_esito_banditore["team"]} a '
-                f'{_auto_esito_banditore["prezzo"]:g} crediti.'
-            )
-    except Exception as _auto_errore_banditore:
-        st.caption(
-            "Auto-assegnazione in attesa: "
-            + str(_auto_errore_banditore)
-        )
+    if st.session_state.get("auctioneer_msg"):
+        st.success(st.session_state.pop("auctioneer_msg"))
 
     st.subheader("🔨 Banditore")
-    st.caption(
-        "Aggiornamento automatico ogni 2 secondi. "
-        "Dopo ogni offerta parte un timer di 10 secondi."
-    )
 
-    if st.button(
-        "🔄 AGGIORNA OFFERTE",
-        use_container_width=True,
-        key="auctioneer_refresh_offerte"
-    ):
-        st.rerun(scope="fragment")
-
-    _perf_banditore = {}
-    _t_banditore = time.perf_counter()
-
+    # FAST PATH: durante il bidding una sola query remota.
     try:
-        _t0 = time.perf_counter()
-        _snap = snapshot_banditore_multilega(league_id)
-        _perf_banditore["Snapshot unico"] = time.perf_counter() - _t0
-
-        tipo_asta = _snap["tipo_asta"]
-        turno_corrente = _snap["turno"]
-        teams = _snap["teams"]
-        disponibili = _snap["disponibili"]
-        lotto_aperto = _snap["lotto"]
-        _disponibili_count = int(_snap["disponibili_count"])
-        _assegnati_count = int(_snap["assegnati_count"])
+        live = snapshot_lotto_live_v132(league_id)
     except Exception as errore:
-        st.error("Impossibile caricare la console Banditore: "+str(errore))
+        st.error("Impossibile leggere il lotto corrente: " + str(errore))
         return
 
-    render_info_modalita_asta(tipo_asta, turno_corrente)
+    if live is not None:
+        st.caption(
+            "Monitor live del lotto corrente · aggiornamento leggero ogni 1 secondo."
+        )
+        render_card_giocatore_live_v132(live)
 
-    m1,m2,m3=st.columns(3)
-    m1.metric("Disponibili",_disponibili_count)
-    m2.metric("Assegnati",_assegnati_count)
-    m3.metric("Squadre",len(teams))
-
-    if lotto_aperto:
-        _stato_lotto_banditore = str(lotto_aperto.get("stato","")).upper()
-
-        if _stato_lotto_banditore == "OPEN":
+        if live["current_bid"] is None:
+            st.info("Nessuna squadra ha ancora effettuato un'offerta.")
+        else:
             st.success(
-                f'🟢 Lotto aperto: **{lotto_aperto["nome"]}** · '
-                f'{lotto_aperto["squadra"]} · {lotto_aperto["ruolo_mantra"]}'
-            )
-        elif _stato_lotto_banditore == "CLOSING":
-            st.warning(
-                f'🟠 Offerte chiuse: **{lotto_aperto["nome"]}** · '
-                "attesa assegnazione definitiva"
-            )
-        else:
-            st.info(
-                f'Lot #{lotto_aperto["lot_id"]} · stato {_stato_lotto_banditore}'
+                f'🏆 Migliore offerta: **{live["current_bid"]:g}** crediti · '
+                f'**{live["current_team"]}**'
             )
 
-        try:
-            _stato_bids_banditore = stato_offerte_lotto_multilega(
-                league_id,
-                lotto_aperto["lot_id"],
-                20,
-                include_history=False
-            )
-            _best_banditore = _stato_bids_banditore["best"]
-        except Exception as errore:
-            _stato_bids_banditore = {"best": None, "bids": []}
-            _best_banditore = None
-            st.warning("Impossibile leggere le offerte: " + str(errore))
+        st.markdown("#### Offerte per squadra")
+        st.dataframe(
+            _tabella_offerte_live_v132(live),
+            use_container_width=True,
+            hide_index=True
+        )
 
-        if _best_banditore:
-            st.info(
-                f'🏆 Migliore offerta: **{_best_banditore["amount"]:g}** crediti · '
-                f'**{_best_banditore["team"]}**'
-            )
-
-            _timer_banditore = secondi_timer_asta_v128(
-                lotto_aperto.get("bid_deadline_ts")
-            )
-            if _timer_banditore is not None:
-                if _timer_banditore > 0:
-                    st.markdown(
-                        f"### ⏱ {_timer_banditore} secondi all'assegnazione"
-                    )
-                    st.progress(
-                        max(0.0, min(1.0, _timer_banditore / 10.0))
-                    )
-                else:
-                    st.warning(
-                        "⏱ Timer scaduto · assegnazione automatica in corso..."
-                    )
-
-            st.caption(
-                "Il lotto verrà assegnato automaticamente allo scadere "
-                "del timer. Ogni nuova offerta riporta il timer a 10 secondi."
-            )
-
-        else:
-            st.caption("Nessuna offerta registrata sul lotto corrente.")
-
-            if _stato_lotto_banditore == "CLOSING":
+        if live["stato"] == "OPEN":
+            if live["current_bid"] is None:
                 if st.button(
-                    "↩ RIAPRI OFFERTE",
+                    "⏹ CHIUDI LOTTO SENZA ASSEGNAZIONE",
                     use_container_width=True,
-                    key="auctioneer_reopen_no_bid"
+                    key=f"v132_close_empty_{live['lot_id']}"
                 ):
                     try:
-                        riapri_lotto_banditore(
+                        chiudi_lotto_banditore(
                             league_id,
-                            lotto_aperto["lot_id"]
+                            live["lot_id"],
+                            "CLOSED"
+                        )
+                        tipo = tipo_asta_lega_multilega(league_id)
+                        if tipo in ("RANDOM","ALFABETICO"):
+                            salta_giocatore_modalita_multilega(
+                                league_id,
+                                live["player_id"]
+                            )
+                        elif tipo == "CHIAMATA":
+                            avanza_turno_squadra_multilega(
+                                league_id,
+                                "CHIAMATA"
+                            )
+                        st.session_state["auctioneer_msg"] = (
+                            f'Lotto di {live["nome"]} chiuso senza assegnazione.'
                         )
                         st.rerun(scope="fragment")
                     except Exception as errore:
                         st.error(str(errore))
-
-        _band_hist_key=f"auctioneer_lot_history_{league_id}_{lotto_aperto['lot_id']}"
-
-        if st.button(
-            "📜 MOSTRA / NASCONDI OFFERTE LOTTO",
-            use_container_width=True,
-            key=f"auctioneer_lot_history_toggle_{league_id}_{lotto_aperto['lot_id']}"
-        ):
-            st.session_state[_band_hist_key]=not bool(
-                st.session_state.get(_band_hist_key,False)
-            )
-
-        if st.session_state.get(_band_hist_key,False):
-            try:
-                _band_history=stato_offerte_lotto_multilega(
-                    league_id,lotto_aperto["lot_id"],20,include_history=True
-                )["bids"]
-            except Exception as errore:
-                _band_history=[]
-                st.warning("Impossibile leggere lo storico offerte: "+str(errore))
-
-            if not _band_history:
-                st.caption("Nessuna offerta registrata.")
             else:
-                st.dataframe(
-                    pd.DataFrame([
-                        {
-                            "Squadra":b["team"],"Offerta":b["amount"],
-                            "Utente":b["username"],"Data":b["created_at"],
-                        }
-                        for b in _band_history
-                    ]),
-                    use_container_width=True,hide_index=True
+                st.caption(
+                    "Quando termina il countdown a voce, chiudi il lotto. "
+                    "Il server assegnerà automaticamente il giocatore "
+                    "alla migliore offerta registrata."
                 )
+                if st.button(
+                    "🔒 CHIUDI LOTTO E ASSEGNA AL MIGLIOR OFFERENTE",
+                    type="primary",
+                    use_container_width=True,
+                    key=f"v132_close_assign_{live['lot_id']}"
+                ):
+                    try:
+                        esito = chiudi_e_assegna_migliore_v132(
+                            league_id,
+                            live["lot_id"]
+                        )
+                        st.session_state["auctioneer_msg"] = (
+                            f'{live["nome"]} assegnato a {esito["team"]} '
+                            f'a {esito["prezzo"]:g} crediti.'
+                        )
+                        st.rerun(scope="fragment")
+                    except Exception as errore:
+                        st.error(str(errore))
+        else:
+            st.warning("Chiusura/assegnazione del lotto in corso.")
 
-        if int(_stato_bids_banditore.get("count",0)) == 0 and st.button(
-            "⏹ CHIUDI LOTTO SENZA ASSEGNAZIONE",
-            use_container_width=True,
-            key="auctioneer_close_lot"
-        ):
-            try:
-                chiudi_lotto_banditore(
-                    league_id,
-                    lotto_aperto["lot_id"],
-                    "CLOSED"
-                )
+        elapsed = time.perf_counter() - t0
+        if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
+            st.caption(f"⏱ Banditore live: {elapsed:.2f} s")
+        return
 
-                if tipo_asta in ("RANDOM","ALFABETICO"):
-                    salta_giocatore_modalita_multilega(
-                        league_id,
-                        lotto_aperto["player_id"]
-                    )
-                elif tipo_asta == "CHIAMATA":
-                    avanza_turno_squadra_multilega(
-                        league_id,
-                        tipo_asta
-                    )
+    # SLOW PATH: nessun lotto. Serve soltanto per preparare il successivo.
+    try:
+        snap = snapshot_banditore_multilega(league_id)
+    except Exception as errore:
+        st.error("Impossibile preparare il prossimo lotto: " + str(errore))
+        return
 
-                st.session_state["auctioneer_msg"] = (
-                    f'Lotto di {lotto_aperto["nome"]} chiuso.'
-                )
-                st.rerun(scope="fragment")
-            except Exception as errore:
-                st.error(str(errore))
+    tipo_asta = snap["tipo_asta"]
+    turno = snap["turno"]
+    disponibili = snap["disponibili"]
 
-    if _disponibili_count <= 0:
+    render_info_modalita_asta(tipo_asta, turno)
+
+    if int(snap["disponibili_count"]) <= 0:
         st.success("Non ci sono più giocatori disponibili.")
         return
-    if not teams:
-        st.warning("La lega non contiene squadre attive.")
-        return
 
-    # --------------------------------------------------------
-    # V106 - RIVELAZIONE CONTROLLATA DEL GIOCATORE
-    # --------------------------------------------------------
-    # Regola di equità:
-    # finché esiste un lotto OPEN il Banditore vede esclusivamente
-    # il giocatore corrente. Non vengono calcolati, selezionati o
-    # mostrati candidati successivi.
-    if lotto_aperto is not None:
-        g = {
-            "player_id": int(lotto_aperto["player_id"]),
-            "nome": str(lotto_aperto["nome"]),
-            "squadra": str(lotto_aperto["squadra"]),
-            "ruolo_mantra": str(lotto_aperto["ruolo_mantra"]),
-            "fvm": float(lotto_aperto["fvm"]),
-            "stato": "DISPONIBILE",
-            "assigned_team_id": None,
-            "prezzo": None,
-        }
-
-        st.markdown(
-            f'### Giocatore corrente: **{g["nome"]}**'
-        )
-        st.caption(
-            f'{g["squadra"]} · {g["ruolo_mantra"]} · FVM {g["fvm"]:g}'
-        )
-
-        st.caption(
-            "🔒 Il giocatore successivo resta nascosto fino alla chiusura "
-            "o all'assegnazione del lotto corrente."
-        )
-
-    elif tipo_asta in ("RANDOM","ALFABETICO"):
-        # Il candidato viene determinato SOLO quando non esiste più
-        # un lotto corrente. Quindi non è mai possibile anticipare
-        # il giocatore successivo durante l'asta precedente.
+    if tipo_asta in ("RANDOM","ALFABETICO"):
         g = prossimo_giocatore_automatico_multilega(
             league_id,
             disponibili,
             tipo_asta
         )
-
         if g is None:
-            st.success("Non ci sono altri giocatori da proporre in questa scansione.")
+            st.info("Nessun altro giocatore da proporre.")
             return
 
-        st.markdown(
-            f'### Giocatore corrente: **{g["nome"]}**'
-        )
+        st.markdown(f'### Prossimo giocatore: **{g["nome"]}**')
         st.caption(
             f'{g["squadra"]} · {g["ruolo_mantra"]} · FVM {g["fvm"]:g}'
         )
-
         if st.button(
             "📣 APRI ASTA SUL GIOCATORE",
             type="primary",
             use_container_width=True,
-            key="auctioneer_open_lot_auto"
+            key="v132_open_auto"
         ):
             try:
                 apri_lotto_banditore(
@@ -29569,403 +29866,60 @@ def render_banditore_asta():
                     g["player_id"]
                 )
                 st.session_state["auctioneer_msg"] = (
-                    f'{g["nome"]} è ora il giocatore all’asta.'
+                    f'Asta aperta su {g["nome"]}.'
                 )
                 st.rerun(scope="fragment")
             except Exception as errore:
                 st.error(str(errore))
+        return
 
-    else:
-        # CHIAMATA / DRAFT:
-        # il Banditore NON sceglie il giocatore. Può vedere esclusivamente
-        # la selezione già confermata dalla squadra di turno.
-        _t0 = time.perf_counter()
-        pending_call = chiamata_pendente_multilega(league_id)
-        _perf_banditore["Chiamata pendente"] = time.perf_counter() - _t0
+    pending = chiamata_pendente_multilega(league_id)
 
-        if pending_call is None:
-            g = None
-            _nome_turno = (
-                turno_corrente["nome"]
-                if turno_corrente else "squadra di turno"
-            )
-            st.info(
-                f"⏳ In attesa della selezione di **{_nome_turno}**. "
-                "Nessun giocatore è visibile al Banditore finché la squadra "
-                "non conferma la propria scelta."
-            )
-        else:
-            g = {
-                "player_id": pending_call["player_id"],
-                "nome": pending_call["player"],
-                "squadra": pending_call["squadra_reale"],
-                "ruolo_mantra": pending_call["ruolo_mantra"],
-                "fvm": 0.0,
-            }
-
-            st.success(
-                f'📣 **{pending_call["team"]}** ha selezionato '
-                f'**{pending_call["player"]}**'
-            )
-            st.caption(
-                f'{pending_call["squadra_reale"]} · '
-                f'{pending_call["ruolo_mantra"]}'
-            )
-
-            _label_gestisci = (
-                "🔨 APRI ASTA SULLA CHIAMATA"
-                if tipo_asta == "CHIAMATA"
-                else "✅ CONFERMA ASSEGNAZIONE DRAFT"
-            )
-
-            if st.button(
-                _label_gestisci,
-                type="primary",
-                use_container_width=True,
-                key=f"auctioneer_handle_call_{pending_call['call_id']}"
-            ):
-                try:
-                    esito = gestisci_chiamata_banditore_multilega(
-                        league_id,
-                        pending_call["call_id"]
-                    )
-                    invalida_cache_dati()
-
-                    if esito["azione"] == "OPENED":
-                        st.session_state["auctioneer_msg"] = (
-                            f'Asta aperta su {pending_call["player"]}, '
-                            f'chiamato da {pending_call["team"]}.'
-                        )
-                    else:
-                        st.session_state["auctioneer_msg"] = (
-                            f'{pending_call["player"]} assegnato in Draft '
-                            f'a {pending_call["team"]}.'
-                        )
-
-                    st.rerun(scope="fragment")
-                except Exception as errore:
-                    st.error(str(errore))
-
-    if g is not None and not (
-        tipo_asta == "DRAFT"
-        and lotto_aperto is None
-    ):
-        etichette_team={
-            f'{t["nome"]} · {t["giocatori"]} gioc. · {t["spesa_effettiva"]:g}/{t["budget"]:g} cr.':t
-            for t in teams
-        }
-
-        if tipo_asta in ("CHIAMATA","DRAFT") and turno_corrente:
-            _team_turno = next(
-                (x for x in teams if int(x["team_id"]) == int(turno_corrente["team_id"])),
-                None
-            )
-        else:
-            _team_turno = None
-
-        c1,c2=st.columns([2,1])
-        with c1:
-            if tipo_asta == "DRAFT" and _team_turno:
-                st.text_input(
-                    "Squadra assegnataria",
-                    value=_team_turno["nome"],
-                    disabled=True,
-                    key="auctioneer_draft_team_display"
-                )
-                t = _team_turno
-            else:
-                _team_labels = list(etichette_team.keys())
-                _default_idx = 0
-                if _team_turno:
-                    for _i,_lbl in enumerate(_team_labels):
-                        if int(etichette_team[_lbl]["team_id"]) == int(_team_turno["team_id"]):
-                            _default_idx = _i
-                            break
-
-                scelta_t=st.selectbox(
-                    "Squadra vincitrice",
-                    _team_labels,
-                    index=_default_idx,
-                    key="auctioneer_team"
-                )
-                t=etichette_team[scelta_t]
-
-        with c2:
-            prezzo=st.number_input(
-                "Prezzo finale",
-                min_value=0.0,
-                value=1.0,
-                step=1.0,
-                disabled=(tipo_asta=="DRAFT"),
-                key="auctioneer_price"
-            )
-
-        if tipo_asta == "DRAFT":
-            prezzo = 0.0
-
+    if pending is None:
+        nome_turno = turno["nome"] if turno else "squadra di turno"
         st.info(
-            f'**{g["nome"]}** ({g["ruolo_mantra"]}, {g["squadra"]}) → '
-            f'**{t["nome"]}** a **{prezzo:g} crediti**'
+            f"⏳ In attesa della selezione di **{nome_turno}**."
         )
+        return
 
-        _assegnazione_bloccata = (
-            tipo_asta != "DRAFT"
-            and lotto_aperto is not None
-            and int(lotto_aperto["player_id"]) != int(g["player_id"])
-        )
-
-        # Se ci sono offerte sul lotto corrente, la fonte autorevole è la
-        # migliore offerta. Il Banditore non può assegnare manualmente il
-        # giocatore a un importo/squadra incompatibili con il bidding.
-        if tipo_asta != "DRAFT" and lotto_aperto is not None:
-            _best_manual = None
-            if (
-                lotto_aperto.get("current_bid") is not None
-                and lotto_aperto.get("current_team_id") is not None
-            ):
-                _best_manual = {
-                    "team_id": int(lotto_aperto["current_team_id"]),
-                    "amount": float(lotto_aperto["current_bid"]),
-                }
-
-            if (
-                _best_manual is not None
-                and int(lotto_aperto["player_id"]) == int(g["player_id"])
-                and (
-                    int(t["team_id"]) != int(_best_manual["team_id"])
-                    or abs(float(prezzo) - float(_best_manual["amount"])) > 0.0001
-                )
-            ):
-                _assegnazione_bloccata = True
-                st.warning(
-                    "Sono presenti offerte: l'assegnazione deve rispettare "
-                    "il miglior offerente e il relativo prezzo."
-                )
-
-            if (
-                _best_manual is not None
-                and str(lotto_aperto.get("stato","")).upper() != "CLOSING"
-            ):
-                _assegnazione_bloccata = True
-                st.caption(
-                    "Prima dell'assegnazione devi chiudere le offerte."
-                )
-
-        if _assegnazione_bloccata:
-            st.warning(
-                "Il giocatore selezionato non coincide con il lotto aperto. "
-                "Seleziona il giocatore attualmente all'asta oppure chiudi il lotto."
-            )
-
-        if st.button(
-            "✅ ASSEGNA GIOCATORE" if tipo_asta!="DRAFT" else "✅ ASSEGNA DRAFT",
-            type="primary",
-            use_container_width=True,
-            disabled=_assegnazione_bloccata,
-            key="auctioneer_assign"
-        ):
-            try:
-                risultato=assegna_giocatore_banditore(
-                    league_id,g["player_id"],t["team_id"],prezzo
-                )
-
-                if tipo_asta in ("CHIAMATA","DRAFT"):
-                    avanza_turno_squadra_multilega(
-                        league_id,
-                        tipo_asta
-                    )
-
-                invalida_cache_dati()
-                st.session_state["auctioneer_msg"]=(
-                    f'{g["nome"]} assegnato a {risultato["team"]} '
-                    + (
-                        "in modalità Draft."
-                        if tipo_asta=="DRAFT"
-                        else f'a {prezzo:g} crediti.'
-                    )
-                )
-                st.rerun(scope="fragment")
-            except Exception as errore:
-                st.error(str(errore))
-
-    if st.session_state.get("auctioneer_msg"):
-        st.success(st.session_state.pop("auctioneer_msg"))
-
-    st.markdown("#### Situazione squadre")
+    st.success(
+        f'📣 **{pending["team"]}** ha selezionato '
+        f'**{pending["player"]}**'
+    )
     st.caption(
-        "Dati live calcolati sulle assegnazioni effettive della lega."
+        f'{pending["squadra_reale"]} · {pending["ruolo_mantra"]}'
     )
-    df_team=pd.DataFrame([
-        {
-            "Nome squadra":t["nome"],
-            "Giocatori acquistati (di cui portieri)":
-                f'{t["giocatori"]} ({t["portieri"]})',
-            "Valore acquisti":t["valore_acquisti"],
-            "Spesa effettiva":t["spesa_effettiva"]
-        }
-        for t in teams
-    ])
-    st.dataframe(df_team,use_container_width=True,hide_index=True)
 
-    st.markdown("---")
-    st.markdown("#### ↶ Ultime assegnazioni")
-
-    if "auctioneer_show_history" not in st.session_state:
-        st.session_state["auctioneer_show_history"] = False
+    label = (
+        "🔨 APRI ASTA SULLA CHIAMATA"
+        if tipo_asta == "CHIAMATA"
+        else "✅ CONFERMA ASSEGNAZIONE DRAFT"
+    )
 
     if st.button(
-        "📋 MOSTRA / NASCONDI CRONOLOGIA",
+        label,
+        type="primary",
         use_container_width=True,
-        key="auctioneer_toggle_history"
+        key=f"v132_handle_call_{pending['call_id']}"
     ):
-        st.session_state["auctioneer_show_history"] = (
-            not st.session_state.get("auctioneer_show_history", False)
-        )
-
-    if st.session_state.get("auctioneer_show_history", False):
-        st.caption(
-            "Puoi annullare un'assegnazione solo se è ancora quella corrente "
-            "del giocatore. L'operazione ripristina disponibilità, rosa e budget."
-        )
-
         try:
-            _t0 = time.perf_counter()
-            storico=ultime_assegnazioni_banditore(league_id,15)
-            _perf_banditore["Cronologia"] = time.perf_counter() - _t0
-        except Exception as errore:
-            storico=[]
-            st.error("Impossibile leggere la cronologia asta: "+str(errore))
-
-        attive=[x for x in storico if x["stato"].upper()=="ACTIVE"]
-
-        if not storico:
-            st.info("Nessuna assegnazione registrata.")
-        else:
-            righe_storico=[]
-            for x in storico:
-                righe_storico.append({
-                    "ID":x["history_id"],
-                    "Giocatore":x["giocatore"],
-                    "Ruolo":x["ruolo"],
-                    "Squadra":x["team"],
-                    "Prezzo":x["prezzo"],
-                    "Stato":"ATTIVA" if x["stato"].upper()=="ACTIVE" else "ANNULLATA",
-                    "Assegnata da":x["assegnato_da"],
-                    "Data":x["assegnato_il"]
-                })
-            st.dataframe(
-                pd.DataFrame(righe_storico),
-                use_container_width=True,
-                hide_index=True
+            esito = gestisci_chiamata_banditore_multilega(
+                league_id,
+                pending["call_id"]
             )
-
-        if attive:
-            opzioni_undo={
-                f'#{x["history_id"]} · {x["giocatore"]} → {x["team"]} · {x["prezzo"]:g} cr.':x
-                for x in attive
-            }
-            scelta_undo=st.selectbox(
-                "Assegnazione da annullare",
-                list(opzioni_undo.keys()),
-                key="auctioneer_undo_select"
-            )
-            conferma_undo_asta=st.checkbox(
-                "Confermo l'annullamento dell'assegnazione selezionata",
-                key="auctioneer_undo_confirm"
-            )
-            if st.button(
-                "↶ ANNULLA ASSEGNAZIONE",
-                disabled=not conferma_undo_asta,
-                use_container_width=True,
-                key="auctioneer_undo_btn"
-            ):
-                x=opzioni_undo[scelta_undo]
-                try:
-                    annulla_assegnazione_banditore(
-                        league_id,
-                        x["history_id"]
-                    )
-                    invalida_cache_dati()
-                    st.session_state["auctioneer_msg"]=(
-                        f'Assegnazione di {x["giocatore"]} a {x["team"]} annullata.'
-                    )
-                    st.rerun(scope="fragment")
-                except Exception as errore:
-                    st.error(str(errore))
-
-    if "auctioneer_show_audit" not in st.session_state:
-        st.session_state["auctioneer_show_audit"] = False
-
-    if st.button(
-        "📜 MOSTRA / NASCONDI AUDIT ASTA",
-        use_container_width=True,
-        key="auctioneer_toggle_audit"
-    ):
-        st.session_state["auctioneer_show_audit"] = (
-            not st.session_state.get("auctioneer_show_audit", False)
-        )
-
-    if st.session_state.get("auctioneer_show_audit", False):
-        try:
-            _t0 = time.perf_counter()
-            audit=audit_asta_multilega(league_id,100)
-            _perf_banditore["Audit"] = time.perf_counter() - _t0
-            if not audit:
-                st.caption("Nessun evento d'asta registrato.")
-            else:
-                righe=[]
-                for a in audit:
-                    try:
-                        det=json.loads(a["dettagli"]) if a["dettagli"] else {}
-                    except Exception:
-                        det={}
-                    righe.append({
-                        "Data":a["data"],
-                        "Evento":(
-                            "ASSEGNAZIONE"
-                            if a["azione"]=="PLAYER_ASSIGNED"
-                            else (
-                                "OFFERTA"
-                                if a["azione"]=="BID_PLACED"
-                                else "ANNULLAMENTO"
-                            )
-                        ),
-                        "Utente":a["utente"],
-                        "Squadra":a["squadra"],
-                        "Player ID":a["player_id"],
-                        "Prezzo":det.get("prezzo",det.get("prezzo_annullato","")),
-                        "History ID":det.get("history_id","")
-                    })
-                st.dataframe(
-                    pd.DataFrame(righe),
-                    use_container_width=True,
-                    hide_index=True
+            invalida_cache_dati()
+            if esito["azione"] == "OPENED":
+                st.session_state["auctioneer_msg"] = (
+                    f'Asta aperta su {pending["player"]}.'
                 )
+            else:
+                st.session_state["auctioneer_msg"] = (
+                    f'{pending["player"]} assegnato in Draft '
+                    f'a {pending["team"]}.'
+                )
+            st.rerun(scope="fragment")
         except Exception as errore:
-            st.error("Impossibile leggere l'audit: "+str(errore))
-
-    _perf_banditore["Totale render misurato"] = (
-        time.perf_counter() - _t_banditore
-    )
-
-    if "ADMIN" in RUOLI_ATTIVI:
-        with st.expander("⏱ Diagnostica prestazioni Banditore", expanded=False):
-            st.caption(
-                "Tempi del caricamento corrente. Se una fase resta lenta, "
-                "possiamo intervenire sul round-trip specifico."
-            )
-            st.dataframe(
-                pd.DataFrame([
-                    {
-                        "Fase": _fase,
-                        "Secondi": round(float(_sec), 3),
-                    }
-                    for _fase, _sec in _perf_banditore.items()
-                ]),
-                use_container_width=True,
-                hide_index=True
-            )
-
+            st.error(str(errore))
 
 
 
@@ -29998,6 +29952,9 @@ def manutenzione_cache_performance_v122():
         "v130_bid_custom_": 3,
         "v130_bid_custom_submit_": 3,
         "_v130_last_bid_": 2,
+        "v132_bid_": 6,
+        "v132_custom_": 3,
+        "v132_custom_submit_": 3,
     }
 
     chiavi = list(st.session_state.keys())
@@ -30046,41 +30003,28 @@ def venduti_avversari_normalizzati_multilega(
     team_id,
     forza=False
 ):
-    """V119 - cache di sessione della pagina Venduti ad avversari."""
+    """
+    V132 - vista derivata autorevole.
+    Nessuna copia fisica e nessuna cache di sessione: ogni apertura legge
+    direttamente le assegnazioni correnti della lega.
+    """
     league_id = int(league_id)
     team_id = int(team_id)
-    chiave = f"_ml35_venduti_{league_id}_{team_id}"
-
-    if not forza:
-        cached = st.session_state.get(chiave)
-        if isinstance(cached, pd.DataFrame):
-            return cached
 
     conn = _portal_raw_connection()
     try:
         df = pd.read_sql_query("""
             SELECT
-                c.player_id AS Id,
-                c.ruolo_classico AS R,
-                c.ruolo_mantra AS RM,
-                c.nome AS Nome,
-                c.squadra AS Squadra,
-                c.quotazione_attuale AS "Qt.A",
-                c.quotazione_iniziale AS "Qt.I",
-                c.differenza AS "Diff.",
-                c.quotazione_attuale_mantra AS "Qt.A M",
-                c.quotazione_iniziale_mantra AS "Qt.I M",
-                c.differenza_mantra AS "Diff.M",
-                c.fvm AS FVM,
-                c.fvm_mantra AS "FVM M",
-                'AVVERSARIO' AS Stato,
-                lp.prezzo_assegnazione AS Prezzo,
-                COALESCE(t.nome,'') AS "Acquistato da"
+                c.nome AS "NOME GIOCATORE",
+                c.ruolo_mantra AS "RUOLO",
+                c.squadra AS "SQUADRA",
+                lp.prezzo_assegnazione AS "PREZZO",
+                COALESCE(t.nome,'') AS "ASSEGNATO A"
             FROM league_players lp
             JOIN league_player_catalog c
               ON c.league_id=lp.league_id
              AND c.player_id=lp.player_id
-            LEFT JOIN teams t
+            JOIN teams t
               ON t.league_id=lp.league_id
              AND t.id=lp.assigned_team_id
             WHERE lp.league_id=?
@@ -30089,25 +30033,20 @@ def venduti_avversari_normalizzati_multilega(
               AND lp.assigned_team_id<>?
             ORDER BY c.nome COLLATE NOCASE
         """, conn, params=(league_id, team_id))
-
-        colonne = [
-            "Id","R","RM","Nome","Squadra","Qt.A","Qt.I","Diff.",
-            "Qt.A M","Qt.I M","Diff.M","FVM","FVM M","Stato",
-            "Prezzo","Acquistato da"
-        ]
-        for col in colonne:
-            if col not in df.columns:
-                df[col] = pd.Series(dtype="object")
-        df = df[colonne]
     finally:
         _portal_close(conn)
 
-    st.session_state[chiave] = df
-    return df
-
-
-
-
+    colonne = [
+        "NOME GIOCATORE",
+        "RUOLO",
+        "SQUADRA",
+        "PREZZO",
+        "ASSEGNATO A",
+    ]
+    for col in colonne:
+        if col not in df.columns:
+            df[col] = pd.Series(dtype="object")
+    return df[colonne]
 
 
 
@@ -30816,244 +30755,106 @@ def callback_bid_personalizzato_v130(
     )
 
 
-@st.fragment(run_every="2s")
+@st.fragment(run_every="1s")
 def render_bidding_inline_asta_v126():
     """
-    V126 - bidding integrato direttamente nella pagina ASTA.
-
-    Il riconoscimento squadra usa ml_team_id, non RUOLI_ATTIVI.
+    V132 - ASTA squadra: un solo fragment live, una sola query per refresh.
+    Nessun timer e nessuna ricerca giocatore durante il lotto.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
 
     if league_id is None or team_id is None:
+        st.info("Seleziona una squadra della lega.")
         return
 
     league_id = int(league_id)
     team_id = int(team_id)
+    t0 = time.perf_counter()
 
     try:
-        assicura_schema_timer_v129(league_id)
-    except Exception as _schema_error:
-        st.error(
-            "Impossibile aggiornare lo schema timer dell'asta: "
-            + str(_schema_error)
-        )
-        return
-
-    _perf_start = time.perf_counter()
-
-    try:
-        _auto_esito = auto_finalizza_lotto_scaduto_multilega(
-            league_id
-        )
-        if _auto_esito:
-            st.session_state["team_bid_msg"] = (
-                f'⏱ {_auto_esito["team"]} si aggiudica il giocatore '
-                f'a {_auto_esito["prezzo"]:g} crediti.'
-            )
-    except Exception as _auto_errore:
-        st.caption(
-            "Auto-assegnazione in attesa: " + str(_auto_errore)
-        )
-
-    try:
-        stato = snapshot_bidding_asta_team_v126(
+        stato = snapshot_lotto_live_v132(
             league_id,
             team_id
         )
     except Exception as errore:
-        st.warning(
-            "Impossibile leggere l'asta live: " + str(errore)
-        )
+        st.warning("Impossibile leggere l'asta live: " + str(errore))
         return
 
-    _elapsed = time.perf_counter() - _perf_start
+    if st.session_state.get("team_bid_msg"):
+        st.success(st.session_state.pop("team_bid_msg"))
+    if st.session_state.get("team_bid_error"):
+        st.error(st.session_state.pop("team_bid_error"))
 
     st.markdown("### 📡 ASTA LIVE")
-    st.caption(
-        "Aggiornamento automatico ogni 2 secondi."
-    )
-
-    if st.session_state.get("team_bid_msg"):
-        st.success(
-            st.session_state.pop("team_bid_msg")
-        )
-
-    if st.session_state.get("team_bid_error"):
-        st.error(
-            st.session_state.pop("team_bid_error")
-        )
 
     if stato is None:
         st.info(
             "⏳ Nessun giocatore è attualmente all'asta. "
             "Attendi l'apertura del lotto da parte del Banditore."
         )
-
-        if st.button(
-            "⟳ AGGIORNA SUBITO",
-            use_container_width=True,
-            key="v126_asta_refresh_no_lot"
-        ):
-            st.rerun(scope="fragment")
-
-        if "ADMIN" in RUOLI_ATTIVI and _elapsed >= 0.75:
-            st.caption(
-                f"⏱ Snapshot ASTA LIVE: {_elapsed:.2f} s"
-            )
         return
 
-    if stato["stato"] == "OPEN":
-        st.success("🟢 OFFERTE APERTE")
-    else:
-        st.warning(
-            "🟠 OFFERTE CHIUSE · assegnazione in corso"
-        )
-
-    _html_asta_live = (
-        '<div style="'
-        'background:#071a2f;'
-        'border:2px solid #f5b51b;'
-        'border-radius:14px;'
-        'padding:18px 22px;'
-        'margin:6px 0 14px 0;'
-        'color:#fff;'
-        '">'
-        '<div style="'
-        'font-size:12px;'
-        'color:#94a3b8;'
-        'font-weight:800;'
-        'letter-spacing:.4px;'
-        '">'
-        'GIOCATORE IN ASTA'
-        '</div>'
-        '<div style="'
-        'font-size:30px;'
-        'font-weight:950;'
-        'margin-top:3px;'
-        '">'
-        + html.escape(stato["nome"])
-        + '</div>'
-        '<div style="'
-        'font-size:16px;'
-        'color:#dbeafe;'
-        'margin-top:4px;'
-        '">'
-        + html.escape(stato["squadra"])
-        + '&nbsp;·&nbsp;'
-        + html.escape(stato["ruolo_mantra"])
-        + '&nbsp;·&nbsp; FVM '
-        + f'{stato["fvm"]:g}'
-        + '</div>'
-        '</div>'
-    )
-
-    st.markdown(
-        _html_asta_live,
-        unsafe_allow_html=True
-    )
+    render_card_giocatore_live_v132(stato)
 
     if stato["current_bid"] is None:
-        st.info(
-            f'Nessuna offerta · partenza **{stato["offerta_minima"]:g}** crediti.'
-        )
+        st.info("Nessuna offerta registrata.")
     elif stato["current_team_id"] == team_id:
         st.success(
-            f'🏆 Sei il miglior offerente a '
-            f'**{stato["current_bid"]:g}** crediti.'
+            f'🏆 Sei il miglior offerente · '
+            f'**{stato["current_bid"]:g} crediti**'
         )
     else:
         st.warning(
-            f'Migliore offerta: '
-            f'**{stato["current_bid"]:g}** crediti · '
+            f'🏆 Migliore offerta: **{stato["current_bid"]:g}** crediti · '
             f'**{stato["current_team"]}**'
         )
 
-    _timer_sec = secondi_timer_asta_v128(
-        stato.get("bid_deadline_ts")
+    st.markdown("#### Offerte per squadra")
+    st.dataframe(
+        _tabella_offerte_live_v132(stato),
+        use_container_width=True,
+        hide_index=True
     )
 
-    if stato["current_bid"] is None:
+    team = stato.get("team")
+    if team is None:
+        return
+
+    # Le maschere spariscono se la squadra è già la migliore offerente.
+    if stato["current_team_id"] == team_id:
         st.caption(
-            "⏱ Il timer partirà dalla prima offerta."
+            "Le maschere di offerta ricompariranno automaticamente "
+            "se un'altra squadra effettua un rilancio."
         )
-    elif _timer_sec is not None:
-        if _timer_sec > 0:
-            st.markdown(
-                f"### ⏱ {_timer_sec} secondi all'assegnazione automatica"
-            )
-            st.progress(
-                max(0.0, min(1.0, _timer_sec / 10.0))
-            )
-        else:
-            st.warning(
-                "⏱ Timer scaduto · assegnazione automatica in corso..."
-            )
-
-    _m1, _m2, _m3, _m4 = st.columns(4)
-
-    _m1.metric(
-        "Budget residuo",
-        f'{stato["residuo"]:g}'
-    )
-    _m2.metric(
-        "Offerta minima",
-        f'{stato["offerta_minima"]:g}'
-    )
-    _m3.metric(
-        "Offerta massima",
-        f'{stato["offerta_massima"]:g}'
-    )
-    _m4.metric(
-        "Rosa",
-        f'{stato["numero_rosa"]}/{stato["max_giocatori"]}'
-    )
-
-    st.caption(
-        f'Incremento minimo {stato["incremento"]:g} · '
-        f'Riserva rosa {stato["riserva_minima"]:g} · '
-        f'Portieri {stato["portieri_attuali"]}/{stato["min_portieri"]}'
-    )
-
-    if not stato["can_bid"]:
-        st.info("ℹ️ " + str(stato["motivo"]))
-
+    elif not team["can_bid"]:
+        st.info("ℹ️ " + str(team["motivo"]))
     else:
-        minimo = float(stato["offerta_minima"])
-        massimo = float(stato["offerta_massima"])
+        minimo = float(team["offerta_minima"])
+        massimo = float(team["offerta_massima"])
 
         st.markdown("#### 💰 Fai la tua offerta")
 
-        _c1, _c2, _c3 = st.columns(3)
+        m1,m2,m3 = st.columns(3)
+        m1.metric("Budget residuo", f'{team["residuo"]:g}')
+        m2.metric("Offerta minima", f"{minimo:g}")
+        m3.metric("Offerta massima", f"{massimo:g}")
 
+        c1,c2,c3 = st.columns(3)
         rapidi = [
             ("OFFERTA MINIMA", minimo),
             ("+5", min(massimo, minimo + 5)),
             ("+10", min(massimo, minimo + 10)),
         ]
 
-        for col, (label, valore) in zip(
-            (_c1, _c2, _c3),
-            rapidi
-        ):
+        for col,(label,valore) in zip((c1,c2,c3),rapidi):
             with col:
                 st.button(
                     f"{label} · {valore:g}",
-                    type=(
-                        "primary"
-                        if label == "OFFERTA MINIMA"
-                        else "secondary"
-                    ),
                     use_container_width=True,
-                    disabled=(
-                        valore < minimo - 1e-9
-                        or valore > massimo + 1e-9
-                    ),
-                    key=(
-                        f"v130_bid_quick_"
-                        f"{stato['lot_id']}_{team_id}_{label}"
-                    ),
+                    type="primary" if label=="OFFERTA MINIMA" else "secondary",
+                    disabled=valore < minimo or valore > massimo,
+                    key=f"v132_bid_{stato['lot_id']}_{team_id}_{label}",
                     on_click=callback_bid_rapido_v130,
                     args=(
                         league_id,
@@ -31063,124 +30864,40 @@ def render_bidding_inline_asta_v126():
                     )
                 )
 
-        _custom_bid_key = (
-            f"v130_bid_custom_{stato['lot_id']}_{team_id}"
-        )
-
-        _custom_now = st.session_state.get(
-            _custom_bid_key,
-            minimo
-        )
+        custom_key = f"v132_custom_{stato['lot_id']}_{team_id}"
+        current = st.session_state.get(custom_key, minimo)
         try:
-            _custom_now = float(_custom_now)
+            current = float(current)
         except Exception:
-            _custom_now = minimo
-
-        if (
-            _custom_now < minimo
-            or _custom_now > max(minimo, massimo)
-        ):
-            st.session_state[_custom_bid_key] = minimo
+            current = minimo
+        if current < minimo or current > max(minimo,massimo):
+            st.session_state[custom_key] = minimo
 
         st.number_input(
             "Offerta personalizzata",
             min_value=minimo,
-            max_value=max(minimo, massimo),
-            value=float(
-                st.session_state.get(
-                    _custom_bid_key,
-                    minimo
-                )
-            ),
-            step=float(stato["incremento"]),
-            key=_custom_bid_key
+            max_value=max(minimo,massimo),
+            value=float(st.session_state.get(custom_key,minimo)),
+            step=float(team["incremento"]),
+            key=custom_key
         )
-
         st.button(
             "💰 INVIA OFFERTA",
             type="primary",
             use_container_width=True,
-            key=(
-                f"v130_bid_custom_submit_"
-                f"{stato['lot_id']}_{team_id}"
-            ),
+            key=f"v132_custom_submit_{stato['lot_id']}_{team_id}",
             on_click=callback_bid_personalizzato_v130,
             args=(
                 league_id,
                 stato["lot_id"],
                 team_id,
-                _custom_bid_key
+                custom_key
             )
         )
 
-    _r1, _r2 = st.columns(2)
-
-    with _r1:
-        if st.button(
-            "⟳ AGGIORNA ASTA LIVE",
-            use_container_width=True,
-            key=(
-                f"v126_asta_refresh_"
-                f"{stato['lot_id']}_{team_id}"
-            )
-        ):
-            st.rerun(scope="fragment")
-
-    with _r2:
-        history_key = (
-            f"v126_bid_history_"
-            f"{stato['lot_id']}_{team_id}"
-        )
-
-        if st.button(
-            "📜 ULTIME OFFERTE",
-            use_container_width=True,
-            key=(
-                f"v126_bid_history_toggle_"
-                f"{stato['lot_id']}_{team_id}"
-            )
-        ):
-            st.session_state[history_key] = not bool(
-                st.session_state.get(history_key, False)
-            )
-
-    if st.session_state.get(history_key, False):
-        try:
-            storico = stato_offerte_lotto_multilega(
-                league_id,
-                stato["lot_id"],
-                15,
-                include_history=True
-            )["bids"]
-        except Exception as errore:
-            storico = []
-            st.warning(
-                "Impossibile leggere lo storico offerte: "
-                + str(errore)
-            )
-
-        if storico:
-            st.dataframe(
-                pd.DataFrame([
-                    {
-                        "Squadra": b["team"],
-                        "Offerta": b["amount"],
-                        "Data": b["created_at"],
-                    }
-                    for b in storico
-                ]),
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.caption("Nessuna offerta registrata.")
-
-    if "ADMIN" in RUOLI_ATTIVI and _elapsed >= 0.75:
-        st.caption(
-            f"⏱ Snapshot ASTA LIVE: {_elapsed:.2f} s"
-        )
-
-    st.markdown("---")
+    elapsed = time.perf_counter() - t0
+    if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
+        st.caption(f"⏱ Live ASTA: {elapsed:.2f} s")
 
 
 
@@ -31892,800 +31609,51 @@ def render_navigazione_e_pagina():
 
     elif sezione == "ASTA":
 
-        # V126 · bidding direttamente nella pagina ASTA.
-        # Riconoscimento squadra basato su ml_team_id, non sul ruolo TEAM.
+        # V132: la sezione ASTA è esclusivamente la console live della squadra.
+        # Ricerca/listone restano nella sezione LISTONE.
         render_bidding_inline_asta_v126()
 
-
-        st.markdown(
-            """
-            <style>
-            /* VERSIONE B - CONSOLE ASTA COMPATTA */
-            section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
-                font-size:1.22rem !important;
-                font-weight:800 !important;
-                text-align:center !important;
-                min-height:58px !important;
-                border:2px solid #94a3b8 !important;
-                border-radius:10px !important;
-                background:#ffffff !important;
-            }
-
-            section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
-                border:2px solid #94a3b8 !important;
-                border-radius:10px !important;
-                background:#ffffff !important;
-                min-height:50px !important;
-            }
-
-            section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within > div,
-            section[data-testid="stMain"] div[data-testid="stNumberInput"]:focus-within input {
-                border-color:#071a2f !important;
-                box-shadow:0 0 0 3px rgba(7,26,47,.10) !important;
-            }
-
-            /* DISPONIBILITÀ: croce rossa compatta e ben visibile */
-            div[class*="st-key-btn_infortunio_"] .stButton > button {
-                border:none !important;
-                background:transparent !important;
-                box-shadow:none !important;
-                padding:0 !important;
-                min-height:42px !important;
-                height:42px !important;
-                font-size:1.55rem !important;
-                line-height:1 !important;
-            }
-
-            /* STRISCIA OPERATIVA ASTA: stessa altezza reale per tutti i blocchi */
-            div[class*="st-key-btn_acquista_"] .stButton,
-            div[class*="st-key-btn_avversario_"] .stButton {
-                height:76px !important;
-            }
-
-            div[class*="st-key-btn_acquista_"] .stButton > button,
-            div[class*="st-key-btn_avversario_"] .stButton > button {
-                min-height:76px !important;
-                height:76px !important;
-                width:100% !important;
-                font-weight:900 !important;
-                font-size:1rem !important;
-                border-radius:8px !important;
-                padding-top:0 !important;
-                padding-bottom:0 !important;
-            }
-
-            /* OFFERTA: alza l'intero controllo, compresi +/- */
-            section[data-testid="stMain"] div[data-testid="stNumberInput"] > div,
-            section[data-testid="stMain"] div[data-testid="stNumberInput"] [data-baseweb="input"],
-            section[data-testid="stMain"] div[data-testid="stNumberInput"] [data-baseweb="base-input"] {
-                min-height:76px !important;
-                height:76px !important;
-            }
-
-            section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
-                min-height:76px !important;
-                height:76px !important;
-                font-size:1.22rem !important;
-                font-weight:800 !important;
-                text-align:center !important;
-                border-radius:8px 0 0 8px !important;
-                padding-top:0 !important;
-                padding-bottom:0 !important;
-            }
-
-            section[data-testid="stMain"] div[data-testid="stNumberInput"] button {
-                height:38px !important;
-                min-height:38px !important;
-            }
-
-            /* Metriche: riferimento visivo per l'altezza della riga */
-            section[data-testid="stMain"] div[data-testid="stMetric"] {
-                min-height:76px !important;
-                height:76px !important;
-                padding:8px 12px !important;
-                display:flex !important;
-                flex-direction:column !important;
-                justify-content:center !important;
-                box-sizing:border-box !important;
-            }
-
-            @media (max-width:768px) {
-                section[data-testid="stMain"] div[data-testid="stNumberInput"] input {
-                    font-size:1.08rem !important;
-                    min-height:52px !important;
-                }
-
-                section[data-testid="stMain"] div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
-                    min-height:46px !important;
-                }
-
-                div[class*="st-key-btn_acquista_"] .stButton > button,
-                div[class*="st-key-btn_avversario_"] .stButton > button {
-                    min-height:68px !important;
-                    height:68px !important;
-                }
-            }
-
-    /* ==========================================================
-       V74 - POPUP DETTAGLIO IQR
-       ========================================================== */
-
-    /* Titolo interno IQR nel popup */
-    div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-star,
-    div[role="dialog"] .iqr-gauge-card .iqr-v73-star {
-        color: #ffc21c !important;
-        font-size: 26px !important;
-        line-height: 1 !important;
-        font-weight: 950 !important;
-    }
-
-    div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-title,
-    div[role="dialog"] .iqr-gauge-card .iqr-v73-title {
-        color: #111827 !important;
-        font-size: 24px !important;
-        line-height: 1 !important;
-        font-weight: 900 !important;
-    }
-
-    div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-percent,
-    div[role="dialog"] .iqr-gauge-card .iqr-v73-percent {
-        color: #ffc21c !important;
-        font-size: 24px !important;
-        line-height: 1 !important;
-        font-weight: 950 !important;
-    }
-
-    /* Stato qualitativo nel popup */
-    div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-status,
-    div[role="dialog"] .iqr-gauge-card .iqr-v73-status {
-        color: #ffffff !important;
-        font-size: 22px !important;
-        line-height: 1.15 !important;
-        font-weight: 900 !important;
-        padding: 10px 22px !important;
-    }
-
-    /* Mantiene ben leggibile e centrata l'intestazione */
-    div[data-testid="stDialog"] .iqr-gauge-card .iqr-v73-top,
-    div[role="dialog"] .iqr-gauge-card .iqr-v73-top {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: 10px !important;
-    }
-
-    /* Compatibilità con eventuale markup IQR precedente usato nel dettaglio */
-    div[data-testid="stDialog"] .iqr-v71-star,
-    div[role="dialog"] .iqr-v71-star {
-        color: #ffc21c !important;
-        font-size: 26px !important;
-        font-weight: 950 !important;
-    }
-
-    div[data-testid="stDialog"] .iqr-v71-title,
-    div[role="dialog"] .iqr-v71-title {
-        color: #111827 !important;
-        font-size: 24px !important;
-        font-weight: 900 !important;
-    }
-
-    div[data-testid="stDialog"] .iqr-v71-percent,
-    div[role="dialog"] .iqr-v71-percent {
-        color: #ffc21c !important;
-        font-size: 24px !important;
-        font-weight: 950 !important;
-    }
-
-    div[data-testid="stDialog"] .iqr-v71-status,
-    div[role="dialog"] .iqr-v71-status {
-        color: #ffffff !important;
-        font-size: 22px !important;
-        line-height: 1.15 !important;
-        font-weight: 900 !important;
-    }
-    </style>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.caption(
-            "Analisi e ricerca giocatori"
-        )
-
-        df = df_completo.copy()
-
-        if df.empty:
-            st.info("Prima devi caricare il listone.")
-
-        else:
-            disponibili = (
-                df[
-                    df["Stato"] == "DISPONIBILE"
-                ]
-                .copy()
-                .sort_values("Nome")
-                .reset_index(drop=True)
-            )
-
-            if disponibili.empty:
-
-                st.info(
-                    "Nessun giocatore disponibile."
-                )
-
-            else:
-
-                opzioni_asta = (
-                    disponibili
-                    .apply(
-                        lambda r:
-                        f"{r['Nome']} — "
-                        f"{r['Squadra']} — "
-                        f"{r['RM']}",
-                        axis=1
-                    )
-                    .tolist()
-                )
-
-                scelta = st.selectbox(
-                    "🔎 CERCA GIOCATORE / SQUADRA / RUOLO",
-                    options=opzioni_asta,
-                    index=None,
-                    placeholder=(
-                        "Scrivi nome, squadra o ruolo…"
-                    ),
-                    key="search_select_asta"
-                )
-
-                if scelta is None:
-
-                    st.info(
-                        "⌨️ Scrivi poche lettere: il giocatore viene proposto "
-                        "subito. Puoi cercare anche per squadra o ruolo."
-                    )
-
-                else:
-
-                    giocatore = (
-                        disponibili.iloc[
-                            opzioni_asta.index(
-                                scelta
-                            )
-                        ]
-                    )
-
-                    colore_nome_asta = (
-                        colore_fvm_mantra(
-                            giocatore.get(
-                                "RM",
-                                ""
-                            ),
-                            giocatore.get(
-                                "FVM M"
-                            )
-                        )
-                    )
-
-                    priorita_acquisto = (
-                        valuta_priorita_acquisto(
-                            giocatore,
-                            df_rosa_globale,
-                            df_completo
-                        )
-                    )
-
-                    (
-                        bg_priorita,
-                        fg_priorita,
-                        bordo_priorita
-                    ) = stile_priorita_acquisto(
-                        priorita_acquisto[
-                            "Etichetta"
-                        ]
-                    )
-
-                    consiglio_budget = (
-                        calcola_budget_massimo_consigliato(
-                            giocatore,
-                            priorita_acquisto,
-                            budget_asta,
-                            budget_rimanente,
-                            numero_rosa
-                        )
-                    )
-
-                    g1, g2, g3, g4, g5, g6, g7, g8 = (
-                        st.columns(
-                            [
-                                1.06,
-                                0.72,
-                                0.68,
-                                0.58,
-                                0.72,
-                                0.52,
-                                1.12,
-                                0.88
-                            ]
-                        )
-                    )
-
-                    with g1:
-
-                        st.markdown(
-                            f"""
-                            <div class="asta-player-mobile-fix">
-                                <div style="
-                                    font-size:0.875rem;
-                                    color:rgba(49,51,63,0.65);
-                                    margin-bottom:0.15rem;
-                                ">
-                                    Giocatore
-                                </div>
-                                <div style="
-                                    font-size:1.35rem;
-                                    line-height:1.15;
-                                    font-weight:700;
-                                    color:{colore_nome_asta};
-                                    white-space:normal;
-                                    overflow-wrap:anywhere;
-                                ">
-                                    {html.escape(str(giocatore["Nome"]))}
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-                    g2.metric(
-                        "Squadra",
-                        giocatore["Squadra"]
-                    )
-
-                    g3.metric(
-                        "Ruolo",
-                        giocatore["RM"]
-                    )
-
-                    sigle_specialista = (
-                        sigle_specialista_giocatore(
-                            giocatore["Nome"],
-                            giocatore["Squadra"]
-                        )
-                    )
-
-                    g4.metric(
-                        "R / CP",
-                        sigle_specialista
-                        if sigle_specialista
-                        else "—"
-                    )
-
-                    info_disp = info_disponibilita_giocatore(
-                        giocatore["Nome"],
-                        giocatore["Squadra"]
-                    )
-
-                    with g5:
-                        st.caption("Disponibilità")
-                        if info_disp["disponibile"]:
-                            st.markdown(
-                                '<div style="font-size:1.65rem;line-height:1.55;'
-                                'font-weight:900;color:#16a34a;">✓</div>',
-                                unsafe_allow_html=True
-                            )
-                        else:
-                            if st.button(
-                                "❌",
-                                key=f"btn_infortunio_{int(giocatore['Id'])}",
-                                help="Clicca per vedere infortunio e tempi di recupero"
-                            ):
-                                mostra_dettaglio_infortunio(
-                                    giocatore["Nome"],
-                                    giocatore["Squadra"],
-                                    info_disp["dettaglio"]
-                                )
-
-                    g6.metric(
-                        "FVM",
-                        giocatore["FVM"]
-                    )
-
-                    with g7:
-
-                        dettaglio_priorita = (
-                            f"Ruolo {priorita_acquisto['Ruolo']} · "
-                            f"fascia {priorita_acquisto['Fascia candidato'].title()} · "
-                            f"in rosa {priorita_acquisto['Copertura']} · "
-                            f"rimasti {priorita_acquisto['Disponibili']}"
-                        )
-
-                        with st.container(
-                            key=(
-                                "priorita_click_"
-                                f"{int(giocatore['Id'])}"
-                            )
-                        ):
-
-                            st.markdown(
-                                f"""
-                                <div style="
-                                    min-height:72px;
-                                    border:2px solid {bordo_priorita};
-                                    border-radius:10px;
-                                    background:{bg_priorita};
-                                    padding:9px 10px;
-                                    display:flex;
-                                    flex-direction:column;
-                                    justify-content:center;
-                                    box-sizing:border-box;
-                                    cursor:pointer;
-                                ">
-                                    <div style="
-                                        font-size:0.78rem;
-                                        color:#475569;
-                                        margin-bottom:4px;
-                                        font-weight:600;
-                                    ">
-                                        Priorità acquisto
-                                    </div>
-                                    <div style="
-                                        font-size:1.00rem;
-                                        line-height:1.10;
-                                        font-weight:800;
-                                        color:{fg_priorita};
-                                    ">
-                                        {html.escape(
-                                            priorita_acquisto[
-                                                "Etichetta"
-                                            ]
-                                        )}
-                                    </div>
-                                    <div style="
-                                        font-size:0.66rem;
-                                        line-height:1.15;
-                                        color:#64748b;
-                                        margin-top:4px;
-                                    ">
-                                        {html.escape(
-                                            dettaglio_priorita
-                                        )}
-                                    </div>
-                                    <div style="
-                                        font-size:0.62rem;
-                                        line-height:1.1;
-                                        color:#64748b;
-                                        margin-top:5px;
-                                        font-weight:600;
-                                    ">
-                                        Giocatori disponibili
-                                    </div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True
-                            )
-
-                            if st.button(
-                                "Giocatori disponibili",
-                                key=(
-                                    "btn_priorita_"
-                                    f"{int(giocatore['Id'])}"
-                                ),
-                            ):
-
-                                mostra_dettaglio_priorita_acquisto(
-                                    giocatore,
-                                    priorita_acquisto,
-                                    df_completo
-                                )
-
-                    with g8:
-
-                        st.markdown(
-                            f"""
-                            <div style="
-                                min-height:72px;
-                                border:2px solid #f5b51b;
-                                border-radius:10px;
-                                background:#fff8e6;
-                                padding:9px 10px;
-                                display:flex;
-                                flex-direction:column;
-                                justify-content:center;
-                                box-sizing:border-box;
-                            ">
-                                <div style="
-                                    font-size:0.76rem;
-                                    color:#475569;
-                                    margin-bottom:4px;
-                                    font-weight:700;
-                                ">
-                                    Budget max consigliato
-                                </div>
-                                <div style="
-                                    font-size:1.32rem;
-                                    line-height:1.05;
-                                    font-weight:900;
-                                    color:#071a2f;
-                                ">
-                                    {consiglio_budget["Massimo"]} €
-                                </div>
-                                <div style="
-                                    font-size:0.62rem;
-                                    line-height:1.15;
-                                    color:#64748b;
-                                    margin-top:5px;
-                                ">
-                                    FVM + priorità + budget residuo
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-                    chiave_prezzo = (
-                        "offerta_asta_"
-                        f"{int(giocatore['Id'])}"
-                    )
-
-                    if chiave_prezzo not in st.session_state:
-                        st.session_state[
-                            chiave_prezzo
-                        ] = 1.00
-
-                    c1, c2, c3, c4, c5 = (
-                        st.columns(
-                            [
-                                1.15,
-                                1.20,
-                                1.20,
-                                0.85,
-                                0.85
-                            ],
-                            vertical_alignment="bottom"
-                        )
-                    )
-
-                    with c1:
-
-                        prezzo = st.number_input(
-                            "Offerta",
-                            min_value=0.10,
-                            max_value=5000.00,
-                            step=0.10,
-                            format="%.2f",
-                            key=chiave_prezzo,
-                            label_visibility="collapsed"
-                        )
-
-                    prezzo = round(
-                        float(prezzo),
-                        2
-                    )
-
-                    nuovo_valore = round(
-                        valore_acquisti + prezzo,
-                        2
-                    )
-
-                    nuova_spesa = (
-                        calcola_spesa_effettiva(
-                            nuovo_valore
-                        )
-                    )
-
-                    incremento = round(
-                        nuova_spesa
-                        - spesa_effettiva,
-                        2
-                    )
-
-                    valido, motivo = (
-                        verifica_acquisto_regole(
-                            df_rosa_globale,
-                            giocatore["RM"]
-                        )
-                    )
-
-                    with c2:
-
-                        if st.button(
-                            "✅ ACQUISTA",
-                            use_container_width=True,
-                            type="primary",
-                            disabled=(not valido),
-                            key=(
-                                "btn_acquista_"
-                                f"{int(giocatore['Id'])}"
-                            )
-                        ):
-
-                            esegui_operazione(
-                                int(giocatore["Id"]),
-                                "ACQUISTO",
-                                "MIO",
-                                prezzo,
-                                0
-                            )
-
-                            st.rerun()
-
-                    with c3:
-
-                        if st.button(
-                            "🔴 VENDUTO AD AVVERSARIO",
-                            use_container_width=True,
-                            key=(
-                                "btn_avversario_"
-                                f"{int(giocatore['Id'])}"
-                            )
-                        ):
-
-                            esegui_operazione(
-                                int(giocatore["Id"]),
-                                "VENDUTO AVVERSARIO",
-                                "AVVERSARIO",
-                                None,
-                                0
-                            )
-
-                            st.rerun()
-
-                    with c4:
-
-                        st.metric(
-                            "Impatto effettivo",
-                            f"{formatta_crediti(incremento)} €"
-                        )
-
-                    with c5:
-
-                        st.metric(
-                            "Nuova spesa",
-                            f"{formatta_crediti(nuova_spesa)} €"
-                        )
-
-                    if not valido:
-
-                        st.error(
-                            "⛔ " + motivo
-                        )
-
-
-
-    # ============================================================
-    # VENDUTI AD AVVERSARI
-    # ============================================================
 
     elif sezione == "VENDUTI AD AVVERSARI":
 
         st.subheader("🔴 Venduti ad avversari")
 
-        if "messaggio_reset_avversari" in st.session_state:
+        league_id = (
+            st.session_state.get("ml_league_id")
+            or st.session_state.get("selected_league_id")
+        )
+        team_id = (
+            st.session_state.get("ml_team_id")
+            or st.session_state.get("selected_team_id")
+        )
 
-            st.success(
-                st.session_state.pop(
-                    "messaggio_reset_avversari"
-                )
-            )
-
-        _league_v117 = st.session_state.get("selected_league_id")
-        _team_v117 = st.session_state.get("selected_team_id")
-
-        if _league_v117 and _team_v117:
+        if league_id is None or team_id is None:
+            st.info("Seleziona una squadra della lega.")
+        else:
             try:
                 avversari = venduti_avversari_normalizzati_multilega(
-                    int(_league_v117),
-                    int(_team_v117)
+                    int(league_id),
+                    int(team_id)
                 )
-            except Exception:
-                _stato_safe = df_completo.get(
-                    "Stato",
-                    pd.Series("", index=df_completo.index, dtype="object")
+            except Exception as errore:
+                st.error(
+                    "Impossibile leggere i giocatori venduti: "
+                    + str(errore)
                 )
-                avversari = (
-                    df_completo[_stato_safe == "AVVERSARIO"]
-                    .copy()
-                )
-        else:
-            _stato_safe = df_completo.get(
-                "Stato",
-                pd.Series("", index=df_completo.index, dtype="object")
-            )
-            avversari = (
-                df_completo[_stato_safe == "AVVERSARIO"]
-                .copy()
-            )
+                avversari = pd.DataFrame()
 
-        if "Nome" in avversari.columns:
-            avversari = (
-                avversari
-                .sort_values("Nome")
-                .reset_index(drop=True)
-            )
-        else:
-            avversari = avversari.reset_index(drop=True)
-
-        if avversari.empty:
-
-            st.info("Nessun giocatore venduto agli avversari.")
-
-        else:
-
-            reset_col1, reset_col2 = st.columns(
-                [
-                    1.8,
-                    4.2
-                ]
-            )
-
-            with reset_col1:
-
-                if st.button(
-                    "↩️ RIPRISTINA TUTTI",
-                    use_container_width=True,
-                    key="btn_reset_tutti_avversari"
-                ):
-
-                    conferma_ripristina_tutti_avversari()
-
-            with reset_col2:
-
+            if avversari.empty:
+                st.info("Nessun giocatore venduto agli avversari.")
+            else:
                 st.caption(
-                    "Rende nuovamente disponibili tutti i giocatori "
-                    "assegnati agli avversari."
+                    f"Giocatori assegnati alle altre squadre: {len(avversari)}"
+                )
+                st.dataframe(
+                    avversari,
+                    use_container_width=True,
+                    hide_index=True
                 )
 
-            st.caption(
-                f"Giocatori venduti agli avversari: {len(avversari)}"
-            )
-
-            intestazione = st.columns(
-                [4, 2, 2, 1, 0.8]
-            )
-
-            for col, titolo in zip(
-                intestazione,
-                ["Giocatore", "Squadra", "Ruolo", "FVM", "Ripristina"]
-            ):
-                col.markdown(f"**{titolo}**")
-
-            for _, riga in avversari.iterrows():
-
-                cols = st.columns(
-                    [4, 2, 2, 1, 0.8],
-                    vertical_alignment="center"
-                )
-
-                colore_nome = colore_fvm_mantra(
-                    riga.get("RM", ""),
-                    riga.get("FVM M")
-                )
-
-                cols[0].markdown(
-                    f"<span style='color:{colore_nome};font-weight:800;'>"
-                    f"{html.escape(str(riga['Nome']))}</span>",
-                    unsafe_allow_html=True
-                )
-                cols[1].write(riga["Squadra"])
-                cols[2].write(riga["RM"])
-                cols[3].write(riga["FVM"])
-
-                with cols[4]:
-                    if st.button(
-                        "↩️",
-                        key=f"ripristina_{int(riga['Id'])}",
-                        help="Rendi nuovamente disponibile",
-                        use_container_width=True
-                    ):
-                        conferma_ripristino_avversario(
-                            int(riga["Id"]),
-                            riga["Nome"]
-                        )
-
-
-    # ============================================================
-    # ROSA
-    # ============================================================
 
     elif sezione == "ROSA":
 
