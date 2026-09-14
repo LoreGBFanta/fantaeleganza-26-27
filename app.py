@@ -12212,7 +12212,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.0"
+MULTILEGA_SCHEMA_VERSION = "5.0.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -13294,34 +13294,60 @@ def schermata_le_mie_leghe(accessi):
             st.rerun()
         st.stop()
 
-    # Raggruppa le membership della stessa lega.
+    # V137: i permessi possono trovarsi su membership diverse della stessa
+    # lega (es. riga ADMIN senza team + riga TEAM con team). Li aggreghiamo
+    # per lega senza perdere la membership concreta della squadra.
     gruppi = {}
+
     for accesso in accessi:
         lid = int(accesso["league_id"])
+
         gruppo = gruppi.setdefault(lid, {
             "league_id": lid,
             "league_nome": accesso["league_nome"],
             "stagione": accesso["stagione"],
             "modalita": accesso["modalita"],
+            "ruoli_lega": set(),
             "SQUADRA": None,
             "BANDITORE": None,
             "ADMIN": None,
         })
 
-        ruoli = {str(x).upper() for x in accesso.get("ruoli", [])}
+        ruoli_riga = {
+            str(x).upper()
+            for x in accesso.get("ruoli", [])
+        }
+        gruppo["ruoli_lega"].update(ruoli_riga)
 
+        # SQUADRA deve usare la membership che contiene davvero team_id.
         if (
-            "TEAM" in ruoli
+            "TEAM" in ruoli_riga
             and accesso.get("team_id") is not None
             and gruppo["SQUADRA"] is None
         ):
             gruppo["SQUADRA"] = dict(accesso)
 
-        if "AUCTIONEER" in ruoli and gruppo["BANDITORE"] is None:
+        # BANDITORE/ADMIN possono essere membership senza team.
+        if (
+            "AUCTIONEER" in ruoli_riga
+            and gruppo["BANDITORE"] is None
+        ):
             gruppo["BANDITORE"] = dict(accesso)
 
-        if "ADMIN" in ruoli and gruppo["ADMIN"] is None:
+        if (
+            "ADMIN" in ruoli_riga
+            and gruppo["ADMIN"] is None
+        ):
             gruppo["ADMIN"] = dict(accesso)
+
+    # Se una stessa membership contiene più permessi, ogni modalità riceve
+    # comunque l'insieme completo dei ruoli autorizzati della lega.
+    for gruppo in gruppi.values():
+        ruoli_lega = sorted(gruppo["ruoli_lega"])
+        for modalita_accesso in ("SQUADRA", "BANDITORE", "ADMIN"):
+            accesso_ruolo = gruppo.get(modalita_accesso)
+            if accesso_ruolo is not None:
+                accesso_ruolo["ruoli"] = list(ruoli_lega)
 
     st.caption(
         "Le stesse credenziali possono essere utilizzate contemporaneamente "
@@ -13390,6 +13416,14 @@ def schermata_le_mie_leghe(accessi):
             x for x in ("SQUADRA", "BANDITORE", "ADMIN")
             if gruppo[x] is not None
         ]
+
+        if not disponibili:
+            st.warning(
+                "Questa membership non ha ancora un livello operativo "
+                "SQUADRA, BANDITORE o ADMIN assegnato."
+            )
+            continue
+
         cols = st.columns(len(disponibili))
 
         for col, ruolo in zip(cols, disponibili):
@@ -13803,19 +13837,21 @@ def dettagli_squadre_lega_multilega(league_id):
                 t.posizione,
                 t.owner_user_id,
                 COALESCE(u.username, ''),
-                COALESCE(lm.is_admin, 0),
-                COALESCE(lm.is_auctioneer, 0),
-                COALESCE(lm.is_team_member, 1),
-                COALESCE(lm.is_active, 1)
+                COALESCE(MAX(lm.is_admin), 0),
+                COALESCE(MAX(lm.is_auctioneer), 0),
+                COALESCE(MAX(lm.is_team_member), 1),
+                COALESCE(MAX(lm.is_active), 1)
             FROM teams t
             LEFT JOIN users u
               ON u.id = t.owner_user_id
             LEFT JOIN league_members lm
               ON lm.league_id = t.league_id
-             AND lm.team_id = t.id
              AND lm.user_id = t.owner_user_id
+             AND lm.is_active = 1
             WHERE t.league_id = ?
               AND t.is_active = 1
+            GROUP BY
+                t.id,t.nome,t.posizione,t.owner_user_id,u.username
             ORDER BY t.posizione, t.id
         """, (league_id,))
         risultato = [
@@ -25245,7 +25281,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.0 &nbsp;|&nbsp; V136 Accessi Separati'
+        'MULTILEGA 5.0.1 &nbsp;|&nbsp; V137 Fix Accessi Ruoli'
         '</div>',
         unsafe_allow_html=True
     )
