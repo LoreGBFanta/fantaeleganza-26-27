@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.2"
+MULTILEGA_SCHEMA_VERSION = "5.2.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25058,6 +25058,7 @@ with st.sidebar:
     )
     if st.button(
         "⇄ CAMBIA LIVELLO ACCESSO",
+        type="primary",
         use_container_width=True,
         key="ml136_switch_access"
     ):
@@ -25414,7 +25415,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.2 &nbsp;|&nbsp; V140 Ultra Fast Access + Fix Banditore'
+        'MULTILEGA 5.2.1 &nbsp;|&nbsp; V141 Pulsante Accesso Blu'
         '</div>',
         unsafe_allow_html=True
     )
