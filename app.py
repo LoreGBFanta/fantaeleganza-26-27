@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.6"
+MULTILEGA_SCHEMA_VERSION = "5.6.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25424,7 +25424,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.6 &nbsp;|&nbsp; V149 Storico Gestione Rosa'
+        'MULTILEGA 5.6.1 &nbsp;|&nbsp; V150 Fix Rosa + Filtri Storico'
         '</div>',
         unsafe_allow_html=True
     )
@@ -26870,9 +26870,109 @@ def render_storico_asta_v147():
 
     nomi_team = ["—"] + [x["nome"] for x in teams]
 
-    # Paginazione per evitare centinaia di widget simultanei.
+    # ------------------------------------------------------------
+    # V150 - ricerca e filtri storico asta
+    # ------------------------------------------------------------
+    f1, f2, f3, f4 = st.columns([3.2, 1.8, 1.8, 1.4])
+
+    with f1:
+        ricerca = st.text_input(
+            "🔎 Cerca giocatore",
+            placeholder="Nome giocatore...",
+            key=f"v150_hist_search_{league_id}"
+        ).strip()
+
+    squadre_reali = sorted(
+        {
+            str(x).strip()
+            for x in storico["SQUADRA"].dropna().tolist()
+            if str(x).strip()
+        },
+        key=str.casefold
+    )
+
+    ruoli_storico = sorted(
+        {
+            str(x).strip()
+            for x in storico["RUOLO"].dropna().tolist()
+            if str(x).strip()
+        },
+        key=str.casefold
+    )
+
+    with f2:
+        filtro_assegnato = st.selectbox(
+            "Assegnato a",
+            ["TUTTE"] + nomi_team,
+            key=f"v150_hist_filter_team_{league_id}"
+        )
+
+    with f3:
+        filtro_squadra = st.selectbox(
+            "Squadra Serie A",
+            ["TUTTE"] + squadre_reali,
+            key=f"v150_hist_filter_realteam_{league_id}"
+        )
+
+    with f4:
+        filtro_ruolo = st.selectbox(
+            "Ruolo",
+            ["TUTTI"] + ruoli_storico,
+            key=f"v150_hist_filter_role_{league_id}"
+        )
+
+    storico_filtrato = storico.copy()
+
+    if ricerca:
+        _q = ricerca.casefold()
+        storico_filtrato = storico_filtrato[
+            storico_filtrato["NOME GIOCATORE"]
+            .fillna("")
+            .astype(str)
+            .str.casefold()
+            .str.contains(_q, regex=False)
+        ]
+
+    if filtro_assegnato != "TUTTE":
+        if filtro_assegnato == "—":
+            storico_filtrato = storico_filtrato[
+                storico_filtrato["ASSEGNATO A"]
+                .fillna("—")
+                .astype(str)
+                .replace("", "—")
+                == "—"
+            ]
+        else:
+            storico_filtrato = storico_filtrato[
+                storico_filtrato["ASSEGNATO A"]
+                .fillna("")
+                .astype(str)
+                == filtro_assegnato
+            ]
+
+    if filtro_squadra != "TUTTE":
+        storico_filtrato = storico_filtrato[
+            storico_filtrato["SQUADRA"]
+            .fillna("")
+            .astype(str)
+            == filtro_squadra
+        ]
+
+    if filtro_ruolo != "TUTTI":
+        storico_filtrato = storico_filtrato[
+            storico_filtrato["RUOLO"]
+            .fillna("")
+            .astype(str)
+            == filtro_ruolo
+        ]
+
+    if storico_filtrato.empty:
+        st.info("Nessun giocatore corrisponde ai filtri selezionati.")
+        return
+
+    # Paginazione applicata DOPO ricerca e filtri.
     page_size = 25
-    totale_righe = len(storico)
+    totale_righe = len(storico_filtrato)
     totale_pagine = max(1, (totale_righe + page_size - 1) // page_size)
 
     if totale_pagine > 1:
@@ -26889,10 +26989,11 @@ def render_storico_asta_v147():
 
     start_idx = (int(pagina)-1) * page_size
     end_idx = min(start_idx + page_size, totale_righe)
-    pagina_df = storico.iloc[start_idx:end_idx].copy()
+    pagina_df = storico_filtrato.iloc[start_idx:end_idx].copy()
 
     st.caption(
-        f"Visualizzati {start_idx+1}-{end_idx} di {totale_righe} giocatori chiamati."
+        f"Visualizzati {start_idx+1}-{end_idx} di {totale_righe} "
+        f"giocatori trovati."
     )
 
     hdr = st.columns([3.1,1.2,1.8,1.1,2.0,0.75,0.8,0.8])
@@ -34200,7 +34301,6 @@ def render_navigazione_e_pagina():
                 key="rosa_mobile_view"
             ):
 
-                # Header compatto mobile
                 h1, h2, h3, h4, h5 = st.columns(
                     [2.0, 0.8, 1.4, 0.7, 0.9]
                 )
@@ -34213,15 +34313,62 @@ def render_navigazione_e_pagina():
 
                 for _, giocatore in df_rosa.iterrows():
 
-                    giocatore_id = int(
-                        giocatore["Id"]
-                    )
-
                     prezzo_attuale = float(
                         giocatore["Prezzo"]
                         or 0
                     )
-                    r5.write(formatta_crediti(prezzo_attuale))
+
+                    r1, r2, r3, r4, r5 = st.columns(
+                        [2.0, 0.8, 1.4, 0.7, 0.9],
+                        vertical_alignment="center"
+                    )
+
+                    colore_nome = (
+                        colore_fvm_mantra(
+                            giocatore.get(
+                                "RM",
+                                ""
+                            ),
+                            giocatore.get(
+                                "FVM M"
+                            )
+                        )
+                    )
+
+                    r1.markdown(
+                        f"<span style='color:{colore_nome};"
+                        f"font-weight:800;'>"
+                        f"{html.escape(str(giocatore['Nome']))}"
+                        f"</span>",
+                        unsafe_allow_html=True
+                    )
+
+                    r2.write(
+                        giocatore["RM"]
+                    )
+
+                    r3.markdown(
+                        html_titolarita_rosa(
+                            giocatore["Nome"],
+                            giocatore["Squadra"],
+                            mappa_titolarita_rosa
+                        ),
+                        unsafe_allow_html=True
+                    )
+
+                    r4.write(
+                        sigle_specialista_giocatore(
+                            giocatore["Nome"],
+                            giocatore["Squadra"]
+                        )
+                        or "—"
+                    )
+
+                    r5.write(
+                        formatta_crediti(
+                            prezzo_attuale
+                        )
+                    )
 
 
             # ----------------------------------------------------
