@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.4"
+MULTILEGA_SCHEMA_VERSION = "5.5"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25424,7 +25424,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.4 &nbsp;|&nbsp; V147 Storico Asta + Counter'
+        'MULTILEGA 5.5 &nbsp;|&nbsp; V148 Auto Live + Fast Close'
         '</div>',
         unsafe_allow_html=True
     )
@@ -31451,27 +31451,265 @@ def callback_prossimo_giocatore_v135(
 
 
 
+
+def assegna_lotto_migliore_v148(league_id, lot_id):
+    """
+    V148 FAST CLOSE.
+
+    L'offerta conclusiva è già stata validata server-side al momento
+    dell'inserimento. Alla conferma del Banditore eseguiamo solo:
+      - claim atomico OPEN -> CLOSING;
+      - assegnazione centrale league_players;
+      - projection rosters + team_budgets;
+      - storico;
+      - chiusura lotto/sessione;
+      - audit.
+
+    Nessuna rilettura di rosa/portieri/budget: evita round-trip Turso
+    duplicati nella fase più sensibile dell'asta.
+    """
+    league_id = int(league_id)
+    lot_id = int(lot_id)
+    user_id = int(st.session_state.get("auth_user_id") or 0)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+        # 1) Claim atomico + recupero vincitore/prezzo in una sola query.
+        cur.execute("""
+            UPDATE auction_lots
+            SET stato='CLOSING',
+                closing_by_user_id=?,
+                closing_at=CURRENT_TIMESTAMP,
+                version=COALESCE(version,0)+1
+            WHERE id=?
+              AND league_id=?
+              AND stato='OPEN'
+              AND current_team_id IS NOT NULL
+              AND current_bid IS NOT NULL
+              AND EXISTS (
+                  SELECT 1
+                  FROM league_members lm
+                  WHERE lm.league_id=?
+                    AND lm.user_id=?
+                    AND lm.is_active=1
+                    AND (lm.is_auctioneer=1 OR lm.is_admin=1)
+              )
+            RETURNING player_id,current_team_id,current_bid
+        """, (
+            user_id,
+            lot_id,
+            league_id,
+            league_id,
+            user_id
+        ))
+        row = cur.fetchone()
+
+        if not row:
+            raise ValueError(
+                "Il lotto non è più aperto oppure non esiste "
+                "un'offerta conclusiva valida."
+            )
+
+        player_id = int(row[0])
+        team_id = int(row[1])
+        prezzo = float(row[2])
+
+        # 2) Nome squadra per feedback/audit.
+        cur.execute("""
+            SELECT nome
+            FROM teams
+            WHERE league_id=? AND id=? AND is_active=1
+            LIMIT 1
+        """, (league_id,team_id))
+        rt = cur.fetchone()
+        if not rt:
+            raise ValueError("Squadra vincitrice non valida.")
+        nome_team = str(rt[0] or "")
+
+        # 3) Stato autorevole.
+        cur.execute("""
+            INSERT INTO league_players (
+                league_id,player_id,stato,
+                assigned_team_id,prezzo_assegnazione,updated_at
+            )
+            VALUES (?,?,'ASSEGNATO',?,?,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,player_id)
+            DO UPDATE SET
+                stato='ASSEGNATO',
+                assigned_team_id=excluded.assigned_team_id,
+                prezzo_assegnazione=excluded.prezzo_assegnazione,
+                updated_at=CURRENT_TIMESTAMP
+        """, (
+            league_id,player_id,team_id,prezzo
+        ))
+
+        # 4) Projection rosa normalizzata.
+        cur.execute("""
+            INSERT INTO rosters (
+                league_id,team_id,player_id,prezzo_acquisto,
+                fonte,assigned_at,updated_at
+            )
+            VALUES (?,?,?,?,'AUCTION_FINAL',
+                    CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,team_id,player_id)
+            DO UPDATE SET
+                prezzo_acquisto=excluded.prezzo_acquisto,
+                fonte='AUCTION_FINAL',
+                updated_at=CURRENT_TIMESTAMP
+        """, (
+            league_id,team_id,player_id,prezzo
+        ))
+
+        # 5) Budget ricalcolato direttamente nel DB senza query Python.
+        cur.execute("""
+            INSERT INTO team_budgets (
+                league_id,team_id,budget_impostato,
+                valore_acquisti,spesa_effettiva,updated_at
+            )
+            SELECT
+                ?,
+                ?,
+                COALESCE(tb.budget_impostato,r.budget_iniziale,500),
+                x.valore,
+                CASE
+                    WHEN x.valore <= COALESCE(
+                        r.soglia_budget,r.budget_iniziale,500
+                    )
+                    THEN x.valore
+                    ELSE
+                        COALESCE(r.soglia_budget,r.budget_iniziale,500)
+                        +
+                        (
+                            x.valore
+                            - COALESCE(
+                                r.soglia_budget,r.budget_iniziale,500
+                            )
+                        )
+                        * COALESCE(r.moltiplicatore_oltre_soglia,1)
+                END,
+                CURRENT_TIMESTAMP
+            FROM league_rules r
+            LEFT JOIN team_budgets tb
+              ON tb.league_id=r.league_id
+             AND tb.team_id=?
+            CROSS JOIN (
+                SELECT COALESCE(
+                    SUM(COALESCE(prezzo_assegnazione,0)),0
+                ) AS valore
+                FROM league_players
+                WHERE league_id=?
+                  AND stato='ASSEGNATO'
+                  AND assigned_team_id=?
+            ) x
+            WHERE r.league_id=?
+            ON CONFLICT(league_id,team_id)
+            DO UPDATE SET
+                valore_acquisti=excluded.valore_acquisti,
+                spesa_effettiva=excluded.spesa_effettiva,
+                updated_at=CURRENT_TIMESTAMP
+        """, (
+            league_id,team_id,team_id,
+            league_id,team_id,league_id
+        ))
+
+        # 6) Storico assegnazione.
+        cur.execute("""
+            INSERT INTO auction_assignment_history (
+                league_id,player_id,team_id,prezzo,stato,
+                assigned_by_user_id,assigned_at
+            )
+            VALUES (?,?,?,?,'ACTIVE',?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,player_id,team_id,prezzo,user_id
+        ))
+
+        # 7) Chiude il lotto.
+        cur.execute("""
+            UPDATE auction_lots
+            SET stato='ASSIGNED',
+                assigned_team_id=?,
+                final_price=?,
+                closed_at=CURRENT_TIMESTAMP
+            WHERE id=? AND league_id=? AND stato='CLOSING'
+        """, (
+            team_id,prezzo,lot_id,league_id
+        ))
+
+        # 8) Libera subito la sessione asta.
+        cur.execute("""
+            UPDATE auction_sessions
+            SET current_lot_id=NULL,
+                stato='READY',
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND current_lot_id=?
+        """, (
+            league_id,lot_id
+        ))
+
+        # 9) Audit essenziale.
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,team_id,azione,
+                entita,entita_id,dettagli_json,created_at
+            )
+            VALUES (?,?,?,'PLAYER_ASSIGNED','PLAYER',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,user_id,team_id,str(player_id),
+            json.dumps({
+                "prezzo": prezzo,
+                "team": nome_team,
+                "lot_id": lot_id,
+                "modalita": "FAST_CLOSE_V148"
+            }, ensure_ascii=False)
+        ))
+
+        conn.commit()
+
+        return {
+            "player_id": player_id,
+            "team_id": team_id,
+            "team": nome_team,
+            "prezzo": prezzo,
+        }
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+
+    finally:
+        _portal_close(conn)
+
+
+
 def callback_chiudi_assegna_v133(
     league_id,
     lot_id,
     nome
 ):
     try:
-        esito = assegna_lotto_migliore_v146(
+        esito = assegna_lotto_migliore_v148(
             int(league_id),
             int(lot_id)
         )
-        invalida_cache_dati()
+
+        # Nessun full rerun e nessuna invalidazione globale:
+        # ROSA e VENDUTI leggono già lo stato centrale autorevole.
+        st.session_state.pop("_df_giocatori_sessione", None)
+        st.session_state.pop("_ml16_sidebar_metrics", None)
+
         st.session_state["auctioneer_msg"] = (
             f'✅ {nome} assegnato a {esito["team"]} '
-            f'a {esito["prezzo"]:g} crediti. '
-            f'Rosa e Venduti ad avversari aggiornati.'
+            f'a {esito["prezzo"]:g} crediti.'
         )
-        st.session_state["_v135_force_full_reload"] = True
         st.session_state.pop("auctioneer_error", None)
+
     except Exception as errore:
         st.session_state["auctioneer_error"] = str(errore)
-
 
 
 
@@ -32722,8 +32960,7 @@ def render_bidding_inline_asta_v126():
     # Le maschere spariscono se la squadra è già la migliore offerente.
     if stato["current_team_id"] == team_id:
         st.caption(
-            "Premi «AGGIORNA OFFERTE» per verificare se "
-            "un'altra squadra ha effettuato un rilancio."
+            "Le offerte si aggiornano automaticamente."
         )
     elif not team["can_bid"]:
         st.info("ℹ️ " + str(team["motivo"]))
@@ -32838,11 +33075,17 @@ def lotto_corrente_team_fast_multilega(league_id):
 
 
 
-@st.fragment
+@st.fragment(
+    run_every=(
+        "1s"
+        if (
+            st.session_state.get("ml_modalita_accesso") == "SQUADRA"
+            and st.session_state.get("pagina") == "ASTA"
+        )
+        else None
+    )
+)
 def render_navigazione_e_pagina():
-    if st.session_state.pop("_v135_force_full_reload", False):
-        st.rerun()
-
     # ============================================================
     # NAVBAR
     # ============================================================
@@ -32874,13 +33117,20 @@ def render_navigazione_e_pagina():
         st.session_state["pagina"] = PAGINE[0][1]
 
     def _naviga_a(pagina_destinazione):
-        """
-        V100: essendo la navbar dentro st.fragment, il click aggiorna
-        soltanto il fragment di navigazione/pagina. Il boot globale,
-        l'autenticazione, la sidebar e le verifiche DB non vengono
-        rieseguite durante un semplice cambio sezione.
-        """
+        pagina_precedente = st.session_state.get("pagina")
         st.session_state.pagina = pagina_destinazione
+
+        # V148: entrando o uscendo da ASTA ricreiamo il fragment
+        # per attivare/disattivare il polling live da 1 secondo.
+        if (
+            MODALITA_ACCESSO_ATTIVA == "SQUADRA"
+            and (
+                pagina_precedente == "ASTA"
+                or pagina_destinazione == "ASTA"
+            )
+            and pagina_precedente != pagina_destinazione
+        ):
+            st.rerun()
 
 
     st.markdown(
