@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.5"
+MULTILEGA_SCHEMA_VERSION = "5.6"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25424,7 +25424,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.5 &nbsp;|&nbsp; V148 Auto Live + Fast Close'
+        'MULTILEGA 5.6 &nbsp;|&nbsp; V149 Storico Gestione Rosa'
         '</div>',
         unsafe_allow_html=True
     )
@@ -26082,6 +26082,44 @@ def lotto_corrente_multilega(league_id):
 
 
 
+
+def assicura_schema_movimenti_rosa_v149(league_id):
+    """
+    Costi non rimborsabili generati da SVINCOLO.
+    ELIMINA invece rimuove ogni costo residuo.
+    """
+    league_id = int(league_id)
+    guard = f"_v149_release_schema_{league_id}"
+    if st.session_state.get(guard):
+        return
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auction_release_costs (
+                league_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                costo REAL NOT NULL DEFAULT 0,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_by_user_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (league_id, player_id)
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS ix_release_costs_team
+            ON auction_release_costs(league_id, team_id, active)
+        """)
+        conn.commit()
+        st.session_state[guard] = True
+    finally:
+        _portal_close(conn)
+
+
+
 def assicura_schema_storico_asta_v147(league_id):
     """
     Crea una sola volta per sessione lo storico autorevole dei giocatori CHIAMATI.
@@ -26089,6 +26127,7 @@ def assicura_schema_storico_asta_v147(league_id):
     anche senza essere venduto.
     """
     league_id = int(league_id)
+    assicura_schema_movimenti_rosa_v149(league_id)
     guard = f"_v147_storico_schema_{league_id}"
     if st.session_state.get(guard):
         return
@@ -26305,31 +26344,40 @@ def squadre_storico_v147(league_id):
 
 
 def _ricalcola_budget_team_v147(cur, league_id, team_id):
+    league_id = int(league_id)
+    team_id = int(team_id)
+
     cur.execute("""
         SELECT
             COALESCE(tb.budget_impostato,r.budget_iniziale,500),
             COALESCE(r.soglia_budget,r.budget_iniziale,500),
             COALESCE(r.moltiplicatore_oltre_soglia,1),
-            COALESCE(SUM(
-                CASE WHEN lp.stato='ASSEGNATO'
-                      AND lp.assigned_team_id=?
-                     THEN COALESCE(lp.prezzo_assegnazione,0)
-                     ELSE 0 END
+            COALESCE((
+                SELECT SUM(COALESCE(lp.prezzo_assegnazione,0))
+                FROM league_players lp
+                WHERE lp.league_id=?
+                  AND lp.stato='ASSEGNATO'
+                  AND lp.assigned_team_id=?
             ),0)
-        FROM teams t
-        LEFT JOIN league_rules r
-          ON r.league_id=t.league_id
+            +
+            COALESCE((
+                SELECT SUM(COALESCE(rc.costo,0))
+                FROM auction_release_costs rc
+                WHERE rc.league_id=?
+                  AND rc.team_id=?
+                  AND rc.active=1
+            ),0)
+        FROM league_rules r
         LEFT JOIN team_budgets tb
-          ON tb.league_id=t.league_id
-         AND tb.team_id=t.id
-        LEFT JOIN league_players lp
-          ON lp.league_id=t.league_id
-        WHERE t.league_id=? AND t.id=?
-        GROUP BY
-            tb.budget_impostato,r.budget_iniziale,
-            r.soglia_budget,r.moltiplicatore_oltre_soglia
+          ON tb.league_id=r.league_id
+         AND tb.team_id=?
+        WHERE r.league_id=?
         LIMIT 1
-    """, (team_id, league_id, team_id))
+    """, (
+        league_id,team_id,
+        league_id,team_id,
+        team_id,league_id
+    ))
     r = cur.fetchone()
     if not r:
         return
@@ -26356,6 +26404,7 @@ def _ricalcola_budget_team_v147(cur, league_id, team_id):
     """, (
         league_id,team_id,budget,valore,spesa
     ))
+
 
 
 def modifica_assegnazione_storico_v147(
@@ -26489,6 +26538,13 @@ def modifica_assegnazione_storico_v147(
             ))
             if nuova_spesa > budget + 1e-9:
                 raise ValueError("Budget insufficiente per la correzione.")
+
+        # Una correzione manuale dello storico sostituisce qualunque
+        # precedente stato SVINCOLATO del giocatore.
+        cur.execute("""
+            DELETE FROM auction_release_costs
+            WHERE league_id=? AND player_id=?
+        """, (league_id,player_id))
 
         # Rimuove eventuale roster precedente.
         cur.execute("""
@@ -26631,6 +26687,166 @@ def modifica_assegnazione_storico_v147(
         _portal_close(conn)
 
 
+
+def azione_storico_rosa_v149(league_id, player_id, azione):
+    """
+    SVINCOLA:
+      rimuove dalla rosa e mantiene il costo sostenuto.
+
+    ELIMINA:
+      rimuove dalla rosa e restituisce integralmente il costo.
+    """
+    league_id = int(league_id)
+    player_id = int(player_id)
+    azione = str(azione or "").strip().upper()
+    if azione not in ("SVINCOLA","ELIMINA"):
+        raise ValueError("Azione non valida.")
+
+    assicura_schema_movimenti_rosa_v149(league_id)
+
+    user_id = int(st.session_state.get("auth_user_id") or 0)
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=? AND user_id=? AND is_active=1
+              AND (is_auctioneer=1 OR is_admin=1)
+        """, (league_id,user_id))
+        if int((cur.fetchone() or [0])[0] or 0) <= 0:
+            raise PermissionError("Operazione riservata al Banditore/Admin.")
+
+        cur.execute("""
+            SELECT
+                lp.assigned_team_id,
+                lp.prezzo_assegnazione,
+                COALESCE(t.nome,'')
+            FROM league_players lp
+            LEFT JOIN teams t
+              ON t.league_id=lp.league_id
+             AND t.id=lp.assigned_team_id
+            WHERE lp.league_id=?
+              AND lp.player_id=?
+              AND lp.stato='ASSEGNATO'
+            LIMIT 1
+        """, (league_id,player_id))
+        old = cur.fetchone()
+
+        if not old or old[0] is None:
+            raise ValueError("Il giocatore non risulta attualmente assegnato.")
+
+        team_id = int(old[0])
+        prezzo = float(old[1] or 0)
+        team_nome = str(old[2] or "")
+
+        # Rimuove la proiezione rosa.
+        cur.execute("""
+            DELETE FROM rosters
+            WHERE league_id=? AND player_id=?
+        """, (league_id,player_id))
+
+        # Il giocatore torna disponibile in entrambi i casi.
+        cur.execute("""
+            UPDATE league_players
+            SET stato='DISPONIBILE',
+                assigned_team_id=NULL,
+                prezzo_assegnazione=NULL,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND player_id=?
+        """, (league_id,player_id))
+
+        if azione == "SVINCOLA":
+            # Il costo resta definitivamente a carico della vecchia squadra.
+            cur.execute("""
+                INSERT INTO auction_release_costs (
+                    league_id,team_id,player_id,costo,active,
+                    created_by_user_id,created_at,updated_at
+                )
+                VALUES (?,?,?,?,1,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                ON CONFLICT(league_id,player_id)
+                DO UPDATE SET
+                    team_id=excluded.team_id,
+                    costo=excluded.costo,
+                    active=1,
+                    created_by_user_id=excluded.created_by_user_id,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (
+                league_id,team_id,player_id,prezzo,user_id
+            ))
+        else:
+            # ELIMINA = rimborso totale.
+            cur.execute("""
+                DELETE FROM auction_release_costs
+                WHERE league_id=? AND player_id=?
+            """, (league_id,player_id))
+
+        # Storico assegnazione non più attivo.
+        cur.execute("""
+            UPDATE auction_assignment_history
+            SET stato=?,
+                undone_by_user_id=?,
+                undone_at=CURRENT_TIMESTAMP
+            WHERE league_id=?
+              AND player_id=?
+              AND stato='ACTIVE'
+        """, (
+            "RELEASED" if azione=="SVINCOLA" else "DELETED",
+            user_id,league_id,player_id
+        ))
+
+        # Manteniamo il lotto storico chiuso ma non più assegnato correntemente.
+        cur.execute("""
+            UPDATE auction_lots
+            SET assigned_team_id=NULL,
+                final_price=NULL
+            WHERE id=(
+                SELECT id
+                FROM auction_lots
+                WHERE league_id=? AND player_id=?
+                ORDER BY id DESC
+                LIMIT 1
+            )
+        """, (league_id,player_id))
+
+        _ricalcola_budget_team_v147(cur,league_id,team_id)
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,team_id,azione,
+                entita,entita_id,dettagli_json,created_at
+            )
+            VALUES (?,?,?,?, 'PLAYER',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,user_id,team_id,
+            "PLAYER_RELEASED" if azione=="SVINCOLA" else "PLAYER_DELETED",
+            str(player_id),
+            json.dumps({
+                "team": team_nome,
+                "prezzo": prezzo,
+                "rimborso": 0 if azione=="SVINCOLA" else prezzo
+            }, ensure_ascii=False)
+        ))
+
+        conn.commit()
+        return {
+            "team": team_nome,
+            "prezzo": prezzo,
+            "azione": azione
+        }
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+
 def render_storico_asta_v147():
     if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
         st.error("Accedi come BANDITORE per visualizzare lo storico asta.")
@@ -26654,98 +26870,149 @@ def render_storico_asta_v147():
 
     nomi_team = ["—"] + [x["nome"] for x in teams]
 
-    visible = storico[
-        ["NOME GIOCATORE","RUOLO","SQUADRA","PREZZO","ASSEGNATO A"]
-    ].copy()
+    # Paginazione per evitare centinaia di widget simultanei.
+    page_size = 25
+    totale_righe = len(storico)
+    totale_pagine = max(1, (totale_righe + page_size - 1) // page_size)
 
-    edited = st.data_editor(
-        visible,
-        use_container_width=True,
-        hide_index=True,
-        num_rows="fixed",
-        disabled=["NOME GIOCATORE","RUOLO","SQUADRA"],
-        column_config={
-            "PREZZO": st.column_config.NumberColumn(
-                "PREZZO",
-                min_value=0.0,
-                step=1.0,
-                format="%.0f"
-            ),
-            "ASSEGNATO A": st.column_config.SelectboxColumn(
-                "ASSEGNATO A",
-                options=nomi_team,
-                required=True
-            ),
-        },
-        key=f"v147_editor_storico_{league_id}"
+    if totale_pagine > 1:
+        pagina = st.number_input(
+            "Pagina storico",
+            min_value=1,
+            max_value=totale_pagine,
+            value=1,
+            step=1,
+            key=f"v149_hist_page_{league_id}"
+        )
+    else:
+        pagina = 1
+
+    start_idx = (int(pagina)-1) * page_size
+    end_idx = min(start_idx + page_size, totale_righe)
+    pagina_df = storico.iloc[start_idx:end_idx].copy()
+
+    st.caption(
+        f"Visualizzati {start_idx+1}-{end_idx} di {totale_righe} giocatori chiamati."
     )
 
-    if st.button(
-        "💾 SALVA MODIFICHE STORICO",
-        type="primary",
-        use_container_width=True,
-        key=f"v147_save_history_{league_id}"
-    ):
-        modifiche = 0
-        errori = []
+    hdr = st.columns([3.1,1.2,1.8,1.1,2.0,0.75,0.8,0.8])
+    titoli = [
+        "NOME GIOCATORE","RUOLO","SQUADRA","PREZZO",
+        "ASSEGNATO A","SALVA","SVINCOLA","ELIMINA"
+    ]
+    for col,titolo in zip(hdr,titoli):
+        col.markdown(f"**{titolo}**")
 
-        for idx in range(len(storico)):
-            prima_team = str(
-                storico.iloc[idx]["ASSEGNATO A"]
-                if pd.notna(storico.iloc[idx]["ASSEGNATO A"])
-                else "—"
+    for _, r in pagina_df.iterrows():
+        player_id = int(r["__PLAYER_ID"])
+        nome = str(r["NOME GIOCATORE"] or "")
+        ruolo = str(r["RUOLO"] or "")
+        squadra_reale = str(r["SQUADRA"] or "")
+        prezzo = None if pd.isna(r["PREZZO"]) else float(r["PREZZO"])
+        team_corrente = (
+            str(r["ASSEGNATO A"])
+            if pd.notna(r["ASSEGNATO A"]) and str(r["ASSEGNATO A"]).strip()
+            else "—"
+        )
+        if team_corrente not in nomi_team:
+            team_corrente = "—"
+
+        cols = st.columns([3.1,1.2,1.8,1.1,2.0,0.75,0.8,0.8],
+                          vertical_alignment="center")
+
+        cols[0].write(nome)
+        cols[1].write(ruolo)
+        cols[2].write(squadra_reale)
+
+        prezzo_key = f"v149_hist_price_{league_id}_{player_id}"
+        team_key = f"v149_hist_team_{league_id}_{player_id}"
+
+        if prezzo_key not in st.session_state:
+            st.session_state[prezzo_key] = float(prezzo or 0)
+        if team_key not in st.session_state:
+            st.session_state[team_key] = team_corrente
+
+        with cols[3]:
+            st.number_input(
+                "Prezzo",
+                min_value=0.0,
+                step=1.0,
+                key=prezzo_key,
+                label_visibility="collapsed"
             )
-            dopo_team = str(
-                edited.iloc[idx]["ASSEGNATO A"]
-                if pd.notna(edited.iloc[idx]["ASSEGNATO A"])
-                else "—"
+
+        with cols[4]:
+            st.selectbox(
+                "Assegnato a",
+                options=nomi_team,
+                key=team_key,
+                label_visibility="collapsed"
             )
 
-            prima_prezzo = storico.iloc[idx]["PREZZO"]
-            dopo_prezzo = edited.iloc[idx]["PREZZO"]
+        nuovo_prezzo = float(st.session_state.get(prezzo_key,0))
+        nuovo_team = str(st.session_state.get(team_key,"—"))
 
-            p1 = None if pd.isna(prima_prezzo) else float(prima_prezzo)
-            p2 = None if pd.isna(dopo_prezzo) else float(dopo_prezzo)
+        changed = (
+            nuovo_team != team_corrente
+            or abs(nuovo_prezzo - float(prezzo or 0)) > 0.0001
+        )
 
-            changed = (
-                prima_team != dopo_team
-                or (
-                    (p1 is None) != (p2 is None)
-                    or (
-                        p1 is not None and p2 is not None
-                        and abs(p1-p2) > 0.0001
+        with cols[5]:
+            if st.button(
+                "✓",
+                key=f"v149_save_{league_id}_{player_id}",
+                help="Salva prezzo e squadra",
+                disabled=not changed,
+                use_container_width=True
+            ):
+                try:
+                    modifica_assegnazione_storico_v147(
+                        league_id,player_id,nuovo_team,nuovo_prezzo
                     )
-                )
-            )
-            if not changed:
-                continue
+                    st.success(f"Modificato {nome}.")
+                    st.rerun()
+                except Exception as errore:
+                    st.error(f"{nome}: {errore}")
 
-            try:
-                modifica_assegnazione_storico_v147(
-                    league_id,
-                    int(storico.iloc[idx]["__PLAYER_ID"]),
-                    dopo_team,
-                    p2
-                )
-                modifiche += 1
-            except Exception as errore:
-                errori.append(
-                    f'{storico.iloc[idx]["NOME GIOCATORE"]}: {errore}'
-                )
+        assegnato = team_corrente != "—"
 
-        invalida_cache_dati()
+        with cols[6]:
+            if st.button(
+                "🔓",
+                key=f"v149_release_{league_id}_{player_id}",
+                help="Svincola: rimuove dalla rosa senza restituire i crediti",
+                disabled=not assegnato,
+                use_container_width=True
+            ):
+                try:
+                    azione_storico_rosa_v149(
+                        league_id,player_id,"SVINCOLA"
+                    )
+                    st.success(
+                        f"{nome} svincolato: il costo resta a carico della squadra."
+                    )
+                    st.rerun()
+                except Exception as errore:
+                    st.error(f"{nome}: {errore}")
 
-        if modifiche:
-            st.success(
-                f"✅ Modifiche salvate: {modifiche}. "
-                "ROSA e VENDUTI AD AVVERSARI sono stati riallineati."
-            )
-        if errori:
-            for err in errori:
-                st.error(err)
-
-        if modifiche and not errori:
-            st.rerun()
+        with cols[7]:
+            if st.button(
+                "🗑️",
+                key=f"v149_delete_{league_id}_{player_id}",
+                help="Elimina: rimuove dalla rosa e restituisce i crediti",
+                disabled=not assegnato,
+                use_container_width=True
+            ):
+                try:
+                    azione_storico_rosa_v149(
+                        league_id,player_id,"ELIMINA"
+                    )
+                    st.success(
+                        f"{nome} eliminato: i crediti sono stati restituiti."
+                    )
+                    st.rerun()
+                except Exception as errore:
+                    st.error(f"{nome}: {errore}")
 
 
 
@@ -31472,6 +31739,8 @@ def assegna_lotto_migliore_v148(league_id, lot_id):
     lot_id = int(lot_id)
     user_id = int(st.session_state.get("auth_user_id") or 0)
 
+    assicura_schema_movimenti_rosa_v149(league_id)
+
     conn = _portal_raw_connection()
     cur = conn.cursor()
 
@@ -31595,13 +31864,23 @@ def assegna_lotto_migliore_v148(league_id, lot_id):
               ON tb.league_id=r.league_id
              AND tb.team_id=?
             CROSS JOIN (
-                SELECT COALESCE(
-                    SUM(COALESCE(prezzo_assegnazione,0)),0
-                ) AS valore
-                FROM league_players
-                WHERE league_id=?
-                  AND stato='ASSEGNATO'
-                  AND assigned_team_id=?
+                SELECT
+                    COALESCE((
+                        SELECT SUM(COALESCE(prezzo_assegnazione,0))
+                        FROM league_players
+                        WHERE league_id=?
+                          AND stato='ASSEGNATO'
+                          AND assigned_team_id=?
+                    ),0)
+                    +
+                    COALESCE((
+                        SELECT SUM(COALESCE(costo,0))
+                        FROM auction_release_costs
+                        WHERE league_id=?
+                          AND team_id=?
+                          AND active=1
+                    ),0)
+                    AS valore
             ) x
             WHERE r.league_id=?
             ON CONFLICT(league_id,team_id)
@@ -31611,7 +31890,9 @@ def assegna_lotto_migliore_v148(league_id, lot_id):
                 updated_at=CURRENT_TIMESTAMP
         """, (
             league_id,team_id,team_id,
-            league_id,team_id,league_id
+            league_id,team_id,
+            league_id,team_id,
+            league_id
         ))
 
         # 6) Storico assegnazione.
@@ -33865,17 +34146,8 @@ def render_navigazione_e_pagina():
         # Se la rosa contiene giocatori, la mappa viene recuperata dalla
         # cache RAM e ricostruita solo al primo accesso/aggiornamento.
         mappa_titolarita_rosa = {}
-
         if not df_rosa.empty:
-
-            mappa_titolarita_rosa = (
-                costruisci_mappa_titolarita()
-            )
-            if st.button(
-                "🗑️ ELIMINA TUTTA LA ROSA",
-                key="btn_reset_tutta_rosa"
-            ):
-                conferma_elimina_tutta_rosa()
+            mappa_titolarita_rosa = costruisci_mappa_titolarita()
 
         if df_rosa.empty:
 
@@ -33929,8 +34201,8 @@ def render_navigazione_e_pagina():
             ):
 
                 # Header compatto mobile
-                h1, h2, h3, h4, h5, h6 = st.columns(
-                    [2.0, 0.8, 1.4, 0.7, 0.9, 0.5]
+                h1, h2, h3, h4, h5 = st.columns(
+                    [2.0, 0.8, 1.4, 0.7, 0.9]
                 )
 
                 h1.markdown("**NOME GIOCATORE**")
@@ -33938,7 +34210,6 @@ def render_navigazione_e_pagina():
                 h3.markdown("**TITOLARITÀ**")
                 h4.markdown("**R/CP**")
                 h5.markdown("**PREZZO**")
-                h6.markdown("**OK**")
 
                 for _, giocatore in df_rosa.iterrows():
 
@@ -33950,104 +34221,7 @@ def render_navigazione_e_pagina():
                         giocatore["Prezzo"]
                         or 0
                     )
-
-                    chiave_prezzo = (
-                        f"prezzo_rosa_mobile_{giocatore_id}"
-                    )
-
-                    if chiave_prezzo not in st.session_state:
-
-                        st.session_state[
-                            chiave_prezzo
-                        ] = prezzo_attuale
-
-                    r1, r2, r3, r4, r5, r6 = st.columns(
-                        [2.0, 0.8, 1.4, 0.7, 0.9, 0.5],
-                        vertical_alignment="center"
-                    )
-
-                    colore_nome = (
-                        colore_fvm_mantra(
-                            giocatore.get(
-                                "RM",
-                                ""
-                            ),
-                            giocatore.get(
-                                "FVM M"
-                            )
-                        )
-                    )
-
-                    r1.markdown(
-                        f"<span style='color:{colore_nome};"
-                        f"font-weight:800;'>"
-                        f"{html.escape(str(giocatore['Nome']))}"
-                        f"</span>",
-                        unsafe_allow_html=True
-                    )
-
-                    r2.write(
-                        giocatore["RM"]
-                    )
-
-                    r3.markdown(
-                        html_titolarita_rosa(
-                            giocatore["Nome"],
-                            giocatore["Squadra"],
-                            mappa_titolarita_rosa
-                        ),
-                        unsafe_allow_html=True
-                    )
-
-                    r4.write(
-                        sigle_specialista_giocatore(
-                            giocatore["Nome"],
-                            giocatore["Squadra"]
-                        )
-                        or "—"
-                    )
-
-                    with r5:
-
-                        nuovo_prezzo = st.number_input(
-                            "Prezzo",
-                            min_value=0.0,
-                            max_value=5000.0,
-                            step=0.10,
-                            format="%.2f",
-                            key=chiave_prezzo,
-                            label_visibility="collapsed"
-                        )
-
-                    with r6:
-
-                        modificato = (
-                            round(
-                                float(
-                                    nuovo_prezzo
-                                ),
-                                2
-                            )
-                            != round(
-                                prezzo_attuale,
-                                2
-                            )
-                        )
-
-                        if st.button(
-                            "✓",
-                            key=f"salva_prezzo_mobile_{giocatore_id}",
-                            help="Conferma modifica prezzo",
-                            disabled=not modificato,
-                            use_container_width=True
-                        ):
-
-                            conferma_modifica_prezzo(
-                                giocatore_id,
-                                giocatore["Nome"],
-                                prezzo_attuale,
-                                nuovo_prezzo
-                            )
+                    r5.write(formatta_crediti(prezzo_attuale))
 
 
             # ----------------------------------------------------
@@ -34066,9 +34240,7 @@ def render_navigazione_e_pagina():
                             1.8,
                             1.2,
                             1.2,
-                            1.9,
-                            0.7,
-                            0.7
+                            1.9
                         ]
                     )
                 )
@@ -34080,9 +34252,7 @@ def render_navigazione_e_pagina():
                     "Titolarità",
                     "R / CP",
                     "FVM",
-                    "Prezzo acquisto",
-                    "🗑️",
-                    "🔓"
+                    "Prezzo acquisto"
                 ]
 
                 for col, titolo in zip(
@@ -34104,9 +34274,7 @@ def render_navigazione_e_pagina():
                                 1.8,
                                 1.2,
                                 1.2,
-                                1.9,
-                                0.7,
-                                0.7
+                                1.9
                             ],
                             vertical_alignment="center"
                         )
@@ -34142,106 +34310,11 @@ def render_navigazione_e_pagina():
                     cols[5].write(
                         giocatore["FVM"]
                     )
-                    giocatore_id = int(
-                        giocatore["Id"]
-                    )
-
-                    prezzo_attuale = float(
-                        giocatore["Prezzo"]
-                        or 0
-                    )
-
-                    chiave_prezzo = (
-                        f"prezzo_rosa_desktop_{giocatore_id}"
-                    )
-
-                    if chiave_prezzo not in st.session_state:
-
-                        st.session_state[
-                            chiave_prezzo
-                        ] = prezzo_attuale
-
-                    with cols[6]:
-
-                        prezzo_col1, prezzo_col2 = st.columns(
-                            [3.2, 0.8],
-                            vertical_alignment="center"
+                    cols[6].write(
+                        formatta_crediti(
+                            float(giocatore["Prezzo"] or 0)
                         )
-
-                        with prezzo_col1:
-
-                            nuovo_prezzo = st.number_input(
-                                "Prezzo acquisto",
-                                min_value=0.0,
-                                max_value=5000.0,
-                                step=0.10,
-                                format="%.2f",
-                                key=chiave_prezzo,
-                                label_visibility="collapsed"
-                            )
-
-                        with prezzo_col2:
-
-                            modificato = (
-                                round(
-                                    float(
-                                        nuovo_prezzo
-                                    ),
-                                    2
-                                )
-                                != round(
-                                    prezzo_attuale,
-                                    2
-                                )
-                            )
-
-                            if st.button(
-                                "✓",
-                                key=f"salva_prezzo_{giocatore_id}",
-                                help="Conferma modifica prezzo",
-                                disabled=not modificato,
-                                use_container_width=True
-                            ):
-
-                                conferma_modifica_prezzo(
-                                    giocatore_id,
-                                    giocatore["Nome"],
-                                    prezzo_attuale,
-                                    nuovo_prezzo
-                                )
-
-                    with cols[7]:
-                        if st.button(
-                            "🗑️",
-                            key=(
-                                "elimina_"
-                                f"{int(giocatore['Id'])}"
-                            ),
-                            help="Annulla acquisto"
-                        ):
-                            conferma_annullamento(
-                                int(
-                                    giocatore["Id"]
-                                ),
-                                giocatore["Nome"]
-                            )
-
-                    with cols[8]:
-                        if st.button(
-                            "🔓",
-                            key=(
-                                "svincola_"
-                                f"{int(giocatore['Id'])}"
-                            ),
-                            help="Svincola giocatore"
-                        ):
-                            conferma_svincolo(
-                                int(
-                                    giocatore["Id"]
-                                ),
-                                giocatore["Nome"],
-                                giocatore["Prezzo"]
-                            )
+                    )
 
 
     # ============================================================
