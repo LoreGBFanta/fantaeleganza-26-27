@@ -666,6 +666,7 @@ def verifica_password_sicura(
         return False
 
 
+@st.cache_resource(show_spinner=False)
 def inizializza_portale_auth():
     """
     Schema minimo necessario PRIMA del login.
@@ -1284,6 +1285,7 @@ LEGACY_AUTH_BOOTSTRAP = {
 }
 
 
+@st.cache_resource(show_spinner=False)
 def migra_password_account_legacy():
     """
     Migrazione idempotente dei due account storici.
@@ -1459,6 +1461,7 @@ DEFAULT_RENDIMENTO_FASCE = [
 ]
 
 
+@st.cache_resource(show_spinner=False)
 def inizializza_schema_regolamento_avanzato():
     """
     V131 - migrazione robusta dello schema league_rules.
@@ -1735,6 +1738,7 @@ def render_help_modificatori():
 Nota: secondo il regolamento Fantacalcio, **D-Factor e Fattore Rendimento sono alternativi** e non possono essere utilizzati contemporaneamente.
         """)
 
+@st.cache_resource(show_spinner=False)
 def inizializza_schema_profilo_utente():
     if st.session_state.get("_ml07_profile_schema_ok", False):
         return
@@ -12212,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.1"
+MULTILEGA_SCHEMA_VERSION = "5.2"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -20423,17 +20427,14 @@ def bootstrap_database_v139(profilo, legacy_supportato):
 # INIZIALIZZAZIONE · V139 FAST BOOT
 # ============================================================
 
-try:
-    bootstrap_database_v139(
-        PROFILO_ATTIVO,
-        bool(PROFILO_LEGACY_SUPPORTATO)
-    )
-    st.session_state.pop("ml_foundation_error", None)
-except Exception as errore_multilega:
-    st.session_state["ml_foundation_error"] = str(errore_multilega)
+# V140 ULTRA FAST ACCESS:
+# nessuna DDL/sincronizzazione legacy viene eseguita tra login e scelta ruolo.
+# Lo schema minimo è già garantito dal bootstrap pre-login process-wide.
+# Le migrazioni specifiche restano lazy nelle rispettive sezioni.
+st.session_state.pop("ml_foundation_error", None)
 
 # La migrazione ruoli V138 resta disponibile come funzione di manutenzione,
-# ma non viene più eseguita nel percorso normale di login.
+# ma non viene eseguita nel percorso normale di login.
 
 # Gli accessi vengono letti dal DB solo quando servono.
 # Una volta selezionata la lega, la membership validata è mantenuta
@@ -20453,7 +20454,6 @@ if ACCESSO_MULTILEGA_ATTIVO is None:
     # V139: niente seconda query di validazione.
     # Se non c'è un accesso già validato in questa sessione,
     # mostriamo direttamente la scelta del livello.
-    azzera_contesto_multilega()
     schermata_le_mie_leghe(ACCESSI_MULTILEGA)
 
 
@@ -25414,7 +25414,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.1 &nbsp;|&nbsp; V139 Fast Login Boot'
+        'MULTILEGA 5.2 &nbsp;|&nbsp; V140 Ultra Fast Access + Fix Banditore'
         '</div>',
         unsafe_allow_html=True
     )
@@ -30629,6 +30629,42 @@ def callback_chiudi_assegna_v133(
 
 
 
+
+def render_card_giocatore_live_v140(live):
+    """Card giocatore live autonoma e senza query DB."""
+    nome = html.escape(str(live.get("nome") or ""))
+    squadra = html.escape(str(live.get("squadra") or ""))
+    ruolo = html.escape(
+        str(
+            live.get("ruolo_mantra")
+            or live.get("ruolo_classico")
+            or ""
+        )
+    )
+    fvm = float(live.get("fvm") or 0)
+    quotazione = float(live.get("quotazione") or 0)
+
+    st.markdown(
+        (
+            '<div style="background:#fff;border:1px solid #dbe2ea;'
+            'border-radius:14px;padding:16px 18px;margin:4px 0 12px 0;'
+            'box-shadow:0 2px 8px rgba(15,23,42,.05)">'
+            '<div style="font-size:24px;font-weight:900;color:#071a2f">'
+            + nome +
+            '</div>'
+            '<div style="margin-top:5px;color:#64748b;font-size:14px">'
+            + squadra +
+            (' · ' + ruolo if ruolo else '') +
+            '</div>'
+            '<div style="margin-top:10px;color:#071a2f;font-size:13px">'
+            '<b>FVM:</b> ' + f'{fvm:g}' +
+            ' &nbsp; · &nbsp; <b>Quotazione:</b> ' + f'{quotazione:g}' +
+            '</div></div>'
+        ),
+        unsafe_allow_html=True
+    )
+
+
 def render_banditore_asta():
     if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
         st.error("Accedi con il livello BANDITORE per usare Gestione Asta.")
@@ -30669,7 +30705,7 @@ def render_banditore_asta():
         return
 
     if live is not None:
-        render_card_giocatore_live_v132(live)
+        render_card_giocatore_live_v140(live)
 
         if live["current_bid"] is None:
             st.info("Nessuna squadra ha ancora effettuato un'offerta.")
@@ -31744,7 +31780,7 @@ def render_bidding_inline_asta_v126():
         )
         return
 
-    render_card_giocatore_live_v132(stato)
+    render_card_giocatore_live_v140(stato)
 
     if stato["current_bid"] is None:
         st.info("Nessuna offerta registrata.")
