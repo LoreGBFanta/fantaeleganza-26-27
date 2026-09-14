@@ -1460,45 +1460,132 @@ DEFAULT_RENDIMENTO_FASCE = [
 
 
 def inizializza_schema_regolamento_avanzato():
-    if st.session_state.get("_ml10_rules_schema_ok", False):
+    """
+    V131 - migrazione robusta dello schema league_rules.
+
+    Correzione importante per Turso/LibSQL:
+    dopo ALTER TABLE non assumiamo più che la stessa connessione veda
+    immediatamente la nuova colonna. Le DDL vengono committate, la connessione
+    viene riaperta e solo dopo vengono eseguiti gli UPDATE di normalizzazione.
+
+    La migrazione resta eseguita una sola volta per sessione.
+    """
+    _guard_key = "_ml131_rules_schema_ok"
+
+    if st.session_state.get(_guard_key, False):
         return
-    conn=_portal_raw_connection(); cur=conn.cursor()
+
+    aggiunte = [
+        ("fasce_gol_json","TEXT"),
+        ("valore_gol_fatto","REAL NOT NULL DEFAULT 3.0"),
+        ("valore_gol_subito","REAL NOT NULL DEFAULT -1.0"),
+        ("valore_ammonizione","REAL NOT NULL DEFAULT -0.5"),
+        ("valore_espulsione","REAL NOT NULL DEFAULT -1.0"),
+        ("valore_rigore_segnato","REAL NOT NULL DEFAULT 3.0"),
+        ("valore_rigore_subito","REAL NOT NULL DEFAULT -1.0"),
+        ("numero_panchinari","INTEGER NOT NULL DEFAULT 10"),
+        ("mod_d_factor","INTEGER NOT NULL DEFAULT 0"),
+        ("mod_rendimento","INTEGER NOT NULL DEFAULT 0"),
+        ("mod_fair_play","INTEGER NOT NULL DEFAULT 0"),
+        ("mod_capitano","INTEGER NOT NULL DEFAULT 0"),
+        ("mod_rendimento_tipo","TEXT NOT NULL DEFAULT 'BONUS'"),
+        ("mod_rendimento_fasce_json","TEXT"),
+    ]
+
+    # --------------------------------------------------------
+    # FASE 1 - DDL
+    # --------------------------------------------------------
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
     try:
         cur.execute("PRAGMA table_info(league_rules)")
-        cols={str(r[1]) for r in cur.fetchall()}
-        aggiunte=[
-            ("fasce_gol_json","TEXT"),
-            ("valore_gol_fatto","REAL NOT NULL DEFAULT 3.0"),
-            ("valore_gol_subito","REAL NOT NULL DEFAULT -1.0"),
-            ("valore_ammonizione","REAL NOT NULL DEFAULT -0.5"),
-            ("valore_espulsione","REAL NOT NULL DEFAULT -1.0"),
-            ("valore_rigore_segnato","REAL NOT NULL DEFAULT 3.0"),
-            ("valore_rigore_subito","REAL NOT NULL DEFAULT -1.0"),
-            ("numero_panchinari","INTEGER NOT NULL DEFAULT 10"),
-            ("mod_d_factor","INTEGER NOT NULL DEFAULT 0"),
-            ("mod_rendimento","INTEGER NOT NULL DEFAULT 0"),
-            ("mod_fair_play","INTEGER NOT NULL DEFAULT 0"),
-            ("mod_capitano","INTEGER NOT NULL DEFAULT 0"),
-            ("mod_rendimento_tipo","TEXT NOT NULL DEFAULT 'BONUS'"),
-            ("mod_rendimento_fasce_json","TEXT"),
-        ]
-        for nome,tipo in aggiunte:
-            if nome not in cols:
-                cur.execute(f"ALTER TABLE league_rules ADD COLUMN {nome} {tipo}")
-        cur.execute("""UPDATE league_rules SET fasce_gol_json=?
-                       WHERE fasce_gol_json IS NULL OR TRIM(fasce_gol_json)=''""",
-                    (json.dumps(DEFAULT_FASCE_GOL),))
-        cur.execute("""UPDATE league_rules SET mod_rendimento_fasce_json=?
-                       WHERE mod_rendimento_fasce_json IS NULL
-                          OR TRIM(mod_rendimento_fasce_json)=''""",
-                    (json.dumps(DEFAULT_RENDIMENTO_FASCE),))
-        # Normalizza il vecchio tipo ALTRO senza alterare le leghe valide.
-        cur.execute("""UPDATE league_rules SET tipo_asta='A CHIAMATA'
-                       WHERE tipo_asta IS NULL OR TRIM(tipo_asta)='' OR UPPER(tipo_asta)='ALTRO'""")
-        conn.commit()
-        st.session_state["_ml10_rules_schema_ok"]=True
+        cols = {str(r[1]) for r in (cur.fetchall() or [])}
+
+        for nome, tipo in aggiunte:
+            if nome in cols:
+                continue
+
+            try:
+                cur.execute(
+                    f"ALTER TABLE league_rules ADD COLUMN {nome} {tipo}"
+                )
+                # Commit immediato: evita problemi di schema-cache di LibSQL.
+                conn.commit()
+                cols.add(nome)
+            except Exception as errore:
+                # Possibile race: un'altra sessione potrebbe aver aggiunto
+                # la colonna tra PRAGMA e ALTER. Verifichiamo prima di fallire.
+                try:
+                    cur.execute("PRAGMA table_info(league_rules)")
+                    cols_check = {
+                        str(r[1])
+                        for r in (cur.fetchall() or [])
+                    }
+                except Exception:
+                    cols_check = set()
+
+                if nome not in cols_check:
+                    raise errore
+
     finally:
         _portal_close(conn)
+
+    # --------------------------------------------------------
+    # FASE 2 - nuova connessione / verifica schema effettivo
+    # --------------------------------------------------------
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("PRAGMA table_info(league_rules)")
+        cols = {str(r[1]) for r in (cur.fetchall() or [])}
+
+        required = {
+            "fasce_gol_json",
+            "mod_rendimento_fasce_json",
+            "tipo_asta",
+        }
+        mancanti = required - cols
+
+        if mancanti:
+            raise RuntimeError(
+                "Migrazione league_rules incompleta. Colonne mancanti: "
+                + ", ".join(sorted(mancanti))
+            )
+
+        cur.execute("""
+            UPDATE league_rules
+            SET fasce_gol_json=?
+            WHERE fasce_gol_json IS NULL
+               OR TRIM(fasce_gol_json)=''
+        """, (json.dumps(DEFAULT_FASCE_GOL),))
+
+        cur.execute("""
+            UPDATE league_rules
+            SET mod_rendimento_fasce_json=?
+            WHERE mod_rendimento_fasce_json IS NULL
+               OR TRIM(mod_rendimento_fasce_json)=''
+        """, (json.dumps(DEFAULT_RENDIMENTO_FASCE),))
+
+        cur.execute("""
+            UPDATE league_rules
+            SET tipo_asta='A CHIAMATA'
+            WHERE tipo_asta IS NULL
+               OR TRIM(tipo_asta)=''
+               OR UPPER(tipo_asta)='ALTRO'
+        """)
+
+        conn.commit()
+
+        # Elimina eventuale vecchio flag che poteva mascherare uno schema
+        # incompleto nelle versioni precedenti.
+        st.session_state.pop("_ml10_rules_schema_ok", None)
+        st.session_state[_guard_key] = True
+
+    finally:
+        _portal_close(conn)
+
 
 
 def _fasce_gol_da_valori(valori):
@@ -12125,7 +12212,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "4.2.2"
+MULTILEGA_SCHEMA_VERSION = "4.2.3"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25253,7 +25340,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 4.2.2 &nbsp;|&nbsp; V130 Fix Bid Buttons'
+        'MULTILEGA 4.2.3 &nbsp;|&nbsp; V131 Fix Rules Schema Refresh'
         '</div>',
         unsafe_allow_html=True
     )
