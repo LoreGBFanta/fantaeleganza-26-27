@@ -11115,46 +11115,110 @@ def salva_budget_asta(
     return valore
 
 
-def aggiorna_budget_da_widget():
-
+def leggi_budget_squadra_autorevole(league_id, team_id):
+    """Legge il budget della squadra dalla fonte autorevole condivisa da tutti i livelli."""
     try:
-
-        nuovo_budget = round(
-            float(
-                st.session_state.get(
-                    "budget_asta_input",
-                    SOGLIA_BASE
-                )
-            ),
-            2
-        )
-
+        league_id = int(league_id)
+        team_id = int(team_id)
     except Exception:
+        return float(SOGLIA_BASE)
 
-        nuovo_budget = float(
-            SOGLIA_BASE
-        )
+    conn = _portal_raw_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT COALESCE(tb.budget_impostato, lr.budget_iniziale, ?)
+            FROM teams t
+            LEFT JOIN league_rules lr
+              ON lr.league_id=t.league_id
+            LEFT JOIN team_budgets tb
+              ON tb.league_id=t.league_id
+             AND tb.team_id=t.id
+            WHERE t.league_id=? AND t.id=?
+            LIMIT 1
+        """, (SOGLIA_BASE, league_id, team_id))
+        riga = cur.fetchone()
+        return float(riga[0] if riga and riga[0] is not None else SOGLIA_BASE)
+    finally:
+        _portal_close(conn)
 
-    budget_corrente = round(
-        float(
-            st.session_state.get(
-                "budget_asta_corrente",
-                SOGLIA_BASE
+
+def salva_budget_squadra_autorevole(league_id, team_id, valore):
+    """Salva il budget SOLO per la squadra indicata; Admin/Banditore restano read-only."""
+    try:
+        league_id = int(league_id)
+        team_id = int(team_id)
+        valore = round(max(0.0, float(valore)), 2)
+    except Exception:
+        return float(SOGLIA_BASE)
+
+    conn = _portal_raw_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO team_budgets (
+                league_id, team_id, budget_impostato,
+                valore_acquisti, spesa_effettiva, updated_at
             )
-        ),
-        2
-    )
+            SELECT
+                ?, ?, ?,
+                COALESCE(tb.valore_acquisti, 0),
+                COALESCE(tb.spesa_effettiva, 0),
+                CURRENT_TIMESTAMP
+            FROM (SELECT 1) x
+            LEFT JOIN team_budgets tb
+              ON tb.league_id=? AND tb.team_id=?
+            ON CONFLICT(league_id,team_id)
+            DO UPDATE SET
+                budget_impostato=excluded.budget_impostato,
+                updated_at=CURRENT_TIMESTAMP
+        """, (league_id, team_id, valore, league_id, team_id))
+        conn.commit()
+        return valore
+    finally:
+        _portal_close(conn)
 
-    if nuovo_budget == budget_corrente:
+
+def aggiorna_budget_da_widget():
+    # V154: il budget e' modificabile esclusivamente dal livello SQUADRA.
+    # Tutti i livelli leggono pero' la stessa riga team_budgets.
+    modalita = str(
+        st.session_state.get("ml_modalita_accesso")
+        or st.session_state.get("modalita_accesso")
+        or ""
+    ).upper()
+
+    league_id = st.session_state.get("ml_league_id")
+    team_id = st.session_state.get("ml_sidebar_team_id") or st.session_state.get("ml_team_id")
+
+    # Protezione server-side: Admin e Banditore non possono mai salvare il budget,
+    # anche se il widget venisse manipolato lato client.
+    if modalita != "SQUADRA":
+        if league_id is not None and team_id is not None:
+            budget_db = leggi_budget_squadra_autorevole(league_id, team_id)
+            st.session_state["budget_asta_corrente"] = budget_db
+            st.session_state["budget_asta_input"] = budget_db
         return
 
-    st.session_state[
-        "budget_asta_corrente"
-    ] = (
-        salva_budget_asta(
-            nuovo_budget
+    try:
+        nuovo_budget = round(
+            max(0.0, float(st.session_state.get("budget_asta_input", SOGLIA_BASE))),
+            2
         )
-    )
+    except Exception:
+        nuovo_budget = float(SOGLIA_BASE)
+
+    if league_id is not None and team_id is not None:
+        budget_salvato = salva_budget_squadra_autorevole(
+            league_id, team_id, nuovo_budget
+        )
+    else:
+        # Fallback solo per eventuali contesti legacy privi di squadra/lega.
+        budget_salvato = salva_budget_asta(nuovo_budget)
+
+    st.session_state["budget_asta_corrente"] = float(budget_salvato)
+    st.session_state["budget_asta_input"] = float(budget_salvato)
+    st.session_state.pop("_ml16_sidebar_metrics", None)
 
 
 # ============================================================
@@ -20720,17 +20784,16 @@ else:
 
 
 # ============================================================
-# V153 - SIDEBAR SQUADRA VISIBILE E AGGIORNATA SU TUTTI I LIVELLI
-# La pagina centrale mantiene il proprio contesto ADMIN/BANDITORE/SQUADRA,
-# mentre la sidebar legge SEMPRE la squadra associata allo stesso utente.
+# V154 - SIDEBAR SQUADRA VISIBILE E SINCRONIZZATA SU TUTTI I LIVELLI
+# Il budget e' scritto esclusivamente dal livello SQUADRA e letto sempre
+# da team_budgets anche in ADMIN/BANDITORE, quindi tutti vedono lo stesso valore.
 # ============================================================
 _sidebar_team_id = st.session_state.get("ml_sidebar_team_id")
 _sidebar_team_nome = str(st.session_state.get("ml_sidebar_team_nome") or TEAM_ATTIVO_NOME or "")
 _sidebar_league_id = st.session_state.get("ml_league_id")
 
 if (
-    MODALITA_ACCESSO_ATTIVA != "SQUADRA"
-    and _sidebar_league_id is not None
+    _sidebar_league_id is not None
     and _sidebar_team_id is not None
 ):
     _sid_lid = int(_sidebar_league_id)
