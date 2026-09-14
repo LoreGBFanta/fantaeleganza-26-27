@@ -12212,7 +12212,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.0.2"
+MULTILEGA_SCHEMA_VERSION = "5.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -13127,6 +13127,11 @@ def imposta_contesto_multilega_sessione(
 def elenca_accessi_multilega(
     username
 ):
+    cache_key = "_v139_accessi_" + str(username).strip().casefold()
+    cached = st.session_state.get(cache_key)
+    if isinstance(cached, list):
+        return [dict(x) for x in cached]
+
     """
     Restituisce tutte le membership attive dell'utente.
 
@@ -13252,6 +13257,7 @@ def elenca_accessi_multilega(
                     ruoli
             })
 
+        st.session_state[cache_key] = [dict(x) for x in accessi]
         return accessi
 
     finally:
@@ -13540,6 +13546,7 @@ def schermata_le_mie_leghe(accessi):
     )
 
     def _entra_modalita(accesso_base, modalita_accesso):
+        st.session_state["_v139_enter_started"] = time.perf_counter()
         accesso_scelto = dict(accesso_base)
         accesso_scelto["modalita_accesso"] = modalita_accesso
 
@@ -13852,6 +13859,9 @@ def crea_lega_multilega(
 
 def invalida_cache_admin_multilega():
     for chiave in list(st.session_state.keys()):
+        if str(chiave).startswith("_v139_accessi_"):
+            st.session_state.pop(chiave, None)
+            continue
         if chiave.startswith((
             "_ml16_admin_leghe_",
             "_ml16_admin_rules_",
@@ -20397,126 +20407,54 @@ def gestisci_backup_cloud():
             st.rerun()
 
 
+@st.cache_resource(show_spinner=False)
+def bootstrap_database_v139(profilo, legacy_supportato):
+    """DDL/foundation una sola volta per processo e profilo."""
+    if legacy_supportato:
+        inizializza_database(str(profilo))
+    inizializza_database_multilega()
+    if legacy_supportato:
+        sincronizza_legacy_in_multilega()
+    return True
+
+
+
 # ============================================================
-# INIZIALIZZAZIONE
+# INIZIALIZZAZIONE · V139 FAST BOOT
 # ============================================================
 
-if PROFILO_LEGACY_SUPPORTATO:
-
-    inizializza_database(
-        PROFILO_ATTIVO
+try:
+    bootstrap_database_v139(
+        PROFILO_ATTIVO,
+        bool(PROFILO_LEGACY_SUPPORTATO)
     )
+    st.session_state.pop("ml_foundation_error", None)
+except Exception as errore_multilega:
+    st.session_state["ml_foundation_error"] = str(errore_multilega)
 
-# ------------------------------------------------------------
-# MULTILEGA 0.3 - FAST BOOT
-# ------------------------------------------------------------
-# V84 eseguiva CREATE TABLE + sincronizzazione legacy ad ogni rerun.
-# Con DB cloud questo significava molti round-trip ad ogni click
-# e poteva facilmente portare i cambi pagina a 15-20 secondi.
-#
-# Da V85 la foundation viene inizializzata UNA SOLA VOLTA
-# per sessione/profilo. I normali cambi sezione non rifanno
-# migrazione e DDL.
-
-_ml_boot_key = (
-    "ml03_boot_"
-    + PROFILO_ATTIVO
-)
-
-if not st.session_state.get(
-    _ml_boot_key,
-    False
-):
-
-    try:
-
-        inizializza_database_multilega()
-
-        if PROFILO_LEGACY_SUPPORTATO:
-
-            sincronizza_legacy_in_multilega()
-
-        st.session_state[
-            _ml_boot_key
-        ] = True
-
-        st.session_state.pop(
-            "ml_foundation_error",
-            None
-        )
-
-    except Exception as errore_multilega:
-
-        st.session_state[
-            "ml_foundation_error"
-        ] = str(
-            errore_multilega
-        )
-
-
-# V138 - allinea i livelli di accesso degli utenti legacy/esistenti
-# prima di costruire la schermata di scelta ruolo.
-assegna_ruoli_utenti_esistenti_v138()
+# La migrazione ruoli V138 resta disponibile come funzione di manutenzione,
+# ma non viene più eseguita nel percorso normale di login.
 
 # Gli accessi vengono letti dal DB solo quando servono.
 # Una volta selezionata la lega, la membership validata è mantenuta
 # nel session_state server-side e non viene ri-queryata a ogni click.
-_v138_access_reset_key = "_v138_access_context_reset"
-if not st.session_state.get(_v138_access_reset_key):
-    st.session_state.pop("ml_accesso_validato", None)
-    st.session_state.pop("ml_modalita_accesso", None)
-    st.session_state.pop("ml_ruoli", None)
-    st.session_state[_v138_access_reset_key] = True
-
-ACCESSO_MULTILEGA_ATTIVO = (
-    st.session_state.get(
-        "ml_accesso_validato"
-    )
+ACCESSO_MULTILEGA_ATTIVO = st.session_state.get(
+    "ml_accesso_validato"
 )
 
 if ACCESSO_MULTILEGA_ATTIVO is None:
-
     try:
-
-        ACCESSI_MULTILEGA = (
-            elenca_accessi_multilega(
-                PROFILO_ATTIVO
-            )
-        )
-
+        ACCESSI_MULTILEGA = elenca_accessi_multilega(PROFILO_ATTIVO)
     except Exception as errore_accessi:
-
-        st.error(
-            "Impossibile leggere le associazioni dell'utente alle leghe."
-        )
-
-        st.exception(
-            errore_accessi
-        )
-
+        st.error("Impossibile leggere le associazioni dell'utente alle leghe.")
+        st.exception(errore_accessi)
         st.stop()
 
-    accesso_sessione = (
-        accesso_multilega_corrente()
-    )
-
-    if accesso_sessione is None:
-
-        azzera_contesto_multilega()
-
-        schermata_le_mie_leghe(
-            ACCESSI_MULTILEGA
-        )
-
-    ACCESSO_MULTILEGA_ATTIVO = (
-        accesso_sessione
-    )
-
-    st.session_state[
-        "ml_accesso_validato"
-    ] = dict(
-        ACCESSO_MULTILEGA_ATTIVO
-    )
+    # V139: niente seconda query di validazione.
+    # Se non c'è un accesso già validato in questa sessione,
+    # mostriamo direttamente la scelta del livello.
+    azzera_contesto_multilega()
+    schermata_le_mie_leghe(ACCESSI_MULTILEGA)
 
 
 applica_accesso_multilega(
@@ -25476,7 +25414,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.0.2 &nbsp;|&nbsp; V138 Ruoli Utenti Esistenti'
+        'MULTILEGA 5.1 &nbsp;|&nbsp; V139 Fast Login Boot'
         '</div>',
         unsafe_allow_html=True
     )
