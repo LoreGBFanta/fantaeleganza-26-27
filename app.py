@@ -12125,7 +12125,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "4.2.1"
+MULTILEGA_SCHEMA_VERSION = "4.2.2"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25253,7 +25253,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 4.2.1 &nbsp;|&nbsp; V129 Fix Timer Schema'
+        'MULTILEGA 4.2.2 &nbsp;|&nbsp; V130 Fix Bid Buttons'
         '</div>',
         unsafe_allow_html=True
     )
@@ -29907,6 +29907,10 @@ def manutenzione_cache_performance_v122():
         "v126_bid_custom_": 3,
         "v126_bid_history_": 2,
         "v126_bid_history_toggle_": 2,
+        "v130_bid_quick_": 6,
+        "v130_bid_custom_": 3,
+        "v130_bid_custom_submit_": 3,
+        "_v130_last_bid_": 2,
     }
 
     chiavi = list(st.session_state.keys())
@@ -30664,6 +30668,67 @@ def auto_finalizza_lotto_scaduto_multilega(league_id):
 
 
 
+
+
+def _salva_esito_bid_v130(ok, messaggio):
+    if ok:
+        st.session_state["team_bid_msg"] = str(messaggio)
+        st.session_state.pop("team_bid_error", None)
+    else:
+        st.session_state["team_bid_error"] = str(messaggio)
+
+
+def callback_bid_rapido_v130(league_id, lot_id, team_id, amount):
+    """
+    Callback robusto: viene eseguito prima del rerender Streamlit.
+    In questo modo il click non viene perso dal refresh automatico.
+    """
+    try:
+        esito = inserisci_offerta_team_multilega(
+            int(league_id),
+            int(lot_id),
+            int(team_id),
+            float(amount)
+        )
+        _salva_esito_bid_v130(
+            True,
+            f"Offerta di {float(amount):g} crediti registrata."
+        )
+        st.session_state[
+            f"_v130_last_bid_{int(league_id)}_{int(team_id)}"
+        ] = {
+            "lot_id": int(lot_id),
+            "amount": float(amount),
+            "version": int(esito.get("version", 0)),
+            "ts": time.time(),
+        }
+    except Exception as errore:
+        _salva_esito_bid_v130(False, str(errore))
+
+
+def callback_bid_personalizzato_v130(
+    league_id,
+    lot_id,
+    team_id,
+    widget_key
+):
+    try:
+        amount = float(st.session_state.get(widget_key))
+    except Exception:
+        _salva_esito_bid_v130(
+            False,
+            "Importo offerta non valido."
+        )
+        return
+
+    callback_bid_rapido_v130(
+        league_id,
+        lot_id,
+        team_id,
+        amount
+    )
+
+
 @st.fragment(run_every="2s")
 def render_bidding_inline_asta_v126():
     """
@@ -30726,6 +30791,11 @@ def render_bidding_inline_asta_v126():
     if st.session_state.get("team_bid_msg"):
         st.success(
             st.session_state.pop("team_bid_msg")
+        )
+
+    if st.session_state.get("team_bid_error"):
+        st.error(
+            st.session_state.pop("team_bid_error")
         )
 
     if stato is None:
@@ -30881,7 +30951,7 @@ def render_bidding_inline_asta_v126():
             rapidi
         ):
             with col:
-                if st.button(
+                st.button(
                     f"{label} · {valore:g}",
                     type=(
                         "primary"
@@ -30894,59 +30964,67 @@ def render_bidding_inline_asta_v126():
                         or valore > massimo + 1e-9
                     ),
                     key=(
-                        f"v126_bid_quick_"
+                        f"v130_bid_quick_"
                         f"{stato['lot_id']}_{team_id}_{label}"
+                    ),
+                    on_click=callback_bid_rapido_v130,
+                    args=(
+                        league_id,
+                        stato["lot_id"],
+                        team_id,
+                        float(valore)
                     )
-                ):
-                    try:
-                        inserisci_offerta_team_multilega(
-                            league_id,
-                            stato["lot_id"],
-                            team_id,
-                            float(valore)
-                        )
-                        st.session_state["team_bid_msg"] = (
-                            f"Offerta di {valore:g} crediti registrata."
-                        )
-                        st.rerun(scope="fragment")
-                    except Exception as errore:
-                        st.error(str(errore))
+                )
 
-        personalizzata = st.number_input(
+        _custom_bid_key = (
+            f"v130_bid_custom_{stato['lot_id']}_{team_id}"
+        )
+
+        _custom_now = st.session_state.get(
+            _custom_bid_key,
+            minimo
+        )
+        try:
+            _custom_now = float(_custom_now)
+        except Exception:
+            _custom_now = minimo
+
+        if (
+            _custom_now < minimo
+            or _custom_now > max(minimo, massimo)
+        ):
+            st.session_state[_custom_bid_key] = minimo
+
+        st.number_input(
             "Offerta personalizzata",
             min_value=minimo,
             max_value=max(minimo, massimo),
-            value=minimo,
+            value=float(
+                st.session_state.get(
+                    _custom_bid_key,
+                    minimo
+                )
+            ),
             step=float(stato["incremento"]),
-            key=(
-                f"v126_bid_custom_"
-                f"{stato['lot_id']}_{team_id}"
-            )
+            key=_custom_bid_key
         )
 
-        if st.button(
+        st.button(
             "💰 INVIA OFFERTA",
             type="primary",
             use_container_width=True,
             key=(
-                f"v126_bid_custom_submit_"
+                f"v130_bid_custom_submit_"
                 f"{stato['lot_id']}_{team_id}"
+            ),
+            on_click=callback_bid_personalizzato_v130,
+            args=(
+                league_id,
+                stato["lot_id"],
+                team_id,
+                _custom_bid_key
             )
-        ):
-            try:
-                inserisci_offerta_team_multilega(
-                    league_id,
-                    stato["lot_id"],
-                    team_id,
-                    float(personalizzata)
-                )
-                st.session_state["team_bid_msg"] = (
-                    f"Offerta di {float(personalizzata):g} "
-                    "crediti registrata."
-                )
-                st.rerun(scope="fragment")
-            except Exception as errore:
-                st.error(str(errore))
+        )
 
     _r1, _r2 = st.columns(2)
 
