@@ -12125,7 +12125,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "4.2"
+MULTILEGA_SCHEMA_VERSION = "4.2.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25253,7 +25253,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 4.2 &nbsp;|&nbsp; V128 AutoRefresh + Timer'
+        'MULTILEGA 4.2.1 &nbsp;|&nbsp; V129 Fix Timer Schema'
         '</div>',
         unsafe_allow_html=True
     )
@@ -25511,7 +25511,7 @@ def inizializza_listone_lega_asta(league_id, forza=False):
     """
     league_id = int(league_id)
 
-    _guard_key = f"_auction_schema_ready_v116_{league_id}"
+    _guard_key = f"_auction_schema_ready_v129_{league_id}"
     if not forza and st.session_state.get(_guard_key):
         return
 
@@ -25631,7 +25631,9 @@ def inizializza_listone_lega_asta(league_id, forza=False):
                     current_bid REAL,
                     current_team_id INTEGER,
                     bid_count INTEGER NOT NULL DEFAULT 0,
-                    version INTEGER NOT NULL DEFAULT 0
+                    version INTEGER NOT NULL DEFAULT 0,
+                    bid_deadline_ts REAL,
+                    auto_assign_claimed INTEGER NOT NULL DEFAULT 0
                 )
             """)
 
@@ -26814,6 +26816,8 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
     lot_id = int(lot_id)
     team_id = int(team_id)
     amount = round(float(amount), 2)
+
+    assicura_schema_timer_v129(league_id)
     user_id = int(st.session_state.get("auth_user_id") or 0)
 
     # Validazione completa di membership, budget, rosa e regole.
@@ -29204,6 +29208,15 @@ def render_banditore_asta():
     league_id=int(st.session_state.get("ml_league_id"))
 
     try:
+        assicura_schema_timer_v129(league_id)
+    except Exception as _schema_error_banditore:
+        st.error(
+            "Impossibile aggiornare lo schema timer dell'asta: "
+            + str(_schema_error_banditore)
+        )
+        return
+
+    try:
         _auto_esito_banditore = auto_finalizza_lotto_scaduto_multilega(
             league_id
         )
@@ -30266,6 +30279,59 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
 
 
 
+
+def assicura_schema_timer_v129(league_id):
+    """
+    V129 - migrazione timer idempotente e una sola volta per sessione/lega.
+
+    Corregge le installazioni aggiornate da V127/V128 nelle quali
+    auction_lots esisteva già senza bid_deadline_ts/auto_assign_claimed.
+    """
+    league_id = int(league_id)
+    key = f"_v129_timer_schema_ready_{league_id}"
+
+    if st.session_state.get(key):
+        return
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    dirty = False
+
+    try:
+        cur.execute("PRAGMA table_info(auction_lots)")
+        cols = {str(r[1]) for r in (cur.fetchall() or [])}
+
+        if "bid_deadline_ts" not in cols:
+            cur.execute(
+                "ALTER TABLE auction_lots ADD COLUMN bid_deadline_ts REAL"
+            )
+            dirty = True
+
+        if "auto_assign_claimed" not in cols:
+            cur.execute(
+                "ALTER TABLE auction_lots "
+                "ADD COLUMN auto_assign_claimed INTEGER NOT NULL DEFAULT 0"
+            )
+            dirty = True
+
+        if dirty:
+            conn.commit()
+
+        st.session_state[key] = True
+
+        # The general auction initializer may have cached an older schema-ready flag.
+        for old_key in list(st.session_state.keys()):
+            if (
+                str(old_key).startswith("_auction_schema_ready_")
+                and str(old_key) != f"_auction_schema_ready_v129_{league_id}"
+            ):
+                st.session_state.pop(old_key, None)
+
+    finally:
+        _portal_close(conn)
+
+
+
 def secondi_timer_asta_v128(deadline_ts):
     if deadline_ts is None:
         return None
@@ -30613,6 +30679,15 @@ def render_bidding_inline_asta_v126():
 
     league_id = int(league_id)
     team_id = int(team_id)
+
+    try:
+        assicura_schema_timer_v129(league_id)
+    except Exception as _schema_error:
+        st.error(
+            "Impossibile aggiornare lo schema timer dell'asta: "
+            + str(_schema_error)
+        )
+        return
 
     _perf_start = time.perf_counter()
 
