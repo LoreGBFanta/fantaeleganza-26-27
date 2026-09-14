@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.2.1"
+MULTILEGA_SCHEMA_VERSION = "5.2.2"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -13136,15 +13136,7 @@ def elenca_accessi_multilega(
     if isinstance(cached, list):
         return [dict(x) for x in cached]
 
-    """
-    Restituisce tutte le membership attive dell'utente.
 
-    Un accesso è definito dalla relazione:
-        user -> league_members -> league -> team
-
-    I ruoli appartengono alla membership nella lega,
-    non all'utente in senso assoluto.
-    """
 
     conn = get_connection()
     cur = conn.cursor()
@@ -25415,7 +25407,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.2.1 &nbsp;|&nbsp; V141 Pulsante Accesso Blu'
+        'MULTILEGA 5.2.2 &nbsp;|&nbsp; V142 Fix Testo Accesso'
         '</div>',
         unsafe_allow_html=True
     )
