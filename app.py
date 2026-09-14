@@ -12212,7 +12212,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "4.4"
+MULTILEGA_SCHEMA_VERSION = "4.4.1"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -15033,7 +15033,7 @@ def render_admin_multilega():
                     key=f"ml36_regen_export_{int(_league_admin_listone)}"
                 ):
                     st.session_state.pop(_export_key, None)
-                    st.rerun(scope="fragment")
+                    st.rerun()
 
     tab_nuova, tab_esistenti = st.tabs(
         [
@@ -25339,7 +25339,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 4.4 &nbsp;|&nbsp; V133 No AutoRefresh + Fast Actions'
+        'MULTILEGA 4.4.1 &nbsp;|&nbsp; V134 Fix Banditore Open'
         '</div>',
         unsafe_allow_html=True
     )
@@ -27605,7 +27605,7 @@ def render_console_asta_team():
                                 f'{_g_call["nome"]} selezionato. '
                                 "Attendi il Banditore."
                             )
-                            st.rerun(scope="fragment")
+                            st.rerun()
                         except Exception as errore:
                             st.error(str(errore))
                 else:
@@ -27852,7 +27852,7 @@ def render_console_asta_team():
                             st.session_state["team_bid_msg"] = (
                                 f"Offerta di {float(_value_q):g} crediti registrata."
                             )
-                            st.rerun(scope="fragment")
+                            st.rerun()
                         except Exception as errore:
                             st.error(str(errore))
 
@@ -27880,7 +27880,7 @@ def render_console_asta_team():
                     st.session_state["team_bid_msg"] = (
                         f"Offerta di {float(offerta_diretta):g} crediti registrata."
                     )
-                    st.rerun(scope="fragment")
+                    st.rerun()
                 except Exception as errore:
                     st.error(str(errore))
 
@@ -27930,7 +27930,7 @@ def render_console_asta_team():
         st.session_state.pop(
             f"_ml37_console_workspace_ready_{league_id}_{team_id}",None
         )
-        st.rerun(scope="fragment")
+        st.rerun()
 
     _console_perf["Totale"]=time.perf_counter()-_console_perf_start
     if "ADMIN" in RUOLI_ATTIVI and _console_perf["Totale"] >= 1.0:
@@ -30334,7 +30334,6 @@ def render_card_giocatore_live_v132(stato):
     st.markdown(card, unsafe_allow_html=True)
 
 
-@st.fragment
 def render_banditore_asta():
     """
     V133 - nessun refresh automatico.
@@ -30360,7 +30359,8 @@ def render_banditore_asta():
     st.button(
         "🔄 AGGIORNA OFFERTE",
         use_container_width=True,
-        key="v133_refresh_banditore"
+        key="v134_refresh_banditore",
+        help="Rilegge immediatamente lo stato corrente dell'asta."
     )
 
     try:
@@ -30518,7 +30518,7 @@ def render_banditore_asta():
                     f'{pending["player"]} assegnato in Draft '
                     f'a {pending["team"]}.'
                 )
-            st.rerun(scope="fragment")
+            st.rerun()
         except Exception as errore:
             st.error(str(errore))
 
@@ -31356,7 +31356,6 @@ def callback_bid_personalizzato_v130(
     )
 
 
-@st.fragment
 def render_bidding_inline_asta_v126():
     """
     V132 - ASTA squadra: un solo fragment live, una sola query per refresh.
@@ -31392,7 +31391,8 @@ def render_bidding_inline_asta_v126():
     st.button(
         "🔄 AGGIORNA OFFERTE",
         use_container_width=True,
-        key="v133_refresh_team_asta"
+        key="v134_refresh_team_asta",
+        help="Rilegge immediatamente lo stato corrente dell'asta."
     )
 
     if stato is None:
@@ -31757,7 +31757,19 @@ def render_navigazione_e_pagina():
 
     elif sezione == "BANDITORE":
 
+        _t_banditore_route = time.perf_counter()
         render_banditore_asta()
+        _banditore_route_elapsed = (
+            time.perf_counter() - _t_banditore_route
+        )
+        if (
+            "ADMIN" in RUOLI_ATTIVI
+            and _banditore_route_elapsed >= 0.75
+        ):
+            st.caption(
+                f"⏱ Apertura Banditore: "
+                f"{_banditore_route_elapsed:.2f} s"
+            )
 
     # ============================================================
     # DASHBOARD
