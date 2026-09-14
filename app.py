@@ -12125,7 +12125,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "4.1.1"
+MULTILEGA_SCHEMA_VERSION = "4.2"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25253,7 +25253,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 4.1.1 &nbsp;|&nbsp; V127 Fix HTML Asta Live'
+        'MULTILEGA 4.2 &nbsp;|&nbsp; V128 AutoRefresh + Timer'
         '</div>',
         unsafe_allow_html=True
     )
@@ -25558,6 +25558,8 @@ def inizializza_listone_lega_asta(league_id, forza=False):
                 "current_team_id",
                 "bid_count",
                 "version",
+                "bid_deadline_ts",
+                "auto_assign_claimed",
             }.issubset(_cols_lot)
 
         if not _schema_completo:
@@ -25649,6 +25651,10 @@ def inizializza_listone_lega_asta(league_id, forza=False):
                     "ALTER TABLE auction_lots ADD COLUMN bid_count INTEGER NOT NULL DEFAULT 0",
                 "version":
                     "ALTER TABLE auction_lots ADD COLUMN version INTEGER NOT NULL DEFAULT 0",
+                "bid_deadline_ts":
+                    "ALTER TABLE auction_lots ADD COLUMN bid_deadline_ts REAL",
+                "auto_assign_claimed":
+                    "ALTER TABLE auction_lots ADD COLUMN auto_assign_claimed INTEGER NOT NULL DEFAULT 0",
             }
 
             for _colonna, _sql in _migrazioni.items():
@@ -25868,7 +25874,8 @@ def lotto_corrente_multilega(league_id):
                 l.current_bid,
                 l.current_team_id,
                 COALESCE(l.bid_count,0),
-                COALESCE(l.version,0)
+                COALESCE(l.version,0),
+                l.bid_deadline_ts
             FROM auction_sessions s
             LEFT JOIN auction_lots l ON l.id=s.current_lot_id
             LEFT JOIN league_player_catalog g ON g.player_id=l.player_id AND g.league_id=s.league_id
@@ -25895,6 +25902,7 @@ def lotto_corrente_multilega(league_id):
             "current_team_id": int(r[11]) if r[11] is not None else None,
             "bid_count": int(r[12] or 0),
             "version": int(r[13] or 0),
+            "bid_deadline_ts": float(r[14]) if r[14] is not None else None,
         }
     finally:
         _portal_close(conn)
@@ -25942,9 +25950,10 @@ def apri_lotto_banditore(league_id, player_id):
         cur.execute("""
             INSERT INTO auction_lots (
                 league_id,player_id,stato,opened_by_user_id,opened_at,
-                current_bid,current_team_id,bid_count,version
+                current_bid,current_team_id,bid_count,version,
+                bid_deadline_ts,auto_assign_claimed
             )
-            VALUES (?,?,'OPEN',?,CURRENT_TIMESTAMP,NULL,NULL,0,0)
+            VALUES (?,?,'OPEN',?,CURRENT_TIMESTAMP,NULL,NULL,0,0,NULL,0)
             RETURNING id
         """,(league_id,player_id,user_id))
         row=cur.fetchone()
@@ -26860,7 +26869,9 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             SET current_bid=?,
                 current_team_id=?,
                 bid_count=COALESCE(bid_count,0)+1,
-                version=COALESCE(version,0)+1
+                version=COALESCE(version,0)+1,
+                bid_deadline_ts=CAST(strftime('%s','now') AS REAL)+10,
+                auto_assign_claimed=0
             WHERE id=?
               AND league_id=?
               AND stato='OPEN'
@@ -29087,7 +29098,8 @@ def snapshot_banditore_multilega(league_id):
                 COALESCE(g.fvm_mantra,g.fvm,0),
                 COALESCE(g.quotazione_attuale_mantra,g.quotazione_attuale,0),
                 l.closing_at,l.current_bid,l.current_team_id,
-                COALESCE(l.bid_count,0),COALESCE(l.version,0)
+                COALESCE(l.bid_count,0),COALESCE(l.version,0),
+                l.bid_deadline_ts
             FROM auction_sessions s
             LEFT JOIN auction_lots l ON l.id=s.current_lot_id
             LEFT JOIN league_player_catalog g
@@ -29114,6 +29126,7 @@ def snapshot_banditore_multilega(league_id):
                 "current_team_id":int(rl[11]) if rl[11] is not None else None,
                 "bid_count":int(rl[12] or 0),
                 "version":int(rl[13] or 0),
+                "bid_deadline_ts":float(rl[14]) if rl[14] is not None else None,
             }
 
         turno = None
@@ -29182,16 +29195,34 @@ def snapshot_banditore_multilega(league_id):
 
 
 
+@st.fragment(run_every="2s")
 def render_banditore_asta():
     if not any(r in RUOLI_ATTIVI for r in ("AUCTIONEER","ADMIN")):
         st.error("Questa sezione è riservata a Banditore o Admin.")
         return
 
     league_id=int(st.session_state.get("ml_league_id"))
+
+    try:
+        _auto_esito_banditore = auto_finalizza_lotto_scaduto_multilega(
+            league_id
+        )
+        if _auto_esito_banditore:
+            st.session_state["auctioneer_msg"] = (
+                f'⏱ Assegnazione automatica: '
+                f'{_auto_esito_banditore["team"]} a '
+                f'{_auto_esito_banditore["prezzo"]:g} crediti.'
+            )
+    except Exception as _auto_errore_banditore:
+        st.caption(
+            "Auto-assegnazione in attesa: "
+            + str(_auto_errore_banditore)
+        )
+
     st.subheader("🔨 Banditore")
     st.caption(
-        "Il Banditore vede solo il giocatore corrente. "
-        "Le offerte vengono aggiornate su richiesta."
+        "Aggiornamento automatico ogni 2 secondi. "
+        "Dopo ogni offerta parte un timer di 10 secondi."
     )
 
     if st.button(
@@ -29264,72 +29295,27 @@ def render_banditore_asta():
                 f'**{_best_banditore["team"]}**'
             )
 
-            if _stato_lotto_banditore == "OPEN":
-                if st.button(
-                    "🔒 CHIUDI LE OFFERTE",
-                    type="primary",
-                    use_container_width=True,
-                    key="auctioneer_freeze_bids"
-                ):
-                    try:
-                        metti_lotto_in_chiusura_banditore(
-                            league_id,
-                            lotto_aperto["lot_id"]
-                        )
-                        st.session_state["auctioneer_msg"] = (
-                            "Offerte chiuse. Ora puoi confermare l'assegnazione."
-                        )
-                        st.rerun(scope="fragment")
-                    except Exception as errore:
-                        st.error(str(errore))
+            _timer_banditore = secondi_timer_asta_v128(
+                lotto_aperto.get("bid_deadline_ts")
+            )
+            if _timer_banditore is not None:
+                if _timer_banditore > 0:
+                    st.markdown(
+                        f"### ⏱ {_timer_banditore} secondi all'assegnazione"
+                    )
+                    st.progress(
+                        max(0.0, min(1.0, _timer_banditore / 10.0))
+                    )
+                else:
+                    st.warning(
+                        "⏱ Timer scaduto · assegnazione automatica in corso..."
+                    )
 
-            elif _stato_lotto_banditore == "CLOSING":
-                if st.button(
-                    "✅ ASSEGNA AL MIGLIOR OFFERENTE",
-                    type="primary",
-                    use_container_width=True,
-                    key="auctioneer_assign_best_bid"
-                ):
-                    try:
-                        risultato = assegna_giocatore_banditore(
-                            league_id,
-                            lotto_aperto["player_id"],
-                            _best_banditore["team_id"],
-                            _best_banditore["amount"]
-                        )
+            st.caption(
+                "Il lotto verrà assegnato automaticamente allo scadere "
+                "del timer. Ogni nuova offerta riporta il timer a 10 secondi."
+            )
 
-                        if tipo_asta == "CHIAMATA":
-                            avanza_turno_squadra_multilega(
-                                league_id,
-                                tipo_asta
-                            )
-
-                        invalida_cache_dati()
-                        st.session_state["auctioneer_msg"] = (
-                            f'{lotto_aperto["nome"]} assegnato a '
-                            f'{risultato["team"]} a '
-                            f'{_best_banditore["amount"]:g} crediti.'
-                        )
-                        st.rerun(scope="fragment")
-                    except Exception as errore:
-                        st.error(str(errore))
-
-                if st.button(
-                    "↩ RIAPRI OFFERTE",
-                    use_container_width=True,
-                    key="auctioneer_reopen_bids"
-                ):
-                    try:
-                        riapri_lotto_banditore(
-                            league_id,
-                            lotto_aperto["lot_id"]
-                        )
-                        st.session_state["auctioneer_msg"] = (
-                            "Lotto riaperto alle offerte."
-                        )
-                        st.rerun(scope="fragment")
-                    except Exception as errore:
-                        st.error(str(errore))
         else:
             st.caption("Nessuna offerta registrata sul lotto corrente.")
 
@@ -30060,6 +30046,7 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
                 COALESCE(bestt.nome,''),
                 COALESCE(l.bid_count,0),
                 COALESCE(l.version,0),
+                l.bid_deadline_ts,
 
                 COALESCE(t.nome,''),
                 COALESCE(tb.budget_impostato,lr.budget_iniziale,500),
@@ -30136,13 +30123,15 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
         current_bid = float(r[9]) if r[9] is not None else None
         current_team_id = int(r[10]) if r[10] is not None else None
 
-        budget = float(r[15] or 0)
-        incremento = max(0.01, float(r[16] or 1))
-        max_giocatori = int(r[17] or 30)
-        min_portieri = int(r[18] or 0)
-        soglia = float(r[19] or budget)
-        moltiplicatore = max(1.0, float(r[20] or 1))
-        tipo_asta = str(r[21] or "CHIAMATA").strip().upper()
+        bid_deadline_ts = float(r[14]) if r[14] is not None else None
+
+        budget = float(r[16] or 0)
+        incremento = max(0.01, float(r[17] or 1))
+        max_giocatori = int(r[18] or 30)
+        min_portieri = int(r[19] or 0)
+        soglia = float(r[20] or budget)
+        moltiplicatore = max(1.0, float(r[21] or 1))
+        tipo_asta = str(r[22] or "CHIAMATA").strip().upper()
 
         aliases = {
             "A CHIAMATA":"CHIAMATA",
@@ -30150,9 +30139,9 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
         }
         tipo_asta = aliases.get(tipo_asta, tipo_asta)
 
-        numero_rosa = int(r[22] or 0)
-        valore_acquisti = float(r[23] or 0)
-        portieri_attuali = int(r[24] or 0)
+        numero_rosa = int(r[23] or 0)
+        valore_acquisti = float(r[24] or 0)
+        portieri_attuali = int(r[25] or 0)
 
         giocatore_portiere = (
             ruolo_classico == "P"
@@ -30247,8 +30236,9 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
             "current_team": str(r[11] or ""),
             "bid_count": int(r[12] or 0),
             "version": int(r[13] or 0),
+            "bid_deadline_ts": bid_deadline_ts,
 
-            "team_nome": str(r[14] or ""),
+            "team_nome": str(r[15] or ""),
             "budget": budget,
             "incremento": incremento,
             "max_giocatori": max_giocatori,
@@ -30275,6 +30265,340 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
         _portal_close(conn)
 
 
+
+def secondi_timer_asta_v128(deadline_ts):
+    if deadline_ts is None:
+        return None
+    try:
+        return max(
+            0,
+            int(math.ceil(float(deadline_ts) - time.time()))
+        )
+    except Exception:
+        return None
+
+
+def auto_finalizza_lotto_scaduto_multilega(league_id):
+    """
+    V128 - auto-assegnazione atomica del lotto scaduto.
+
+    Può essere invocata sia dal Banditore sia da una squadra.
+    Una sola sessione può reclamare il lotto grazie a UPDATE ... RETURNING
+    con auto_assign_claimed=0.
+    """
+    league_id = int(league_id)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+        # Claim atomico del lotto scaduto.
+        cur.execute("""
+            UPDATE auction_lots
+            SET stato='CLOSING',
+                auto_assign_claimed=1,
+                closing_at=COALESCE(closing_at,CURRENT_TIMESTAMP)
+            WHERE id=(
+                SELECT s.current_lot_id
+                FROM auction_sessions s
+                WHERE s.league_id=?
+                LIMIT 1
+            )
+              AND league_id=?
+              AND stato='OPEN'
+              AND current_bid IS NOT NULL
+              AND current_team_id IS NOT NULL
+              AND bid_deadline_ts IS NOT NULL
+              AND bid_deadline_ts<=CAST(strftime('%s','now') AS REAL)
+              AND COALESCE(auto_assign_claimed,0)=0
+            RETURNING
+                id,
+                player_id,
+                current_team_id,
+                current_bid
+        """, (league_id, league_id))
+
+        claimed = cur.fetchone()
+        if not claimed:
+            return None
+
+        lot_id = int(claimed[0])
+        player_id = int(claimed[1])
+        team_id = int(claimed[2])
+        prezzo = float(claimed[3])
+
+        # Regole + tipo asta.
+        cur.execute("""
+            SELECT
+                COALESCE(max_giocatori,30),
+                COALESCE(min_portieri,0),
+                COALESCE(budget_iniziale,500),
+                COALESCE(soglia_budget,budget_iniziale,500),
+                COALESCE(moltiplicatore_oltre_soglia,1),
+                COALESCE(tipo_asta,'CHIAMATA')
+            FROM league_rules
+            WHERE league_id=?
+            LIMIT 1
+        """, (league_id,))
+        rr = cur.fetchone()
+        if not rr:
+            raise ValueError("Regolamento della lega non trovato.")
+
+        max_giocatori = int(rr[0] or 30)
+        min_portieri = int(rr[1] or 0)
+        budget_default = float(rr[2] or 500)
+        soglia = float(rr[3] or budget_default)
+        moltiplicatore = max(1.0, float(rr[4] or 1))
+        tipo_asta = str(rr[5] or "CHIAMATA").strip().upper()
+
+        # Player ancora disponibile.
+        cur.execute("""
+            SELECT stato
+            FROM league_players
+            WHERE league_id=? AND player_id=?
+            LIMIT 1
+        """, (league_id, player_id))
+        rp = cur.fetchone()
+        if not rp or str(rp[0] or "").upper() != "DISPONIBILE":
+            raise ValueError("Giocatore non più disponibile.")
+
+        # Team attivo.
+        cur.execute("""
+            SELECT nome
+            FROM teams
+            WHERE league_id=? AND id=? AND is_active=1
+            LIMIT 1
+        """, (league_id, team_id))
+        rt = cur.fetchone()
+        if not rt:
+            raise ValueError("Squadra vincitrice non valida.")
+        nome_team = str(rt[0] or "")
+
+        # Rosa autorevole.
+        cur.execute("""
+            SELECT
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=?
+                        THEN 1 ELSE 0
+                    END
+                ),0),
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=?
+                        THEN COALESCE(lp.prezzo_assegnazione,0)
+                        ELSE 0
+                    END
+                ),0),
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=?
+                         AND (
+                            UPPER(COALESCE(c.ruolo_classico,''))='P'
+                            OR UPPER(COALESCE(c.ruolo_mantra,'')) IN ('P','POR')
+                         )
+                        THEN 1 ELSE 0
+                    END
+                ),0)
+            FROM league_players lp
+            LEFT JOIN league_player_catalog c
+              ON c.league_id=lp.league_id
+             AND c.player_id=lp.player_id
+            WHERE lp.league_id=?
+        """, (team_id, team_id, team_id, league_id))
+
+        rrosa = cur.fetchone() or (0,0,0)
+        roster_count = int(rrosa[0] or 0)
+        valore_attuale = float(rrosa[1] or 0)
+        portieri_attuali = int(rrosa[2] or 0)
+
+        if roster_count >= max_giocatori:
+            raise ValueError("Rosa vincitrice già completa.")
+
+        cur.execute("""
+            SELECT
+                COALESCE(ruolo_classico,''),
+                COALESCE(ruolo_mantra,'')
+            FROM league_player_catalog
+            WHERE league_id=? AND player_id=?
+            LIMIT 1
+        """, (league_id, player_id))
+        ruolo = cur.fetchone() or ("","")
+        is_portiere = (
+            str(ruolo[0] or "").strip().upper() == "P"
+            or str(ruolo[1] or "").strip().upper() in ("P","POR")
+        )
+
+        slot_dopo = max(0, max_giocatori - (roster_count + 1))
+        portieri_dopo = portieri_attuali + (1 if is_portiere else 0)
+        portieri_mancanti = max(0, min_portieri - portieri_dopo)
+        if slot_dopo < portieri_mancanti:
+            raise ValueError("Vincolo minimo portieri non rispettabile.")
+
+        cur.execute("""
+            SELECT COALESCE(budget_impostato,?)
+            FROM team_budgets
+            WHERE league_id=? AND team_id=?
+            LIMIT 1
+        """, (budget_default, league_id, team_id))
+        rb = cur.fetchone()
+        budget = float(rb[0] if rb else budget_default)
+
+        nuovo_valore = round(valore_attuale + prezzo, 2)
+        nuova_spesa = float(
+            _spesa_effettiva_regole(
+                nuovo_valore,
+                soglia,
+                moltiplicatore
+            )
+        )
+
+        if nuova_spesa > budget + 1e-9:
+            raise ValueError("Budget insufficiente all'auto-assegnazione.")
+
+        cur.execute("""
+            UPDATE league_players
+            SET stato='ASSEGNATO',
+                assigned_team_id=?,
+                prezzo_assegnazione=?,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND player_id=? AND stato='DISPONIBILE'
+            RETURNING player_id
+        """, (team_id, prezzo, league_id, player_id))
+        if not cur.fetchone():
+            raise ValueError("Giocatore già assegnato da altra operazione.")
+
+        cur.execute("""
+            INSERT INTO rosters (
+                league_id,team_id,player_id,prezzo_acquisto,
+                fonte,assigned_at,updated_at
+            )
+            VALUES (?,?,?,?,'AUTO_TIMER',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,team_id,player_id)
+            DO UPDATE SET
+                prezzo_acquisto=excluded.prezzo_acquisto,
+                fonte='AUTO_TIMER',
+                updated_at=CURRENT_TIMESTAMP
+        """, (league_id, team_id, player_id, prezzo))
+
+        cur.execute("""
+            INSERT INTO team_budgets (
+                league_id,team_id,budget_impostato,
+                valore_acquisti,spesa_effettiva,updated_at
+            )
+            VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,team_id)
+            DO UPDATE SET
+                valore_acquisti=excluded.valore_acquisti,
+                spesa_effettiva=excluded.spesa_effettiva,
+                updated_at=CURRENT_TIMESTAMP
+        """, (
+            league_id, team_id, budget,
+            nuovo_valore, nuova_spesa
+        ))
+
+        cur.execute("""
+            INSERT INTO auction_assignment_history (
+                league_id,player_id,team_id,prezzo,stato,
+                assigned_by_user_id,assigned_at
+            )
+            VALUES (?,?,?,?,'ACTIVE',NULL,CURRENT_TIMESTAMP)
+            RETURNING id
+        """, (league_id, player_id, team_id, prezzo))
+        hrow = cur.fetchone()
+        history_id = int(hrow[0]) if hrow else 0
+
+        # Compatibilità workspace target best-effort.
+        tab_team = f"giocatori_ml_l{league_id}_t{team_id}"
+        try:
+            cur.execute(
+                f"""
+                UPDATE {tab_team}
+                SET stato='MIO',
+                    prezzo_acquisto=?,
+                    ultimo_aggiornamento=CURRENT_TIMESTAMP
+                WHERE id=?
+                """,
+                (prezzo, player_id)
+            )
+        except Exception:
+            pass
+
+        cur.execute("""
+            UPDATE auction_lots
+            SET stato='ASSIGNED',
+                assigned_team_id=?,
+                final_price=?,
+                closed_at=CURRENT_TIMESTAMP,
+                bid_deadline_ts=NULL
+            WHERE id=? AND league_id=? AND auto_assign_claimed=1
+        """, (team_id, prezzo, lot_id, league_id))
+
+        cur.execute("""
+            UPDATE auction_sessions
+            SET current_lot_id=NULL,
+                stato='READY',
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND current_lot_id=?
+        """, (league_id, lot_id))
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,team_id,azione,
+                entita,entita_id,dettagli_json,created_at
+            )
+            VALUES (?,NULL,?,'PLAYER_AUTO_ASSIGNED',
+                    'PLAYER',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            team_id,
+            str(player_id),
+            json.dumps({
+                "prezzo": prezzo,
+                "team": nome_team,
+                "history_id": history_id,
+                "lot_id": lot_id,
+                "timer_secondi": 10,
+            }, ensure_ascii=False)
+        ))
+
+        conn.commit()
+
+        # CHIAMATA: avanza turno solo dopo commit.
+        if tipo_asta in ("CHIAMATA", "A CHIAMATA"):
+            try:
+                avanza_turno_squadra_multilega(
+                    league_id,
+                    "CHIAMATA"
+                )
+            except Exception:
+                pass
+
+        invalida_cache_dati()
+
+        return {
+            "lot_id": lot_id,
+            "player_id": player_id,
+            "team_id": team_id,
+            "team": nome_team,
+            "prezzo": prezzo,
+        }
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+
+@st.fragment(run_every="2s")
 def render_bidding_inline_asta_v126():
     """
     V126 - bidding integrato direttamente nella pagina ASTA.
@@ -30293,6 +30617,20 @@ def render_bidding_inline_asta_v126():
     _perf_start = time.perf_counter()
 
     try:
+        _auto_esito = auto_finalizza_lotto_scaduto_multilega(
+            league_id
+        )
+        if _auto_esito:
+            st.session_state["team_bid_msg"] = (
+                f'⏱ {_auto_esito["team"]} si aggiudica il giocatore '
+                f'a {_auto_esito["prezzo"]:g} crediti.'
+            )
+    except Exception as _auto_errore:
+        st.caption(
+            "Auto-assegnazione in attesa: " + str(_auto_errore)
+        )
+
+    try:
         stato = snapshot_bidding_asta_team_v126(
             league_id,
             team_id
@@ -30306,6 +30644,9 @@ def render_bidding_inline_asta_v126():
     _elapsed = time.perf_counter() - _perf_start
 
     st.markdown("### 📡 ASTA LIVE")
+    st.caption(
+        "Aggiornamento automatico ogni 2 secondi."
+    )
 
     if st.session_state.get("team_bid_msg"):
         st.success(
@@ -30319,7 +30660,7 @@ def render_bidding_inline_asta_v126():
         )
 
         if st.button(
-            "⟳ AGGIORNA ASTA LIVE",
+            "⟳ AGGIORNA SUBITO",
             use_container_width=True,
             key="v126_asta_refresh_no_lot"
         ):
@@ -30396,6 +30737,27 @@ def render_bidding_inline_asta_v126():
             f'**{stato["current_bid"]:g}** crediti · '
             f'**{stato["current_team"]}**'
         )
+
+    _timer_sec = secondi_timer_asta_v128(
+        stato.get("bid_deadline_ts")
+    )
+
+    if stato["current_bid"] is None:
+        st.caption(
+            "⏱ Il timer partirà dalla prima offerta."
+        )
+    elif _timer_sec is not None:
+        if _timer_sec > 0:
+            st.markdown(
+                f"### ⏱ {_timer_sec} secondi all'assegnazione automatica"
+            )
+            st.progress(
+                max(0.0, min(1.0, _timer_sec / 10.0))
+            )
+        else:
+            st.warning(
+                "⏱ Timer scaduto · assegnazione automatica in corso..."
+            )
 
     _m1, _m2, _m3, _m4 = st.columns(4)
 
