@@ -26397,9 +26397,21 @@ def assicura_schema_storico_asta_v147(league_id):
                 called_by_user_id INTEGER,
                 called_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                active INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(league_id, player_id)
             )
         """)
+
+        # V160 - Un giocatore svincolato/eliminato non deve piu' comparire
+        # nello Storico Asta ne' nel contatore. La colonna active permette di
+        # conservarne la traccia tecnica senza farlo ricomparire nei backfill.
+        cur.execute("PRAGMA table_info(auction_called_players)")
+        _called_cols = {str(_r[1]) for _r in (cur.fetchall() or [])}
+        if "active" not in _called_cols:
+            cur.execute(
+                "ALTER TABLE auction_called_players "
+                "ADD COLUMN active INTEGER NOT NULL DEFAULT 1"
+            )
 
         cur.execute("""
             CREATE INDEX IF NOT EXISTS ix_called_players_league_called
@@ -26496,6 +26508,8 @@ def registra_giocatore_chiamato_v147(
         DO UPDATE SET
             fonte=excluded.fonte,
             lot_id=COALESCE(excluded.lot_id,auction_called_players.lot_id),
+            active=1,
+            called_at=CURRENT_TIMESTAMP,
             updated_at=CURRENT_TIMESTAMP
     """, (
         int(league_id),
@@ -26519,6 +26533,7 @@ def contatore_chiamati_v147(league_id):
                     SELECT COUNT(DISTINCT player_id)
                     FROM auction_called_players
                     WHERE league_id=?
+                      AND COALESCE(active,1)=1
                 ),
                 (
                     SELECT COUNT(*)
@@ -26578,6 +26593,7 @@ def _storico_asta_db_v156(league_id):
              AND rl.player_id=cp.player_id
              AND rl.rn=1
             WHERE cp.league_id=?
+              AND COALESCE(cp.active,1)=1
             ORDER BY cp.called_at DESC, cp.id DESC
         """, conn, params=(league_id, league_id))
     finally:
@@ -27098,6 +27114,17 @@ def azione_storico_rosa_v149(league_id, player_id, azione):
             )
         """, (league_id,player_id))
 
+        # V160 - SVINCOLA ed ELIMINA rimuovono il giocatore anche dallo
+        # Storico Asta. Non cancelliamo fisicamente la chiamata: la rendiamo
+        # inattiva, cosi' i backfill storici non possono farla ricomparire.
+        # Una futura nuova chiamata la riattivera' tramite
+        # registra_giocatore_chiamato_v147().
+        cur.execute("""
+            UPDATE auction_called_players
+            SET active=0, updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND player_id=?
+        """, (league_id,player_id))
+
         _ricalcola_budget_team_v147(cur,league_id,team_id)
 
         cur.execute("""
@@ -27118,6 +27145,14 @@ def azione_storico_rosa_v149(league_id, player_id, azione):
         ))
 
         conn.commit()
+
+        # V160 - forza l'aggiornamento immediato di tabella e counter.
+        try:
+            invalida_cache_banditore_v156(league_id)
+        except Exception:
+            st.session_state.pop(f"_v156_history_{league_id}", None)
+            st.session_state.pop(f"_v156_counter_{league_id}", None)
+
         return {
             "team": team_nome,
             "prezzo": prezzo,
