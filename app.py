@@ -30116,6 +30116,338 @@ def annulla_assegnazione_banditore(league_id, history_id):
         _portal_close(conn)
 
 
+
+# ============================================================
+# V153 - RESET SPESE + UNDO GESTIONE ASTA
+# ============================================================
+
+def reset_spese_squadra_asta_v153(league_id, team_id):
+    """
+    Azzera integralmente la spesa d'asta della squadra senza cancellare la rosa.
+
+    - i giocatori attualmente assegnati restano in rosa ma con costo corrente 0;
+    - i costi degli svincoli vengono disattivati;
+    - il budget torna integralmente disponibile;
+    - lo storico ACTIVE viene riallineato a prezzo 0 per mantenere coerente l'UNDO;
+    - l'operazione viene registrata nell'audit log.
+    """
+    league_id = int(league_id)
+    team_id = int(team_id)
+    user_id = int(st.session_state.get("auth_user_id") or 0)
+
+    assicura_schema_storico_asta_v147(league_id)
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=? AND user_id=? AND is_active=1
+              AND (is_auctioneer=1 OR is_admin=1)
+        """, (league_id, user_id))
+        if int((cur.fetchone() or [0])[0] or 0) <= 0:
+            raise PermissionError("Operazione riservata al Banditore/Admin.")
+
+        cur.execute("""
+            SELECT nome
+            FROM teams
+            WHERE league_id=? AND id=? AND is_active=1
+            LIMIT 1
+        """, (league_id, team_id))
+        rt = cur.fetchone()
+        if not rt:
+            raise ValueError("Squadra non valida o non attiva.")
+        team_nome = str(rt[0] or "")
+
+        # Fotografia pre-reset per audit.
+        cur.execute("""
+            SELECT
+                COUNT(*),
+                COALESCE(SUM(COALESCE(prezzo_assegnazione,0)),0)
+            FROM league_players
+            WHERE league_id=?
+              AND assigned_team_id=?
+              AND stato='ASSEGNATO'
+        """, (league_id, team_id))
+        pre = cur.fetchone() or (0, 0)
+        giocatori_attivi = int(pre[0] or 0)
+        valore_attivi_prima = float(pre[1] or 0)
+
+        cur.execute("""
+            SELECT COALESCE(SUM(COALESCE(costo,0)),0), COUNT(*)
+            FROM auction_release_costs
+            WHERE league_id=? AND team_id=? AND active=1
+        """, (league_id, team_id))
+        rr = cur.fetchone() or (0, 0)
+        costo_svincoli_prima = float(rr[0] or 0)
+        svincoli_attivi = int(rr[1] or 0)
+
+        # I giocatori restano assegnati ma non generano più spesa.
+        cur.execute("""
+            UPDATE league_players
+            SET prezzo_assegnazione=0,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=?
+              AND assigned_team_id=?
+              AND stato='ASSEGNATO'
+        """, (league_id, team_id))
+
+        cur.execute("""
+            UPDATE rosters
+            SET prezzo_acquisto=0
+            WHERE league_id=? AND team_id=?
+        """, (league_id, team_id))
+
+        # Gli svincoli pregressi non devono più consumare crediti.
+        cur.execute("""
+            UPDATE auction_release_costs
+            SET active=0,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND team_id=? AND active=1
+        """, (league_id, team_id))
+
+        # Mantiene annullabili le assegnazioni correnti dopo il reset.
+        cur.execute("""
+            UPDATE auction_assignment_history
+            SET prezzo=0
+            WHERE league_id=?
+              AND team_id=?
+              AND stato='ACTIVE'
+        """, (league_id, team_id))
+
+        # Allinea anche l'eventuale workspace operativo legacy della squadra.
+        tab_team = "giocatori_ml_l" + str(league_id) + "_t" + str(team_id)
+        try:
+            cur.execute(
+                f"""UPDATE {tab_team}
+                    SET prezzo_acquisto=0,
+                        ultimo_aggiornamento=CURRENT_TIMESTAMP
+                    WHERE stato='ASSEGNATO'"""
+            )
+        except Exception:
+            pass
+
+        _ricalcola_budget_team_v147(cur, league_id, team_id)
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,team_id,azione,
+                entita,entita_id,dettagli_json,created_at
+            )
+            VALUES (?,?,?,'AUCTION_EXPENSES_RESET','TEAM',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            user_id,
+            team_id,
+            str(team_id),
+            json.dumps({
+                "team": team_nome,
+                "giocatori_attivi": giocatori_attivi,
+                "valore_attivi_prima": valore_attivi_prima,
+                "svincoli_attivi": svincoli_attivi,
+                "costo_svincoli_prima": costo_svincoli_prima,
+                "crediti_riassegnati": round(
+                    valore_attivi_prima + costo_svincoli_prima, 2
+                ),
+                "valore_acquisti_dopo": 0,
+                "spesa_effettiva_dopo": 0,
+            }, ensure_ascii=False)
+        ))
+
+        conn.commit()
+        return {
+            "team_id": team_id,
+            "team": team_nome,
+            "giocatori_attivi": giocatori_attivi,
+            "valore_attivi_prima": valore_attivi_prima,
+            "costo_svincoli_prima": costo_svincoli_prima,
+            "crediti_riassegnati": round(
+                valore_attivi_prima + costo_svincoli_prima, 2
+            ),
+        }
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+@st.dialog("Reset spese squadra")
+def dialog_reset_spese_asta_v153(league_id):
+    league_id = int(league_id)
+    teams = squadre_storico_v147(league_id)
+
+    if not teams:
+        st.info("Nessuna squadra attiva disponibile.")
+        return
+
+    st.warning(
+        "Il reset restituisce alla squadra tutti i crediti spesi, "
+        "compresi i costi derivanti dagli svincoli. "
+        "La rosa NON viene cancellata: i giocatori già assegnati restano in squadra."
+    )
+
+    _nomi = [x["nome"] for x in teams]
+    _by_name = {x["nome"]: int(x["team_id"]) for x in teams}
+
+    scelta = st.selectbox(
+        "Squadra da resettare",
+        _nomi,
+        key=f"v153_reset_expenses_team_{league_id}"
+    )
+
+    team_id = _by_name[scelta]
+
+    # Mostra l'impatto prima della conferma.
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN lp.stato='ASSEGNATO' AND lp.assigned_team_id=?
+                                  THEN COALESCE(lp.prezzo_assegnazione,0) ELSE 0 END),0),
+                COALESCE((SELECT SUM(COALESCE(rc.costo,0))
+                          FROM auction_release_costs rc
+                          WHERE rc.league_id=? AND rc.team_id=? AND rc.active=1),0)
+            FROM league_players lp
+            WHERE lp.league_id=?
+        """, (team_id, league_id, team_id, league_id))
+        imp = cur.fetchone() or (0, 0)
+        _attivi = float(imp[0] or 0)
+        _svincoli = float(imp[1] or 0)
+    finally:
+        _portal_close(conn)
+
+    st.info(
+        f"**{scelta}** · spesa giocatori: {formatta_crediti(_attivi)} · "
+        f"costi svincoli: {formatta_crediti(_svincoli)} · "
+        f"crediti da riassegnare: **{formatta_crediti(_attivi + _svincoli)}**"
+    )
+
+    conferma = st.checkbox(
+        f"Confermo il reset completo delle spese di {scelta}",
+        key=f"v153_reset_expenses_confirm_{league_id}_{team_id}"
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button(
+            "✅ CONFERMA RESET",
+            type="primary",
+            use_container_width=True,
+            disabled=not conferma,
+            key=f"v153_reset_expenses_execute_{league_id}_{team_id}"
+        ):
+            try:
+                esito = reset_spese_squadra_asta_v153(league_id, team_id)
+                invalida_cache_dati()
+                st.session_state.pop("_titolarita_cache", None)
+                st.session_state.pop("_formazioni_tipo_fast_cache", None)
+                st.session_state["auctioneer_msg"] = (
+                    f'♻️ Spese di {esito["team"]} azzerate. '
+                    f'Riassegnati {formatta_crediti(esito["crediti_riassegnati"])} crediti.'
+                )
+                st.rerun()
+            except Exception as errore:
+                st.error(str(errore))
+
+    with c2:
+        if st.button(
+            "ANNULLA",
+            use_container_width=True,
+            key=f"v153_reset_expenses_cancel_{league_id}"
+        ):
+            st.rerun()
+
+
+@st.dialog("Undo ultime operazioni asta")
+def dialog_undo_asta_v153(league_id):
+    league_id = int(league_id)
+    operazioni = ultime_assegnazioni_banditore(league_id, limit=10)
+
+    st.caption(
+        "Sono mostrate le ultime 10 aggiudicazioni registrate. "
+        "È annullabile solo un'assegnazione ancora attiva e coerente con la rosa corrente."
+    )
+
+    if not operazioni:
+        st.info("Non ci sono operazioni d'asta da annullare.")
+        return
+
+    opzioni = []
+    mapping = {}
+    for idx, op in enumerate(operazioni, start=1):
+        stato = str(op.get("stato") or "").upper()
+        label = (
+            f'{idx}. {op["giocatore"]} → {op["team"]} · '
+            f'{formatta_crediti(op["prezzo"])} cr · {stato}'
+        )
+        opzioni.append(label)
+        mapping[label] = op
+
+    scelta = st.selectbox(
+        "Operazione da annullare",
+        opzioni,
+        key=f"v153_undo_auction_select_{league_id}"
+    )
+    op = mapping[scelta]
+    annullabile = str(op.get("stato") or "").upper() == "ACTIVE"
+
+    if annullabile:
+        st.warning(
+            f'Annullando questa operazione **{op["giocatore"]}** tornerà disponibile '
+            f'e i {formatta_crediti(op["prezzo"])} crediti verranno restituiti a '
+            f'**{op["team"]}**.'
+        )
+    else:
+        st.info(
+            "Questa operazione non è più attiva ed è mostrata solo per completezza storica."
+        )
+
+    conferma = st.checkbox(
+        "Confermo l'annullamento dell'operazione selezionata",
+        disabled=not annullabile,
+        key=f'v153_undo_confirm_{league_id}_{op["history_id"]}'
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button(
+            "↩️ CONFERMA UNDO",
+            type="primary",
+            use_container_width=True,
+            disabled=(not annullabile or not conferma),
+            key=f'v153_undo_execute_{league_id}_{op["history_id"]}'
+        ):
+            try:
+                annulla_assegnazione_banditore(
+                    league_id,
+                    int(op["history_id"])
+                )
+                invalida_cache_dati()
+                st.session_state.pop("_titolarita_cache", None)
+                st.session_state.pop("_formazioni_tipo_fast_cache", None)
+                st.session_state["auctioneer_msg"] = (
+                    f'↩️ Annullata assegnazione di {op["giocatore"]} a {op["team"]}.'
+                )
+                st.rerun()
+            except Exception as errore:
+                st.error(str(errore))
+
+    with c2:
+        if st.button(
+            "CHIUDI",
+            use_container_width=True,
+            key=f"v153_undo_close_{league_id}"
+        ):
+            st.rerun()
+
+
 def audit_asta_multilega(league_id, limit=100):
     league_id=int(league_id)
     conn=_portal_raw_connection()
@@ -32449,6 +32781,25 @@ def render_banditore_asta():
         st.error(st.session_state.pop("auctioneer_error"))
 
     st.subheader("🔨 Gestione asta")
+
+    _mgmt1, _mgmt2 = st.columns(2)
+    with _mgmt1:
+        if st.button(
+            "♻️ RESET SPESE",
+            use_container_width=True,
+            key=f"v153_reset_expenses_open_{league_id}",
+            help="Restituisce tutti i crediti alla squadra scelta, compresi i costi degli svincoli, senza cancellare la rosa."
+        ):
+            dialog_reset_spese_asta_v153(league_id)
+
+    with _mgmt2:
+        if st.button(
+            "↩️ UNDO",
+            use_container_width=True,
+            key=f"v153_undo_auction_open_{league_id}",
+            help="Annulla una delle ultime 10 aggiudicazioni registrate nell'asta."
+        ):
+            dialog_undo_asta_v153(league_id)
 
     try:
         _chiamati, _totale, _pct = contatore_chiamati_v147(league_id)
