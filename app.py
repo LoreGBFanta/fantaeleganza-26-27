@@ -12125,7 +12125,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "3.8.1"
+MULTILEGA_SCHEMA_VERSION = "3.9"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25253,7 +25253,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 3.8.1 &nbsp;|&nbsp; V123 Fix Situazione Squadre'
+        'MULTILEGA 3.9 &nbsp;|&nbsp; V124 Bidding Engine 2.0'
         '</div>',
         unsafe_allow_html=True
     )
@@ -26348,6 +26348,10 @@ def sincronizza_workspace_corrente_team():
 
 
 def situazione_team_corrente_multilega(league_id, team_id):
+    """
+    V124 - situazione team live.
+    Fonte autorevole: league_players, non rosters legacy/compatibility.
+    """
     league_id = int(league_id)
     team_id = int(team_id)
 
@@ -26358,45 +26362,77 @@ def situazione_team_corrente_multilega(league_id, team_id):
             SELECT
                 COALESCE(t.nome,''),
                 COALESCE(b.budget_impostato,r.budget_iniziale,500),
-                COALESCE(b.valore_acquisti,0),
-                COALESCE(b.spesa_effettiva,0),
                 COALESCE(r.max_giocatori,30),
-                COUNT(ro.id)
+                COALESCE(r.soglia_budget,r.budget_iniziale,500),
+                COALESCE(r.moltiplicatore_oltre_soglia,1),
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=t.id
+                        THEN COALESCE(lp.prezzo_assegnazione,0)
+                        ELSE 0
+                    END
+                ),0),
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=t.id
+                        THEN 1 ELSE 0
+                    END
+                ),0)
             FROM teams t
-            LEFT JOIN league_rules r ON r.league_id=t.league_id
+            LEFT JOIN league_rules r
+              ON r.league_id=t.league_id
             LEFT JOIN team_budgets b
               ON b.league_id=t.league_id
              AND b.team_id=t.id
-            LEFT JOIN rosters ro
-              ON ro.league_id=t.league_id
-             AND ro.team_id=t.id
+            LEFT JOIN league_players lp
+              ON lp.league_id=t.league_id
+             AND lp.assigned_team_id=t.id
+             AND lp.stato='ASSEGNATO'
             WHERE t.league_id=? AND t.id=? AND t.is_active=1
             GROUP BY
-                t.nome,b.budget_impostato,r.budget_iniziale,
-                b.valore_acquisti,b.spesa_effettiva,r.max_giocatori
+                t.id,t.nome,b.budget_impostato,
+                r.budget_iniziale,r.max_giocatori,
+                r.soglia_budget,r.moltiplicatore_oltre_soglia
+            LIMIT 1
         """, (league_id, team_id))
         r = cur.fetchone()
         if not r:
             return None
 
         budget = float(r[1] or 0)
-        spesa = float(r[3] or 0)
+        max_giocatori = int(r[2] or 30)
+        soglia = float(r[3] or budget)
+        moltiplicatore = max(1.0, float(r[4] or 1))
+        valore = float(r[5] or 0)
+        giocatori = int(r[6] or 0)
+
+        spesa = float(
+            _spesa_effettiva_regole(
+                valore,
+                soglia,
+                moltiplicatore
+            )
+        )
 
         return {
             "nome": str(r[0] or ""),
             "budget": budget,
-            "valore_acquisti": float(r[2] or 0),
+            "valore_acquisti": valore,
             "spesa_effettiva": spesa,
             "residuo": round(budget - spesa, 2),
-            "max_giocatori": int(r[4] or 30),
-            "giocatori": int(r[5] or 0),
+            "max_giocatori": max_giocatori,
+            "giocatori": giocatori,
         }
     finally:
         _portal_close(conn)
 
 
 
+
 def regole_bidding_multilega(league_id):
+    """V124 - regole bidding complete in una singola lettura."""
     league_id = int(league_id)
     conn = _portal_raw_connection()
     cur = conn.cursor()
@@ -26405,51 +26441,82 @@ def regole_bidding_multilega(league_id):
             SELECT
                 COALESCE(incremento_minimo,1),
                 COALESCE(max_giocatori,30),
+                COALESCE(min_portieri,0),
                 COALESCE(budget_iniziale,500),
                 COALESCE(soglia_budget,budget_iniziale,500),
-                COALESCE(moltiplicatore_oltre_soglia,1)
+                COALESCE(moltiplicatore_oltre_soglia,1),
+                COALESCE(tipo_asta,'CHIAMATA')
             FROM league_rules
             WHERE league_id=?
             LIMIT 1
         """, (league_id,))
         r = cur.fetchone()
+
         if not r:
             return {
                 "incremento": 1.0,
                 "max_giocatori": 30,
+                "min_portieri": 0,
                 "budget": 500.0,
                 "soglia": 500.0,
                 "moltiplicatore": 1.0,
+                "tipo_asta": "CHIAMATA",
             }
+
+        raw_tipo = str(r[6] or "CHIAMATA").strip().upper()
+        aliases = {
+            "A CHIAMATA": "CHIAMATA",
+            "CHIAMATA": "CHIAMATA",
+            "ALFABETICO": "ALFABETICO",
+            "RANDOM": "RANDOM",
+            "CASUALE": "RANDOM",
+            "DRAFT": "DRAFT",
+        }
+
         return {
             "incremento": max(0.01, float(r[0] or 1)),
             "max_giocatori": int(r[1] or 30),
-            "budget": float(r[2] or 500),
-            "soglia": float(r[3] or r[2] or 500),
-            "moltiplicatore": max(1.0, float(r[4] or 1)),
+            "min_portieri": int(r[2] or 0),
+            "budget": float(r[3] or 500),
+            "soglia": float(r[4] or r[3] or 500),
+            "moltiplicatore": max(1.0, float(r[5] or 1)),
+            "tipo_asta": aliases.get(raw_tipo, raw_tipo),
         }
     finally:
         _portal_close(conn)
 
 
-def stato_offerte_lotto_multilega(league_id, lot_id, limit=20):
+
+
+def stato_offerte_lotto_multilega(
+    league_id,
+    lot_id,
+    limit=20,
+    include_history=False
+):
+    """
+    V124 - stato bidding leggero.
+    Per il rendering standard legge solo il record autorevole auction_lots.
+    Lo storico bids viene caricato solo su richiesta.
+    """
     league_id = int(league_id)
     lot_id = int(lot_id)
 
     conn = _portal_raw_connection()
     cur = conn.cursor()
     try:
-        # Stato autorevole O(1): non ricalcola MAX(bids) a ogni refresh.
         cur.execute("""
             SELECT
                 l.current_bid,
                 l.current_team_id,
                 COALESCE(t.nome,''),
                 COALESCE(l.bid_count,0),
-                COALESCE(l.version,0)
+                COALESCE(l.version,0),
+                l.stato
             FROM auction_lots l
             LEFT JOIN teams t
-              ON t.id=l.current_team_id AND t.league_id=l.league_id
+              ON t.id=l.current_team_id
+             AND t.league_id=l.league_id
             WHERE l.league_id=? AND l.id=?
             LIMIT 1
         """, (league_id, lot_id))
@@ -26464,46 +26531,49 @@ def stato_offerte_lotto_multilega(league_id, lot_id, limit=20):
                 "version": int(stato[4] or 0),
             }
 
-        cur.execute("""
-            SELECT
-                b.id,
-                b.team_id,
-                COALESCE(t.nome,''),
-                b.user_id,
-                COALESCE(u.username,''),
-                b.amount,
-                b.created_at
-            FROM bids b
-            LEFT JOIN teams t
-              ON t.id=b.team_id AND t.league_id=b.league_id
-            LEFT JOIN users u ON u.id=b.user_id
-            WHERE b.league_id=? AND b.lot_id=?
-            ORDER BY b.id DESC
-            LIMIT ?
-        """, (league_id, lot_id, int(limit)))
+        bids = []
+        if include_history:
+            cur.execute("""
+                SELECT
+                    b.id,
+                    b.team_id,
+                    COALESCE(t.nome,''),
+                    b.user_id,
+                    COALESCE(u.username,''),
+                    b.amount,
+                    b.created_at
+                FROM bids b
+                LEFT JOIN teams t
+                  ON t.id=b.team_id AND t.league_id=b.league_id
+                LEFT JOIN users u ON u.id=b.user_id
+                WHERE b.league_id=? AND b.lot_id=?
+                ORDER BY b.id DESC
+                LIMIT ?
+            """, (league_id, lot_id, int(limit)))
 
-        righe = cur.fetchall() or []
-        bids = [
-            {
-                "bid_id": int(r[0]),
-                "team_id": int(r[1]),
-                "team": str(r[2] or ""),
-                "user_id": int(r[3]),
-                "username": str(r[4] or ""),
-                "amount": float(r[5] or 0),
-                "created_at": str(r[6] or ""),
-            }
-            for r in righe
-        ]
+            bids = [
+                {
+                    "bid_id": int(r[0]),
+                    "team_id": int(r[1]),
+                    "team": str(r[2] or ""),
+                    "user_id": int(r[3]),
+                    "username": str(r[4] or ""),
+                    "amount": float(r[5] or 0),
+                    "created_at": str(r[6] or ""),
+                }
+                for r in (cur.fetchall() or [])
+            ]
 
         return {
             "best": migliore,
             "bids": bids,
-            "count": int(stato[3] or 0) if stato else len(bids),
+            "count": int(stato[3] or 0) if stato else 0,
             "version": int(stato[4] or 0) if stato else 0,
+            "stato": str(stato[5] or "") if stato else "",
         }
     finally:
         _portal_close(conn)
+
 
 
 
@@ -26632,22 +26702,39 @@ def calcola_vincoli_offerta_team_multilega(
 
         cur.execute("""
             SELECT
-                COUNT(*),
-                COALESCE(SUM(ro.prezzo_acquisto),0),
-                SUM(
+                COALESCE(SUM(
                     CASE
-                        WHEN UPPER(COALESCE(c.ruolo_classico,''))='P'
-                             OR UPPER(COALESCE(c.ruolo_mantra,'')) IN ('P','POR')
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=?
                         THEN 1 ELSE 0
                     END
-                )
-            FROM rosters ro
+                ),0),
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=?
+                        THEN COALESCE(lp.prezzo_assegnazione,0)
+                        ELSE 0
+                    END
+                ),0),
+                COALESCE(SUM(
+                    CASE
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=?
+                         AND (
+                            UPPER(COALESCE(c.ruolo_classico,''))='P'
+                            OR UPPER(COALESCE(c.ruolo_mantra,'')) IN ('P','POR')
+                         )
+                        THEN 1 ELSE 0
+                    END
+                ),0)
+            FROM league_players lp
             LEFT JOIN league_player_catalog c
-              ON c.league_id=ro.league_id
-             AND c.player_id=ro.player_id
-            WHERE ro.league_id=? AND ro.team_id=?
-        """, (league_id, team_id))
-        rrosa = cur.fetchone()
+              ON c.league_id=lp.league_id
+             AND c.player_id=lp.player_id
+            WHERE lp.league_id=?
+        """, (team_id, team_id, team_id, league_id))
+        rrosa = cur.fetchone() or (0,0,0)
 
         numero_rosa = int(rrosa[0] or 0)
         valore_acquisti = float(rrosa[1] or 0)
@@ -27372,6 +27459,9 @@ def render_console_asta_team():
         "validate atomicamente dal server."
     )
 
+    if st.session_state.get("team_bid_msg"):
+        st.success(st.session_state.pop("team_bid_msg"))
+
     _console_perf_start=time.perf_counter()
     _console_perf={}
     try:
@@ -27532,7 +27622,8 @@ def render_console_asta_team():
         stato_bids = stato_offerte_lotto_multilega(
             league_id,
             lotto["lot_id"],
-            20
+            20,
+            include_history=False
         )
         best = stato_bids["best"]
         incremento = float(regole["incremento"])
@@ -27713,69 +27804,104 @@ def render_console_asta_team():
         elif not vincoli_offerta.get("can_bid", False):
             st.caption("Offerta non disponibile per i vincoli correnti.")
         else:
-            b1, b2 = st.columns([1, 1.5])
+            _min_ui = float(
+                vincoli_offerta.get("minimo", offerta_minima)
+            )
+            _max_ui = float(
+                vincoli_offerta.get("massimo", _min_ui)
+            )
 
-            with b1:
-                if st.button(
-                    f"➕ OFFRI {float(vincoli_offerta.get('minimo',offerta_minima)):g}",
-                    type="primary",
-                    use_container_width=True,
-                    key=f"team_bid_plus_{lotto['lot_id']}"
-                ):
-                    try:
-                        inserisci_offerta_team_multilega(
-                            league_id,
-                            lotto["lot_id"],
-                            team_id,
-                            float(vincoli_offerta.get("minimo",offerta_minima))
-                        )
-                        st.session_state["team_bid_msg"] = (
-                            f"Offerta di {float(vincoli_offerta.get('minimo',offerta_minima)):g} crediti registrata."
-                        )
-                        st.rerun(scope="fragment")
-                    except Exception as errore:
-                        st.error(str(errore))
+            st.markdown("#### Fai la tua offerta")
 
-            with b2:
-                _min_ui = float(
-                    vincoli_offerta.get("minimo",offerta_minima)
-                )
-                _max_ui = float(
-                    vincoli_offerta.get("massimo",_min_ui)
-                )
+            _qb1, _qb2, _qb3 = st.columns(3)
 
-                offerta_diretta = st.number_input(
-                    "Offerta diretta",
-                    min_value=_min_ui,
-                    max_value=max(_min_ui,_max_ui),
-                    value=_min_ui,
-                    step=float(incremento),
-                    key=f"team_bid_direct_value_{lotto['lot_id']}"
-                )
+            _quick_values = [
+                ("OFFERTA MINIMA", _min_ui),
+                ("+5", min(_max_ui, _min_ui + 5)),
+                ("+10", min(_max_ui, _min_ui + 10)),
+            ]
 
-                if st.button(
-                    "INVIA OFFERTA DIRETTA",
-                    use_container_width=True,
-                    key=f"team_bid_direct_{lotto['lot_id']}"
-                ):
-                    try:
-                        inserisci_offerta_team_multilega(
-                            league_id,
-                            lotto["lot_id"],
-                            team_id,
-                            float(offerta_diretta)
-                        )
-                        st.session_state["team_bid_msg"] = (
-                            f"Offerta di {float(offerta_diretta):g} crediti registrata."
-                        )
-                        st.rerun(scope="fragment")
-                    except Exception as errore:
-                        st.error(str(errore))
+            for _col, (_label_q, _value_q) in zip(
+                (_qb1, _qb2, _qb3),
+                _quick_values
+            ):
+                with _col:
+                    _disabled_q = (
+                        _value_q < _min_ui - 1e-9
+                        or _value_q > _max_ui + 1e-9
+                    )
+                    if st.button(
+                        f"{_label_q} · {_value_q:g}",
+                        type=("primary" if _label_q == "OFFERTA MINIMA" else "secondary"),
+                        use_container_width=True,
+                        disabled=_disabled_q,
+                        key=f"team_bid_quick_{lotto['lot_id']}_{_label_q}"
+                    ):
+                        try:
+                            inserisci_offerta_team_multilega(
+                                league_id,
+                                lotto["lot_id"],
+                                team_id,
+                                float(_value_q)
+                            )
+                            st.session_state["team_bid_msg"] = (
+                                f"Offerta di {float(_value_q):g} crediti registrata."
+                            )
+                            st.rerun(scope="fragment")
+                        except Exception as errore:
+                            st.error(str(errore))
 
-            if st.session_state.get("team_bid_msg"):
-                st.success(st.session_state.pop("team_bid_msg"))
-        with st.expander("📜 Ultime offerte", expanded=False):
-            if not stato_bids["bids"]:
+            offerta_diretta = st.number_input(
+                "Offerta personalizzata",
+                min_value=_min_ui,
+                max_value=max(_min_ui, _max_ui),
+                value=_min_ui,
+                step=float(incremento),
+                key=f"team_bid_direct_value_{lotto['lot_id']}"
+            )
+
+            if st.button(
+                "💰 INVIA OFFERTA PERSONALIZZATA",
+                use_container_width=True,
+                key=f"team_bid_direct_{lotto['lot_id']}"
+            ):
+                try:
+                    inserisci_offerta_team_multilega(
+                        league_id,
+                        lotto["lot_id"],
+                        team_id,
+                        float(offerta_diretta)
+                    )
+                    st.session_state["team_bid_msg"] = (
+                        f"Offerta di {float(offerta_diretta):g} crediti registrata."
+                    )
+                    st.rerun(scope="fragment")
+                except Exception as errore:
+                    st.error(str(errore))
+
+        _history_key = f"team_bid_history_{league_id}_{lotto['lot_id']}"
+        if st.button(
+            "📜 MOSTRA / NASCONDI ULTIME OFFERTE",
+            use_container_width=True,
+            key=f"team_bid_history_toggle_{league_id}_{lotto['lot_id']}"
+        ):
+            st.session_state[_history_key] = not bool(
+                st.session_state.get(_history_key, False)
+            )
+
+        if st.session_state.get(_history_key, False):
+            try:
+                _storico_bids = stato_offerte_lotto_multilega(
+                    league_id,
+                    lotto["lot_id"],
+                    20,
+                    include_history=True
+                )["bids"]
+            except Exception as errore:
+                _storico_bids = []
+                st.warning("Impossibile leggere lo storico offerte: " + str(errore))
+
+            if not _storico_bids:
                 st.caption("Nessuna offerta registrata.")
             else:
                 st.dataframe(
@@ -27785,7 +27911,7 @@ def render_console_asta_team():
                             "Offerta": b["amount"],
                             "Data": b["created_at"],
                         }
-                        for b in stato_bids["bids"]
+                        for b in _storico_bids
                     ]),
                     use_container_width=True,
                     hide_index=True
@@ -28084,10 +28210,23 @@ def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
         _min_portieri=int(_r_min_p[0] or 0) if _r_min_p else 0
 
         cur.execute("""
-            SELECT COUNT(*),COALESCE(SUM(prezzo_acquisto),0)
-            FROM rosters
-            WHERE league_id=? AND team_id=?
-        """,(league_id,team_id))
+            SELECT
+                COALESCE(SUM(
+                    CASE
+                        WHEN stato='ASSEGNATO' AND assigned_team_id=?
+                        THEN 1 ELSE 0
+                    END
+                ),0),
+                COALESCE(SUM(
+                    CASE
+                        WHEN stato='ASSEGNATO' AND assigned_team_id=?
+                        THEN COALESCE(prezzo_assegnazione,0)
+                        ELSE 0
+                    END
+                ),0)
+            FROM league_players
+            WHERE league_id=?
+        """,(team_id,team_id,league_id))
         roster_count,valore_attuale=cur.fetchone()
         roster_count=int(roster_count or 0)
         valore_attuale=float(valore_attuale or 0)
@@ -28097,19 +28236,23 @@ def assegna_giocatore_banditore(league_id, player_id, team_id, prezzo):
 
         cur.execute("""
             SELECT
-                SUM(
+                COALESCE(SUM(
                     CASE
-                        WHEN UPPER(COALESCE(c.ruolo_classico,''))='P'
-                             OR UPPER(COALESCE(c.ruolo_mantra,'')) IN ('P','POR')
+                        WHEN lp.stato='ASSEGNATO'
+                         AND lp.assigned_team_id=?
+                         AND (
+                            UPPER(COALESCE(c.ruolo_classico,''))='P'
+                            OR UPPER(COALESCE(c.ruolo_mantra,'')) IN ('P','POR')
+                         )
                         THEN 1 ELSE 0
                     END
-                )
-            FROM rosters ro
+                ),0)
+            FROM league_players lp
             LEFT JOIN league_player_catalog c
-              ON c.league_id=ro.league_id
-             AND c.player_id=ro.player_id
-            WHERE ro.league_id=? AND ro.team_id=?
-        """,(league_id,team_id))
+              ON c.league_id=lp.league_id
+             AND c.player_id=lp.player_id
+            WHERE lp.league_id=?
+        """,(team_id,league_id))
         _r_portieri=cur.fetchone()
         _portieri_attuali=int(_r_portieri[0] or 0) if _r_portieri else 0
 
@@ -29200,7 +29343,8 @@ def render_banditore_asta():
             _stato_bids_banditore = stato_offerte_lotto_multilega(
                 league_id,
                 lotto_aperto["lot_id"],
-                20
+                20,
+                include_history=True
             )
             _best_banditore = _stato_bids_banditore["best"]
         except Exception as errore:
@@ -29835,6 +29979,8 @@ def manutenzione_cache_performance_v122():
         "team_bid_direct_value_": 3,
         "team_call_search_": 2,
         "team_call_player_": 2,
+        "team_bid_history_": 2,
+        "team_bid_history_toggle_": 2,
     }
 
     chiavi = list(st.session_state.keys())
