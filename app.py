@@ -14969,6 +14969,184 @@ def invalida_export_rose_multilega(league_id=None):
 
 
 
+
+
+def render_admin_listone_lega():
+    """Pagina autonoma Admin per caricamento e controllo del listone di lega."""
+    if st.session_state.get("ml_modalita_accesso") != "ADMIN" or "ADMIN" not in RUOLI_ATTIVI:
+        st.error("Questa sezione è riservata agli amministratori della lega.")
+        return
+
+    st.subheader("☷ Listone di lega")
+    _league_admin_listone = st.session_state.get("ml_league_id")
+    if _league_admin_listone is None:
+        st.info("Nessuna lega selezionata.")
+        return
+
+    st.caption(
+        "Il listone viene caricato una sola volta dall'Admin ed è condiviso "
+        "con tutte le squadre della lega. La sezione LISTONE dei team resta consultiva."
+    )
+
+    _file_listone_admin = st.file_uploader(
+        "Carica il listone Fantacalcio.it",
+        type=["xlsx", "xlsm"],
+        key=f"admin_listone_upload_{int(_league_admin_listone)}"
+    )
+
+    if _file_listone_admin is not None:
+        if st.button(
+            "☁️ CARICA / AGGIORNA LISTONE DI LEGA",
+            type="primary",
+            use_container_width=True,
+            key=f"admin_listone_commit_{int(_league_admin_listone)}"
+        ):
+            try:
+                _df_admin_listone = parse_file_listone_fantacalcio(
+                    _file_listone_admin.getvalue()
+                )
+                _esito_listone = importa_listone_lega_da_admin(
+                    int(_league_admin_listone),
+                    _df_admin_listone
+                )
+                invalida_inizializzazione_asta_multilega(
+                    int(_league_admin_listone)
+                )
+                st.session_state.pop(
+                    f"_ml35_listone_centrale_{int(_league_admin_listone)}",
+                    None
+                )
+                st.success(
+                    "✅ Listone di lega aggiornato. "
+                    f"Totale: {_esito_listone['totale']} · "
+                    f"Nuovi: {_esito_listone['nuovi']} · "
+                    f"Aggiornati: {_esito_listone['aggiornati']}."
+                )
+                st.rerun()
+            except Exception as errore:
+                st.error("Errore caricamento listone: " + str(errore))
+
+    try:
+        _df_catalogo_admin = carica_listone_centrale_lega(
+            int(_league_admin_listone)
+        )
+        if _df_catalogo_admin.empty:
+            st.info("Nessun listone ancora caricato per questa lega.")
+        else:
+            st.caption(
+                f"Giocatori attualmente nel listone condiviso: "
+                f"{len(_df_catalogo_admin)}"
+            )
+            st.dataframe(
+                _df_catalogo_admin,
+                use_container_width=True,
+                hide_index=True
+            )
+    except Exception as errore:
+        st.warning("Impossibile leggere il listone di lega: " + str(errore))
+
+
+def render_admin_export_rose_lega():
+    """Pagina autonoma Admin per preparazione ed export delle rose di lega."""
+    if st.session_state.get("ml_modalita_accesso") != "ADMIN" or "ADMIN" not in RUOLI_ATTIVI:
+        st.error("Questa sezione è riservata agli amministratori della lega.")
+        return
+
+    st.subheader("⬇️ Export rose lega")
+    _league_admin_listone = st.session_state.get("ml_league_id")
+    if _league_admin_listone is None:
+        st.info("Nessuna lega selezionata.")
+        return
+
+    st.caption(
+        "L'export viene generato solo quando premi PREPARA EXPORT, evitando query "
+        "aggiuntive finché non servono."
+    )
+
+    _export_key = f"_ml36_export_rose_{int(_league_admin_listone)}"
+
+    if st.button(
+        "⚙️ PREPARA EXPORT ROSE",
+        type="primary",
+        use_container_width=True,
+        key=f"ml36_prepare_export_{int(_league_admin_listone)}"
+    ):
+        try:
+            with st.spinner("Preparazione export..."):
+                st.session_state[_export_key] = prepara_export_rose_multilega(
+                    int(_league_admin_listone)
+                )
+        except Exception as errore:
+            st.session_state.pop(_export_key, None)
+            st.error("Errore preparazione export: " + str(errore))
+
+    _export_data = st.session_state.get(_export_key)
+
+    if isinstance(_export_data, dict):
+        _ec1, _ec2 = st.columns(2)
+        _ec1.metric("Squadre", int(_export_data.get("numero_squadre", 0)))
+        _ec2.metric(
+            "Giocatori assegnati",
+            int(_export_data.get("numero_giocatori", 0))
+        )
+
+        if int(_export_data.get("numero_giocatori", 0)) == 0:
+            st.warning("Non risultano ancora giocatori assegnati alle squadre.")
+        else:
+            st.dataframe(
+                _export_data["riepilogo"],
+                use_container_width=True,
+                hide_index=True
+            )
+
+            _nome_base_export = (
+                "fantaeleganza_rose_lega_" + str(int(_league_admin_listone))
+            )
+            _ed1, _ed2 = st.columns(2)
+
+            with _ed1:
+                st.download_button(
+                    "⬇️ CSV ROSE",
+                    data=_export_data["csv"],
+                    file_name=_nome_base_export + ".csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key=f"ml36_download_csv_{int(_league_admin_listone)}"
+                )
+
+            with _ed2:
+                st.download_button(
+                    "⬇️ EXCEL COMPLETO",
+                    data=_export_data["xlsx"],
+                    file_name=_nome_base_export + ".xlsx",
+                    mime=(
+                        "application/vnd.openxmlformats-officedocument."
+                        "spreadsheetml.sheet"
+                    ),
+                    use_container_width=True,
+                    key=f"ml36_download_xlsx_{int(_league_admin_listone)}"
+                )
+
+            st.caption(
+                "Il CSV contiene Squadra, ID giocatore, Nome, club reale, ruoli e prezzo. "
+                "L'Excel contiene anche riepilogo budget e un foglio separato per ogni squadra."
+            )
+
+            st.info(
+                "Compatibilità diretta con «Importa rose» di Leghe Fantacalcio: "
+                "la piattaforma ufficiale supporta l'import dei CSV prodotti da "
+                "FantaAsta Live. Prima di dichiarare questo CSV come formato ufficiale "
+                "1:1, confronteremo l'intestazione con un file ufficiale reale."
+            )
+
+        if st.button(
+            "🔄 RIGENERA EXPORT",
+            use_container_width=True,
+            key=f"ml36_regen_export_{int(_league_admin_listone)}"
+        ):
+            st.session_state.pop(_export_key, None)
+            st.rerun()
+
 def render_admin_multilega():
     if st.session_state.get("ml_modalita_accesso") != "ADMIN":
         st.error("Accedi con il livello ADMIN per usare Gestione Lega.")
@@ -14984,182 +15162,6 @@ def render_admin_multilega():
     st.subheader(
         "⚙️ Gestione lega"
     )
-
-    # ========================================================
-    # V110 · LISTONE CENTRALIZZATO DI LEGA
-    # ========================================================
-    _league_admin_listone = st.session_state.get("ml_league_id")
-
-    if _league_admin_listone is not None:
-        with st.expander(
-            "☷ LISTONE DI LEGA · CARICAMENTO ADMIN",
-            expanded=False
-        ):
-            st.caption(
-                "Il listone viene caricato una sola volta dall'Admin ed è "
-                "condiviso al prossimo aggiornamento con tutte le squadre della lega. "
-                "La sezione LISTONE dei team è solo consultiva."
-            )
-
-            _file_listone_admin = st.file_uploader(
-                "Carica il listone Fantacalcio.it",
-                type=["xlsx","xlsm"],
-                key=f"admin_listone_upload_{int(_league_admin_listone)}"
-            )
-
-            if _file_listone_admin is not None:
-                if st.button(
-                    "☁️ CARICA / AGGIORNA LISTONE DI LEGA",
-                    type="primary",
-                    use_container_width=True,
-                    key=f"admin_listone_commit_{int(_league_admin_listone)}"
-                ):
-                    try:
-                        _df_admin_listone = parse_file_listone_fantacalcio(
-                            _file_listone_admin.getvalue()
-                        )
-                        _esito_listone = importa_listone_lega_da_admin(
-                            int(_league_admin_listone),
-                            _df_admin_listone
-                        )
-                        invalida_inizializzazione_asta_multilega(
-                            int(_league_admin_listone)
-                        )
-                        st.session_state.pop(
-                            f"_ml35_listone_centrale_{int(_league_admin_listone)}",
-                            None
-                        )
-                        st.success(
-                            "✅ Listone di lega aggiornato. "
-                            f"Totale: {_esito_listone['totale']} · "
-                            f"Nuovi: {_esito_listone['nuovi']} · "
-                            f"Aggiornati: {_esito_listone['aggiornati']}."
-                        )
-                    except Exception as errore:
-                        st.error("Errore caricamento listone: " + str(errore))
-
-            try:
-                _df_catalogo_admin = carica_listone_centrale_lega(
-                    int(_league_admin_listone)
-                )
-                if _df_catalogo_admin.empty:
-                    st.info("Nessun listone ancora caricato per questa lega.")
-                else:
-                    st.caption(
-                        f"Giocatori attualmente nel listone condiviso: "
-                        f"{len(_df_catalogo_admin)}"
-                    )
-            except Exception as errore:
-                st.warning("Impossibile leggere il listone di lega: " + str(errore))
-
-        # ========================================================
-        # V120 · EXPORT ROSE - completamente lazy
-        # ========================================================
-        with st.expander(
-            "⬇️ EXPORT ROSE DI LEGA",
-            expanded=False
-        ):
-            st.caption(
-                "L'export viene generato solo quando premi PREPARA EXPORT: "
-                "l'apertura della sezione Gestione Lega non esegue query aggiuntive."
-            )
-
-            _export_key = (
-                f"_ml36_export_rose_{int(_league_admin_listone)}"
-            )
-
-            if st.button(
-                "⚙️ PREPARA EXPORT ROSE",
-                type="primary",
-                use_container_width=True,
-                key=f"ml36_prepare_export_{int(_league_admin_listone)}"
-            ):
-                try:
-                    with st.spinner("Preparazione export..."):
-                        st.session_state[_export_key] = (
-                            prepara_export_rose_multilega(
-                                int(_league_admin_listone)
-                            )
-                        )
-                except Exception as errore:
-                    st.session_state.pop(_export_key, None)
-                    st.error("Errore preparazione export: " + str(errore))
-
-            _export_data = st.session_state.get(_export_key)
-
-            if isinstance(_export_data, dict):
-                _ec1, _ec2 = st.columns(2)
-                _ec1.metric(
-                    "Squadre",
-                    int(_export_data.get("numero_squadre", 0))
-                )
-                _ec2.metric(
-                    "Giocatori assegnati",
-                    int(_export_data.get("numero_giocatori", 0))
-                )
-
-                if int(_export_data.get("numero_giocatori", 0)) == 0:
-                    st.warning(
-                        "Non risultano ancora giocatori assegnati alle squadre."
-                    )
-                else:
-                    st.dataframe(
-                        _export_data["riepilogo"],
-                        use_container_width=True,
-                        hide_index=True
-                    )
-
-                    _nome_base_export = (
-                        "fantaeleganza_rose_lega_"
-                        + str(int(_league_admin_listone))
-                    )
-
-                    _ed1, _ed2 = st.columns(2)
-
-                    with _ed1:
-                        st.download_button(
-                            "⬇️ CSV ROSE",
-                            data=_export_data["csv"],
-                            file_name=_nome_base_export + ".csv",
-                            mime="text/csv",
-                            use_container_width=True,
-                            key=f"ml36_download_csv_{int(_league_admin_listone)}"
-                        )
-
-                    with _ed2:
-                        st.download_button(
-                            "⬇️ EXCEL COMPLETO",
-                            data=_export_data["xlsx"],
-                            file_name=_nome_base_export + ".xlsx",
-                            mime=(
-                                "application/vnd.openxmlformats-officedocument."
-                                "spreadsheetml.sheet"
-                            ),
-                            use_container_width=True,
-                            key=f"ml36_download_xlsx_{int(_league_admin_listone)}"
-                        )
-
-                    st.caption(
-                        "Il CSV contiene Squadra, ID giocatore, Nome, club reale, "
-                        "ruoli e prezzo. L'Excel contiene anche riepilogo budget e "
-                        "un foglio separato per ogni squadra."
-                    )
-
-                    st.info(
-                        "Compatibilità diretta con «Importa rose» di Leghe "
-                        "Fantacalcio: la piattaforma ufficiale supporta l'import "
-                        "dei CSV prodotti da FantaAsta Live. Prima di dichiarare "
-                        "questo CSV come formato ufficiale 1:1, confronteremo "
-                        "l'intestazione con un file ufficiale reale."
-                    )
-
-                if st.button(
-                    "🔄 RIGENERA EXPORT",
-                    use_container_width=True,
-                    key=f"ml36_regen_export_{int(_league_admin_listone)}"
-                ):
-                    st.session_state.pop(_export_key, None)
-                    st.rerun()
 
     tab_nuova, tab_esistenti = st.tabs(
         [
@@ -33687,6 +33689,8 @@ def render_navigazione_e_pagina():
     if MODALITA_ACCESSO_ATTIVA == "ADMIN":
         PAGINE = [
             ("⚙️", "GESTIONE LEGA"),
+            ("☷", "LISTONE"),
+            ("⬇️", "EXPORT ROSE LEGA"),
         ]
     elif MODALITA_ACCESSO_ATTIVA == "BANDITORE":
         PAGINE = [
@@ -33895,6 +33899,14 @@ def render_navigazione_e_pagina():
     elif sezione == "GESTIONE LEGA":
 
         render_admin_multilega()
+
+    elif sezione == "LISTONE" and MODALITA_ACCESSO_ATTIVA == "ADMIN":
+
+        render_admin_listone_lega()
+
+    elif sezione == "EXPORT ROSE LEGA":
+
+        render_admin_export_rose_lega()
 
     elif sezione == "GESTIONE ASTA":
 
