@@ -12216,7 +12216,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "5.2.5"
+MULTILEGA_SCHEMA_VERSION = "5.3"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -25424,7 +25424,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 5.2.5 &nbsp;|&nbsp; V145 UI Admin Pulita'
+        'MULTILEGA 5.3 &nbsp;|&nbsp; V146 Assegnazione Autorevole'
         '</div>',
         unsafe_allow_html=True
     )
@@ -30282,42 +30282,114 @@ def callback_chiudi_vuoto_v133(
 
 
 
-def assegna_lotto_migliore_v135(league_id, lot_id):
-    """Assegna current_team_id/current_bid e aggiorna tutte le viste autorevoli."""
+def assegna_lotto_migliore_v146(league_id, lot_id):
+    """
+    V146 - assegnazione definitiva e autorevole.
+
+    Alla conferma del Banditore:
+      1. congela il lotto;
+      2. usa current_team_id/current_bid come vincitore/prezzo;
+      3. aggiorna league_players;
+      4. aggiorna rosters e team_budgets;
+      5. chiude lotto/sessione;
+      6. sincronizza, se esiste, il workspace compatibilità del vincitore;
+      7. scrive audit/storico.
+
+    Tutto il nucleo autorevole avviene in una sola transazione DB.
+    """
     league_id = int(league_id)
     lot_id = int(lot_id)
     user_id = int(st.session_state.get("auth_user_id") or 0)
 
     conn = _portal_raw_connection()
     cur = conn.cursor()
+
     try:
+        # Permesso server-side.
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM league_members
+            WHERE league_id=?
+              AND user_id=?
+              AND is_active=1
+              AND (is_auctioneer=1 OR is_admin=1)
+        """, (league_id, user_id))
+        if int((cur.fetchone() or [0])[0] or 0) <= 0:
+            raise PermissionError("Operazione riservata al Banditore/Admin.")
+
+        # Snapshot lotto prima del claim.
+        cur.execute("""
+            SELECT
+                player_id,
+                current_team_id,
+                current_bid,
+                stato,
+                COALESCE(version,0)
+            FROM auction_lots
+            WHERE id=? AND league_id=?
+            LIMIT 1
+        """, (lot_id, league_id))
+        lot = cur.fetchone()
+
+        if not lot:
+            raise ValueError("Lotto non trovato.")
+
+        player_id = int(lot[0])
+        team_id = int(lot[1]) if lot[1] is not None else None
+        prezzo = float(lot[2]) if lot[2] is not None else None
+        stato_lotto = str(lot[3] or "").upper()
+        versione = int(lot[4] or 0)
+
+        if stato_lotto != "OPEN":
+            raise ValueError("Il lotto non è più aperto.")
+        if team_id is None or prezzo is None:
+            raise ValueError(
+                "La squadra aggiudicataria deve inserire "
+                "l'offerta conclusiva nell'app prima della conferma."
+            )
+
+        # Claim atomico del lotto. Niente RETURNING: massima compatibilità Turso.
         cur.execute("""
             UPDATE auction_lots
             SET stato='CLOSING',
                 closing_by_user_id=?,
-                closing_at=CURRENT_TIMESTAMP
-            WHERE id=? AND league_id=? AND stato='OPEN'
-              AND current_team_id IS NOT NULL
-              AND current_bid IS NOT NULL
-              AND EXISTS (
-                  SELECT 1
-                  FROM league_members
-                  WHERE league_id=? AND user_id=? AND is_active=1
-                    AND (is_auctioneer=1 OR is_admin=1)
-              )
-            RETURNING player_id,current_team_id,current_bid
-        """, (user_id, lot_id, league_id, league_id, user_id))
-        best = cur.fetchone()
-        if not best:
+                closing_at=CURRENT_TIMESTAMP,
+                version=COALESCE(version,0)+1
+            WHERE id=?
+              AND league_id=?
+              AND stato='OPEN'
+              AND COALESCE(version,0)=?
+              AND current_team_id=?
+              AND ABS(current_bid-?)<0.0001
+        """, (
+            user_id,
+            lot_id,
+            league_id,
+            versione,
+            team_id,
+            prezzo
+        ))
+
+        cur.execute("""
+            SELECT stato,current_team_id,current_bid
+            FROM auction_lots
+            WHERE id=? AND league_id=?
+            LIMIT 1
+        """, (lot_id, league_id))
+        claimed = cur.fetchone()
+
+        if (
+            not claimed
+            or str(claimed[0] or "").upper() != "CLOSING"
+            or int(claimed[1] or 0) != team_id
+            or abs(float(claimed[2] or 0) - prezzo) > 0.0001
+        ):
             raise ValueError(
-                "La squadra aggiudicataria deve prima inserire "
-                "l'offerta conclusiva nell'app."
+                "Il lotto è cambiato nel frattempo. "
+                "Aggiorna le offerte e riprova."
             )
 
-        player_id = int(best[0])
-        team_id = int(best[1])
-        prezzo = float(best[2])
-
+        # Team, regole e giocatore.
         cur.execute("""
             SELECT
                 COALESCE(t.nome,''),
@@ -30327,104 +30399,129 @@ def assegna_lotto_migliore_v135(league_id, lot_id):
                 COALESCE(r.soglia_budget,r.budget_iniziale,500),
                 COALESCE(r.moltiplicatore_oltre_soglia,1),
                 COALESCE(pc.ruolo_classico,''),
-                COALESCE(pc.ruolo_mantra,''),
-                COALESCE(lp_target.stato,''),
-                COALESCE(SUM(CASE WHEN lp.stato='ASSEGNATO' THEN 1 ELSE 0 END),0),
-                COALESCE(SUM(CASE WHEN lp.stato='ASSEGNATO' THEN COALESCE(lp.prezzo_assegnazione,0) ELSE 0 END),0),
-                COALESCE(SUM(
-                    CASE
-                        WHEN lp.stato='ASSEGNATO'
-                         AND (
-                            UPPER(COALESCE(pc2.ruolo_classico,''))='P'
-                            OR UPPER(COALESCE(pc2.ruolo_mantra,'')) IN ('P','POR')
-                         )
-                        THEN 1 ELSE 0
-                    END
-                ),0)
+                COALESCE(pc.ruolo_mantra,'')
             FROM teams t
-            LEFT JOIN league_rules r ON r.league_id=t.league_id
+            LEFT JOIN league_rules r
+              ON r.league_id=t.league_id
             LEFT JOIN team_budgets tb
-              ON tb.league_id=t.league_id AND tb.team_id=t.id
+              ON tb.league_id=t.league_id
+             AND tb.team_id=t.id
             LEFT JOIN league_player_catalog pc
-              ON pc.league_id=t.league_id AND pc.player_id=?
-            LEFT JOIN league_players lp_target
-              ON lp_target.league_id=t.league_id AND lp_target.player_id=?
-            LEFT JOIN league_players lp
-              ON lp.league_id=t.league_id
-             AND lp.assigned_team_id=t.id
-             AND lp.stato='ASSEGNATO'
-            LEFT JOIN league_player_catalog pc2
-              ON pc2.league_id=lp.league_id AND pc2.player_id=lp.player_id
-            WHERE t.league_id=? AND t.id=? AND t.is_active=1
-            GROUP BY
-                t.id,t.nome,r.max_giocatori,r.min_portieri,
-                tb.budget_impostato,r.budget_iniziale,
-                r.soglia_budget,r.moltiplicatore_oltre_soglia,
-                pc.ruolo_classico,pc.ruolo_mantra,lp_target.stato
+              ON pc.league_id=t.league_id
+             AND pc.player_id=?
+            WHERE t.league_id=?
+              AND t.id=?
+              AND t.is_active=1
             LIMIT 1
-        """, (player_id, player_id, league_id, team_id))
-        r = cur.fetchone()
-        if not r:
+        """, (player_id, league_id, team_id))
+        info = cur.fetchone()
+
+        if not info:
             raise ValueError("Squadra vincitrice non valida.")
 
-        nome_team = str(r[0] or "")
-        max_giocatori = int(r[1] or 30)
-        min_portieri = int(r[2] or 0)
-        budget = float(r[3] or 0)
-        soglia = float(r[4] or budget)
-        moltiplicatore = max(1.0, float(r[5] or 1))
-        ruolo_classico = str(r[6] or "").strip().upper()
-        ruolo_mantra = str(r[7] or "").strip().upper()
-        stato_player = str(r[8] or "").upper()
-        roster_count = int(r[9] or 0)
-        valore_attuale = float(r[10] or 0)
-        portieri_attuali = int(r[11] or 0)
+        nome_team = str(info[0] or "")
+        max_giocatori = int(info[1] or 30)
+        min_portieri = int(info[2] or 0)
+        budget = float(info[3] or 0)
+        soglia = float(info[4] or budget)
+        moltiplicatore = max(1.0, float(info[5] or 1))
+        ruolo_classico = str(info[6] or "").strip().upper()
+        ruolo_mantra = str(info[7] or "").strip().upper()
 
-        if stato_player != "DISPONIBILE":
-            raise ValueError("Il giocatore non è più disponibile.")
+        # Non consente una seconda assegnazione dello stesso giocatore.
+        cur.execute("""
+            SELECT stato,assigned_team_id
+            FROM league_players
+            WHERE league_id=? AND player_id=?
+            LIMIT 1
+        """, (league_id, player_id))
+        lp_old = cur.fetchone()
+
+        if (
+            lp_old
+            and str(lp_old[0] or "").upper() == "ASSEGNATO"
+            and lp_old[1] is not None
+        ):
+            raise ValueError("Il giocatore risulta già assegnato.")
+
+        # Statistiche attuali della rosa del vincitore.
+        cur.execute("""
+            SELECT
+                COUNT(*),
+                COALESCE(SUM(COALESCE(lp.prezzo_assegnazione,0)),0),
+                COALESCE(SUM(
+                    CASE WHEN (
+                        UPPER(COALESCE(pc.ruolo_classico,''))='P'
+                        OR UPPER(COALESCE(pc.ruolo_mantra,'')) IN ('P','POR')
+                    ) THEN 1 ELSE 0 END
+                ),0)
+            FROM league_players lp
+            LEFT JOIN league_player_catalog pc
+              ON pc.league_id=lp.league_id
+             AND pc.player_id=lp.player_id
+            WHERE lp.league_id=?
+              AND lp.stato='ASSEGNATO'
+              AND lp.assigned_team_id=?
+        """, (league_id, team_id))
+        stats = cur.fetchone() or (0,0,0)
+
+        roster_count = int(stats[0] or 0)
+        valore_attuale = float(stats[1] or 0)
+        portieri_attuali = int(stats[2] or 0)
+
         if roster_count >= max_giocatori:
             raise ValueError("La rosa della squadra vincitrice è già completa.")
 
-        is_portiere = ruolo_classico == "P" or ruolo_mantra in ("P","POR")
+        is_portiere = (
+            ruolo_classico == "P"
+            or ruolo_mantra in ("P","POR")
+        )
         slot_dopo = max(0, max_giocatori - (roster_count + 1))
         portieri_dopo = portieri_attuali + (1 if is_portiere else 0)
         portieri_mancanti = max(0, min_portieri - portieri_dopo)
+
         if slot_dopo < portieri_mancanti:
             raise ValueError("Vincolo minimo portieri non rispettabile.")
 
         nuovo_valore = round(valore_attuale + prezzo, 2)
-        nuova_spesa = float(_spesa_effettiva_regole(
-            nuovo_valore, soglia, moltiplicatore
-        ))
+        nuova_spesa = float(
+            _spesa_effettiva_regole(
+                nuovo_valore,
+                soglia,
+                moltiplicatore
+            )
+        )
         if nuova_spesa > budget + 1e-9:
             raise ValueError(
                 f"Budget insufficiente: {nuova_spesa:.2f} su {budget:.2f}."
             )
 
+        # Stato autorevole: UPSERT. Questo copre anche cataloghi/leghe
+        # dove league_players non era stato inizializzato perfettamente.
         cur.execute("""
-            UPDATE league_players
-            SET stato='ASSEGNATO',
-                assigned_team_id=?,
-                prezzo_assegnazione=?,
+            INSERT INTO league_players (
+                league_id,
+                player_id,
+                stato,
+                assigned_team_id,
+                prezzo_assegnazione,
+                updated_at
+            )
+            VALUES (?,?,'ASSEGNATO',?,?,CURRENT_TIMESTAMP)
+            ON CONFLICT(league_id,player_id)
+            DO UPDATE SET
+                stato='ASSEGNATO',
+                assigned_team_id=excluded.assigned_team_id,
+                prezzo_assegnazione=excluded.prezzo_assegnazione,
                 updated_at=CURRENT_TIMESTAMP
-            WHERE league_id=? AND player_id=? AND stato='DISPONIBILE'
-        """, (team_id, prezzo, league_id, player_id))
+        """, (
+            league_id,
+            player_id,
+            team_id,
+            prezzo
+        ))
 
-        cur.execute("""
-            SELECT stato,assigned_team_id,prezzo_assegnazione
-            FROM league_players
-            WHERE league_id=? AND player_id=?
-            LIMIT 1
-        """, (league_id, player_id))
-        chk = cur.fetchone()
-        if (
-            not chk
-            or str(chk[0] or "").upper() != "ASSEGNATO"
-            or int(chk[1] or 0) != team_id
-            or abs(float(chk[2] or 0) - prezzo) > 0.0001
-        ):
-            raise RuntimeError("Assegnazione centrale non riuscita.")
-
+        # Rosa normalizzata.
         cur.execute("""
             INSERT INTO rosters (
                 league_id,team_id,player_id,prezzo_acquisto,
@@ -30436,8 +30533,14 @@ def assegna_lotto_migliore_v135(league_id, lot_id):
                 prezzo_acquisto=excluded.prezzo_acquisto,
                 fonte='AUCTION_FINAL',
                 updated_at=CURRENT_TIMESTAMP
-        """, (league_id, team_id, player_id, prezzo))
+        """, (
+            league_id,
+            team_id,
+            player_id,
+            prezzo
+        ))
 
+        # Budget normalizzato.
         cur.execute("""
             INSERT INTO team_budgets (
                 league_id,team_id,budget_impostato,
@@ -30450,18 +30553,29 @@ def assegna_lotto_migliore_v135(league_id, lot_id):
                 spesa_effettiva=excluded.spesa_effettiva,
                 updated_at=CURRENT_TIMESTAMP
         """, (
-            league_id, team_id, budget,
-            nuovo_valore, nuova_spesa
+            league_id,
+            team_id,
+            budget,
+            nuovo_valore,
+            nuova_spesa
         ))
 
+        # Storico.
         cur.execute("""
             INSERT INTO auction_assignment_history (
                 league_id,player_id,team_id,prezzo,stato,
                 assigned_by_user_id,assigned_at
             )
             VALUES (?,?,?,?,'ACTIVE',?,CURRENT_TIMESTAMP)
-        """, (league_id, player_id, team_id, prezzo, user_id))
+        """, (
+            league_id,
+            player_id,
+            team_id,
+            prezzo,
+            user_id
+        ))
 
+        # Chiude il lotto.
         cur.execute("""
             UPDATE auction_lots
             SET stato='ASSIGNED',
@@ -30469,32 +30583,58 @@ def assegna_lotto_migliore_v135(league_id, lot_id):
                 final_price=?,
                 closed_at=CURRENT_TIMESTAMP
             WHERE id=? AND league_id=? AND stato='CLOSING'
-        """, (team_id, prezzo, lot_id, league_id))
+        """, (
+            team_id,
+            prezzo,
+            lot_id,
+            league_id
+        ))
 
+        # Libera la sessione asta.
         cur.execute("""
             UPDATE auction_sessions
             SET current_lot_id=NULL,
                 stato='READY',
                 updated_at=CURRENT_TIMESTAMP
-            WHERE league_id=? AND current_lot_id=?
-        """, (league_id, lot_id))
+            WHERE league_id=?
+              AND current_lot_id=?
+        """, (
+            league_id,
+            lot_id
+        ))
 
-        # Workspace del vincitore: serve ancora per la vecchia pagina ROSA.
-        tab_team = f"giocatori_ml_l{league_id}_t{team_id}"
-        try:
-            cur.execute(
-                f"""
-                UPDATE {tab_team}
-                SET stato='MIO',
-                    prezzo_acquisto=?,
-                    ultimo_aggiornamento=CURRENT_TIMESTAMP
-                WHERE id=?
-                """,
-                (prezzo, player_id)
-            )
-        except Exception:
-            pass
+        # Compatibilità ROSA legacy: aggiorna la tabella corretta del vincitore.
+        tabelle_compat = []
+        nome_upper = nome_team.strip().upper()
 
+        if nome_upper == "IBBINI IDIOTA":
+            tabelle_compat.append("giocatori")
+        elif nome_upper == "GOSTOBAR":
+            tabelle_compat.append("giocatori_gostobar")
+
+        # Workspace multilega moderno, se già creato.
+        tabelle_compat.append(
+            f"giocatori_ml_l{league_id}_t{team_id}"
+        )
+
+        for tab_team in dict.fromkeys(tabelle_compat):
+            try:
+                cur.execute(
+                    f"""
+                    UPDATE {tab_team}
+                    SET stato='MIO',
+                        prezzo_acquisto=?,
+                        ultimo_aggiornamento=CURRENT_TIMESTAMP
+                    WHERE id=?
+                    """,
+                    (prezzo, player_id)
+                )
+            except Exception:
+                # Il workspace può non esistere ancora; la fonte autorevole
+                # resta league_players e la ROSA V146 la legge da lì.
+                pass
+
+        # Audit.
         cur.execute("""
             INSERT INTO audit_log (
                 league_id,user_id,team_id,azione,
@@ -30502,16 +30642,20 @@ def assegna_lotto_migliore_v135(league_id, lot_id):
             )
             VALUES (?,?,?,'PLAYER_ASSIGNED','PLAYER',?,?,CURRENT_TIMESTAMP)
         """, (
-            league_id,user_id,team_id,str(player_id),
+            league_id,
+            user_id,
+            team_id,
+            str(player_id),
             json.dumps({
                 "prezzo": prezzo,
                 "team": nome_team,
                 "lot_id": lot_id,
-                "modalita": "MISTA_VERBALE_APP"
+                "modalita": "ASTA_MISTA_V146"
             }, ensure_ascii=False)
         ))
 
         conn.commit()
+
         return {
             "player_id": player_id,
             "team_id": team_id,
@@ -30525,8 +30669,10 @@ def assegna_lotto_migliore_v135(league_id, lot_id):
         except Exception:
             pass
         raise
+
     finally:
         _portal_close(conn)
+
 
 
 def prossimo_giocatore_senza_lotto_v135(
@@ -30623,14 +30769,15 @@ def callback_chiudi_assegna_v133(
     nome
 ):
     try:
-        esito = assegna_lotto_migliore_v135(
+        esito = assegna_lotto_migliore_v146(
             int(league_id),
             int(lot_id)
         )
         invalida_cache_dati()
         st.session_state["auctioneer_msg"] = (
-            f'{nome} assegnato a {esito["team"]} '
-            f'a {esito["prezzo"]:g} crediti.'
+            f'✅ {nome} assegnato a {esito["team"]} '
+            f'a {esito["prezzo"]:g} crediti. '
+            f'Rosa e Venduti ad avversari aggiornati.'
         )
         st.session_state["_v135_force_full_reload"] = True
         st.session_state.pop("auctioneer_error", None)
@@ -30981,6 +31128,60 @@ manutenzione_cache_performance_v122()
 # ============================================================
 # MULTILEGA 1.8 - NAVIGAZIONE A FRAGMENT
 # ============================================================
+
+
+def carica_rosa_autorevole_v146(league_id, team_id):
+    """
+    Rosa derivata direttamente dallo stato centrale league_players.
+    Evita dipendenze da cache/sessioni o workspace legacy.
+    """
+    league_id = int(league_id)
+    team_id = int(team_id)
+
+    conn = _portal_raw_connection()
+    try:
+        df = pd.read_sql_query("""
+            SELECT
+                c.player_id AS Id,
+                c.ruolo_classico AS R,
+                c.ruolo_mantra AS RM,
+                c.nome AS Nome,
+                c.squadra AS Squadra,
+                c.quotazione_attuale AS "Qt.A",
+                c.quotazione_iniziale AS "Qt.I",
+                c.differenza AS "Diff.",
+                c.quotazione_attuale_mantra AS "Qt.A M",
+                c.quotazione_iniziale_mantra AS "Qt.I M",
+                c.differenza_mantra AS "Diff.M",
+                c.fvm AS FVM,
+                c.fvm_mantra AS "FVM M",
+                'MIO' AS Stato,
+                lp.prezzo_assegnazione AS Prezzo
+            FROM league_players lp
+            JOIN league_player_catalog c
+              ON c.league_id=lp.league_id
+             AND c.player_id=lp.player_id
+            WHERE lp.league_id=?
+              AND lp.stato='ASSEGNATO'
+              AND lp.assigned_team_id=?
+            ORDER BY
+                COALESCE(lp.updated_at,'') DESC,
+                c.nome COLLATE NOCASE
+        """, conn, params=(league_id, team_id))
+    finally:
+        _portal_close(conn)
+
+    colonne = [
+        "Id","R","RM","Nome","Squadra",
+        "Qt.A","Qt.I","Diff.","Qt.A M","Qt.I M","Diff.M",
+        "FVM","FVM M","Stato","Prezzo"
+    ]
+    for col in colonne:
+        if col not in df.columns:
+            df[col] = pd.Series(dtype="object")
+    return df[colonne]
+
+
 
 def venduti_avversari_normalizzati_multilega(
     league_id,
@@ -32675,9 +32876,26 @@ def render_navigazione_e_pagina():
                 )
             )
 
-        df_rosa = (
-            df_rosa_globale.copy()
-        )
+        _rosa_league_id = st.session_state.get("ml_league_id")
+        _rosa_team_id = st.session_state.get("ml_team_id")
+
+        if (
+            _rosa_league_id is not None
+            and _rosa_team_id is not None
+        ):
+            try:
+                df_rosa = carica_rosa_autorevole_v146(
+                    int(_rosa_league_id),
+                    int(_rosa_team_id)
+                )
+            except Exception as errore:
+                st.error(
+                    "Impossibile leggere la rosa aggiornata: "
+                    + str(errore)
+                )
+                df_rosa = df_rosa_globale.copy()
+        else:
+            df_rosa = df_rosa_globale.copy()
 
         # MULTILEGA 0.4:
         # nessun accesso alle Formazioni Tipo se la rosa è vuota.
