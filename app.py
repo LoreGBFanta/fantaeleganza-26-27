@@ -12212,7 +12212,7 @@ def inizializza_database(
 # La V82 congelata resta la baseline di sicurezza.
 # ============================================================
 
-MULTILEGA_SCHEMA_VERSION = "4.5"
+MULTILEGA_SCHEMA_VERSION = "5.0"
 
 LEGA_LEGACY_NOME = "FANTAELEGANZA 26/27"
 
@@ -13124,78 +13124,86 @@ def accesso_multilega_corrente():
     return None
 
 
-def applica_accesso_multilega(
-    accesso
-):
+def applica_accesso_multilega(accesso):
     """
-    Imposta il contesto autorevole della lega selezionata.
+    V136 - separazione netta del contesto operativo.
+
+    Le credenziali identificano l'utente.
+    La sessione sceglie poi UNA modalità di accesso:
+      - SQUADRA
+      - BANDITORE
+      - ADMIN
+
+    Lo stesso account può quindi essere aperto contemporaneamente in
+    sessioni/browser/device differenti con modalità diverse.
     """
+    modalita_accesso = str(
+        accesso.get("modalita_accesso")
+        or st.session_state.get("ml_modalita_accesso")
+        or ""
+    ).strip().upper()
 
-    st.session_state[
-        "ml_schema_version"
-    ] = MULTILEGA_SCHEMA_VERSION
+    if modalita_accesso not in ("SQUADRA", "BANDITORE", "ADMIN"):
+        # Compatibilità con vecchi accessi salvati in sessione.
+        ruoli = [str(x).upper() for x in accesso.get("ruoli", [])]
+        if "TEAM" in ruoli and accesso.get("team_id") is not None:
+            modalita_accesso = "SQUADRA"
+        elif "AUCTIONEER" in ruoli:
+            modalita_accesso = "BANDITORE"
+        elif "ADMIN" in ruoli:
+            modalita_accesso = "ADMIN"
+        else:
+            raise PermissionError("Nessun livello di accesso valido.")
 
-    st.session_state[
-        "ml_user_id"
-    ] = int(
-        accesso[
-            "user_id"
-        ]
-    )
+    ruoli_autorizzati = [
+        str(x).upper()
+        for x in accesso.get("ruoli", [])
+    ]
 
-    st.session_state[
-        "ml_league_id"
-    ] = int(
-        accesso[
-            "league_id"
-        ]
-    )
+    richiesto_db = {
+        "SQUADRA": "TEAM",
+        "BANDITORE": "AUCTIONEER",
+        "ADMIN": "ADMIN",
+    }[modalita_accesso]
 
-    st.session_state[
-        "ml_team_id"
-    ] = (
-        int(
-            accesso[
-                "team_id"
-            ]
+    if richiesto_db not in ruoli_autorizzati:
+        raise PermissionError(
+            f"L'utente non dispone del livello {modalita_accesso}."
         )
-        if accesso[
-            "team_id"
-        ] is not None
-        else None
-    )
 
-    st.session_state[
-        "ml_league_nome"
-    ] = accesso[
-        "league_nome"
-    ]
+    if (
+        modalita_accesso == "SQUADRA"
+        and accesso.get("team_id") is None
+    ):
+        raise PermissionError(
+            "L'accesso SQUADRA richiede una squadra associata."
+        )
 
-    st.session_state[
-        "ml_team_nome"
-    ] = accesso[
-        "team_nome"
-    ]
+    st.session_state["ml_schema_version"] = MULTILEGA_SCHEMA_VERSION
+    st.session_state["ml_user_id"] = int(accesso["user_id"])
+    st.session_state["ml_league_id"] = int(accesso["league_id"])
+    st.session_state["ml_league_nome"] = accesso["league_nome"]
+    st.session_state["ml_stagione"] = accesso["stagione"]
+    st.session_state["ml_modalita"] = accesso["modalita"]
 
-    st.session_state[
-        "ml_ruoli"
-    ] = list(
-        accesso[
-            "ruoli"
-        ]
-    )
+    # Salviamo i ruoli realmente autorizzati separatamente dal ruolo attivo.
+    st.session_state["ml_ruoli_autorizzati"] = list(ruoli_autorizzati)
+    st.session_state["ml_modalita_accesso"] = modalita_accesso
 
-    st.session_state[
-        "ml_stagione"
-    ] = accesso[
-        "stagione"
-    ]
+    # RUOLI_ATTIVI deve contenere esclusivamente il ruolo della pagina corrente.
+    if modalita_accesso == "SQUADRA":
+        st.session_state["ml_ruoli"] = ["TEAM"]
+        st.session_state["ml_team_id"] = int(accesso["team_id"])
+        st.session_state["ml_team_nome"] = str(accesso.get("team_nome") or "")
+    elif modalita_accesso == "BANDITORE":
+        st.session_state["ml_ruoli"] = ["AUCTIONEER"]
+        st.session_state["ml_team_id"] = None
+        st.session_state["ml_team_nome"] = ""
+    else:
+        st.session_state["ml_ruoli"] = ["ADMIN"]
+        st.session_state["ml_team_id"] = None
+        st.session_state["ml_team_nome"] = ""
 
-    st.session_state[
-        "ml_modalita"
-    ] = accesso[
-        "modalita"
-    ]
 
 
 def azzera_contesto_multilega():
@@ -13210,6 +13218,8 @@ def azzera_contesto_multilega():
         "ml_league_nome",
         "ml_team_nome",
         "ml_ruoli",
+        "ml_ruoli_autorizzati",
+        "ml_modalita_accesso",
         "ml_stagione",
         "ml_modalita",
         "ml_accesso_validato",
@@ -13223,98 +13233,39 @@ def azzera_contesto_multilega():
         )
 
 
-def schermata_le_mie_leghe(
-    accessi
-):
+def schermata_le_mie_leghe(accessi):
     """
-    Schermata MULTILEGA 0.2.
+    V136 - dopo il login si sceglie LEGA + LIVELLO DI ACCESSO.
 
-    È volutamente separata dall'interfaccia operativa:
-    prima si identifica l'utente, poi si sceglie il contesto
-    Lega/Squadra, soltanto dopo si entra in FANTAELEGANZA.
+    Le credenziali restano uniche.
+    Il livello operativo viene selezionato per questa singola sessione.
     """
-
     st.markdown(
         """
         <style>
         div[data-testid="stMainBlockContainer"] {
             padding-top: 1.4rem !important;
         }
-
-        .ml02-wrap {
-            max-width: 900px;
-            margin: 0 auto;
+        .ml136-wrap {max-width:940px;margin:0 auto;}
+        .ml136-header {
+            background:linear-gradient(110deg,#061f3a 0%,#0b3158 100%);
+            border:2px solid #ffc21c;border-radius:18px;
+            padding:22px 26px;margin-bottom:20px;color:white;
         }
-
-        .ml02-header {
-            background:
-                linear-gradient(
-                    110deg,
-                    #061f3a 0%,
-                    #0b3158 100%
-                );
-            border: 2px solid #ffc21c;
-            border-radius: 18px;
-            padding: 22px 26px;
-            margin-bottom: 20px;
-            color: white;
+        .ml136-title {font-size:28px;font-weight:950;line-height:1;}
+        .ml136-title span {color:#ffc21c;}
+        .ml136-user {margin-top:8px;color:#cbd5e1;font-size:14px;}
+        .ml136-card {
+            background:white;border:1px solid #dbe3ec;border-radius:14px;
+            padding:17px 19px;margin:0 0 12px 0;
+            box-shadow:0 3px 12px rgba(15,23,42,.05);
         }
-
-        .ml02-title {
-            font-size: 28px;
-            font-weight: 950;
-            line-height: 1;
+        .ml136-league {
+            color:#071a2f;font-size:20px;line-height:1.1;font-weight:950;
         }
-
-        .ml02-title span {
-            color: #ffc21c;
-        }
-
-        .ml02-user {
-            margin-top: 8px;
-            color: #cbd5e1;
-            font-size: 14px;
-        }
-
-        .ml02-card {
-            background: white;
-            border: 1px solid #dbe3ec;
-            border-radius: 14px;
-            padding: 17px 19px;
-            margin: 0 0 10px 0;
-            box-shadow: 0 3px 12px rgba(15,23,42,.05);
-        }
-
-        .ml02-league {
-            color: #071a2f;
-            font-size: 19px;
-            line-height: 1.1;
-            font-weight: 950;
-        }
-
-        .ml02-meta {
-            color: #64748b;
-            font-size: 12px;
-            margin-top: 5px;
-        }
-
-        .ml02-team {
-            color: #071a2f;
-            font-size: 14px;
-            font-weight: 850;
-            margin-top: 10px;
-        }
-
-        .ml02-role {
-            display: inline-block;
-            margin: 7px 5px 0 0;
-            padding: 4px 8px;
-            border-radius: 999px;
-            background: #eef4fb;
-            border: 1px solid #c9d9e9;
-            color: #0b3158;
-            font-size: 10px;
-            font-weight: 900;
+        .ml136-meta {color:#64748b;font-size:12px;margin-top:5px;}
+        .ml136-team {
+            color:#071a2f;font-size:14px;font-weight:850;margin-top:9px;
         }
         </style>
         """,
@@ -13323,227 +13274,155 @@ def schermata_le_mie_leghe(
 
     st.markdown(
         (
-            '<div class="ml02-wrap">'
-            '<div class="ml02-header">'
-            '<div class="ml02-title">'
-            'FANTAELEGANZA <span>MULTILEGA</span>'
-            '</div>'
-            '<div class="ml02-user">'
-            'Le mie leghe · '
-            + html.escape(
-                PROFILO_ATTIVO
-            )
-            + '</div>'
-            '</div>'
-            '</div>'
+            '<div class="ml136-wrap"><div class="ml136-header">'
+            '<div class="ml136-title">FANTAELEGANZA '
+            '<span>ACCESSO</span></div>'
+            '<div class="ml136-user">Utente: '
+            + html.escape(PROFILO_ATTIVO)
+            + ' · scegli la lega e il livello con cui entrare</div>'
+            '</div></div>'
         ),
         unsafe_allow_html=True
     )
 
     if not accessi:
-
-        st.error(
-            "Questo utente non è associato ad alcuna lega attiva."
-        )
-
-        if st.button(
-            "← TORNA ALLA SCELTA UTENTE",
-            use_container_width=False,
-            key="ml02_logout_senza_leghe"
-        ):
-
+        st.error("Questo utente non è associato ad alcuna lega attiva.")
+        if st.button("← CAMBIA UTENTE", key="ml136_logout_empty"):
             azzera_contesto_multilega()
-
-            st.session_state.pop(
-                "profilo_attivo",
-                None
-            )
-
-            st.session_state.pop(
-                "profilo_login_select",
-                None
-            )
-
+            st.session_state.pop("profilo_attivo", None)
+            st.session_state.pop("profilo_login_select", None)
             st.rerun()
-
         st.stop()
 
-    for indice, accesso in enumerate(
-        accessi
-    ):
+    # Raggruppa le membership della stessa lega.
+    gruppi = {}
+    for accesso in accessi:
+        lid = int(accesso["league_id"])
+        gruppo = gruppi.setdefault(lid, {
+            "league_id": lid,
+            "league_nome": accesso["league_nome"],
+            "stagione": accesso["stagione"],
+            "modalita": accesso["modalita"],
+            "SQUADRA": None,
+            "BANDITORE": None,
+            "ADMIN": None,
+        })
 
-        ruoli_html = "".join(
-            (
-                '<span class="ml02-role">'
-                + html.escape(
-                    ruolo
-                )
-                + '</span>'
-            )
-            for ruolo in accesso[
-                "ruoli"
-            ]
-        )
+        ruoli = {str(x).upper() for x in accesso.get("ruoli", [])}
 
-        team_testo = (
-            accesso[
-                "team_nome"
-            ]
-            or "Nessuna squadra associata"
-        )
+        if (
+            "TEAM" in ruoli
+            and accesso.get("team_id") is not None
+            and gruppo["SQUADRA"] is None
+        ):
+            gruppo["SQUADRA"] = dict(accesso)
 
-        stagione_modalita = " · ".join(
-            [
-                valore
-                for valore in [
-                    accesso[
-                        "stagione"
-                    ],
-                    accesso[
-                        "modalita"
-                    ]
-                ]
-                if valore
-            ]
-        )
+        if "AUCTIONEER" in ruoli and gruppo["BANDITORE"] is None:
+            gruppo["BANDITORE"] = dict(accesso)
 
-        col_card, col_enter = st.columns(
-            [
-                4.7,
-                1.3
-            ],
-            vertical_alignment="center"
-        )
+        if "ADMIN" in ruoli and gruppo["ADMIN"] is None:
+            gruppo["ADMIN"] = dict(accesso)
 
-        with col_card:
-
-            st.markdown(
-                (
-                    '<div class="ml02-card">'
-                    '<div class="ml02-league">'
-                    + html.escape(
-                        accesso[
-                            "league_nome"
-                        ]
-                    )
-                    + '</div>'
-                    '<div class="ml02-meta">'
-                    + html.escape(
-                        stagione_modalita
-                    )
-                    + '</div>'
-                    '<div class="ml02-team">'
-                    'Squadra: '
-                    + html.escape(
-                        team_testo
-                    )
-                    + '</div>'
-                    + ruoli_html
-                    + '</div>'
-                ),
-                unsafe_allow_html=True
-            )
-
-        with col_enter:
-
-            if st.button(
-                "ENTRA",
-                type="primary",
-                use_container_width=True,
-                key=(
-                    "ml02_entra_"
-                    + str(
-                        accesso[
-                            "league_id"
-                        ]
-                    )
-                    + "_"
-                    + str(
-                        accesso[
-                            "team_id"
-                        ]
-                    )
-                )
-            ):
-
-                applica_accesso_multilega(
-                    accesso
-                )
-
-                st.session_state[
-                    "ml_accesso_validato"
-                ] = dict(
-                    accesso
-                )
-
-                st.session_state[
-                    "pagina"
-                ] = (
-                    "DASHBOARD"
-                    if accesso.get(
-                        "team_id"
-                    ) is not None
-                    else "GESTIONE LEGA"
-                )
-
-                # Elimina soltanto cache operative che potrebbero
-                # appartenere al contesto precedente.
-                for chiave_sessione in list(
-                    st.session_state.keys()
-                ):
-
-                    if (
-                        chiave_sessione.startswith(
-                            "_df_"
-                        )
-                        or chiave_sessione.startswith(
-                            "_ultime_"
-                        )
-                        or chiave_sessione.startswith(
-                            "_costi_"
-                        )
-                        or chiave_sessione.startswith(
-                            "pdf_"
-                        )
-                    ):
-
-                        st.session_state.pop(
-                            chiave_sessione,
-                            None
-                        )
-
-                st.rerun()
-
-    st.markdown(
-        "---"
+    st.caption(
+        "Le stesse credenziali possono essere utilizzate contemporaneamente "
+        "su più browser o dispositivi. Ogni sessione mantiene il proprio "
+        "livello di accesso."
     )
+
+    def _entra_modalita(accesso_base, modalita_accesso):
+        accesso_scelto = dict(accesso_base)
+        accesso_scelto["modalita_accesso"] = modalita_accesso
+
+        applica_accesso_multilega(accesso_scelto)
+        st.session_state["ml_accesso_validato"] = dict(accesso_scelto)
+
+        pagina_iniziale = {
+            "SQUADRA": "DASHBOARD",
+            "BANDITORE": "GESTIONE ASTA",
+            "ADMIN": "GESTIONE LEGA",
+        }[modalita_accesso]
+        st.session_state["pagina"] = pagina_iniziale
+
+        # Pulisce esclusivamente cache di UI/workspace del contesto precedente.
+        for k in list(st.session_state.keys()):
+            if (
+                str(k).startswith("_df_")
+                or str(k).startswith("_ultime_")
+                or str(k).startswith("_costi_")
+                or str(k).startswith("pdf_")
+                or str(k).startswith("_ml16_sidebar_metrics")
+            ):
+                st.session_state.pop(k, None)
+
+    for lid, gruppo in sorted(
+        gruppi.items(),
+        key=lambda x: str(x[1]["league_nome"]).casefold()
+    ):
+        meta = " · ".join(
+            x for x in (gruppo["stagione"], gruppo["modalita"]) if x
+        )
+
+        team_nome = ""
+        if gruppo["SQUADRA"] is not None:
+            team_nome = str(gruppo["SQUADRA"].get("team_nome") or "")
+
+        st.markdown(
+            (
+                '<div class="ml136-card">'
+                '<div class="ml136-league">'
+                + html.escape(str(gruppo["league_nome"]))
+                + '</div>'
+                '<div class="ml136-meta">'
+                + html.escape(meta)
+                + '</div>'
+                + (
+                    '<div class="ml136-team">Squadra: '
+                    + html.escape(team_nome)
+                    + '</div>'
+                    if team_nome else ""
+                )
+                + '</div>'
+            ),
+            unsafe_allow_html=True
+        )
+
+        disponibili = [
+            x for x in ("SQUADRA", "BANDITORE", "ADMIN")
+            if gruppo[x] is not None
+        ]
+        cols = st.columns(len(disponibili))
+
+        for col, ruolo in zip(cols, disponibili):
+            with col:
+                icona = {
+                    "SQUADRA": "👕",
+                    "BANDITORE": "🔨",
+                    "ADMIN": "⚙️",
+                }[ruolo]
+
+                st.button(
+                    f"{icona} ENTRA COME {ruolo}",
+                    type="primary" if ruolo == "SQUADRA" else "secondary",
+                    use_container_width=True,
+                    key=f"ml136_{lid}_{ruolo}",
+                    on_click=_entra_modalita,
+                    args=(gruppo[ruolo], ruolo)
+                )
+
+    st.markdown("---")
 
     if st.button(
         "← CAMBIA UTENTE",
         use_container_width=False,
-        key="ml02_cambia_utente"
+        key="ml136_cambia_utente"
     ):
-
         azzera_contesto_multilega()
-
-        st.session_state.pop(
-            "profilo_attivo",
-            None
-        )
-
-        st.session_state.pop(
-            "profilo_login_select",
-            None
-        )
-
+        st.session_state.pop("profilo_attivo", None)
+        st.session_state.pop("profilo_login_select", None)
         st.rerun()
 
-    st.caption(
-        "MULTILEGA 0.2 · La lega e la squadra vengono determinate "
-        "dalle membership registrate nel database."
-    )
-
     st.stop()
+
 
 
 
@@ -14837,6 +14716,10 @@ def invalida_export_rose_multilega(league_id=None):
 
 
 def render_admin_multilega():
+    if st.session_state.get("ml_modalita_accesso") != "ADMIN":
+        st.error("Accedi con il livello ADMIN per usare Gestione Lega.")
+        return
+
     """
     MULTILEGA 0.3:
     creazione lega, regolamento e squadre.
@@ -20416,7 +20299,10 @@ applica_accesso_multilega(
 # utenti vengono instradate esclusivamente nel workspace della coppia
 # league_id/team_id validata dal database.
 
-if not PROFILO_LEGACY_SUPPORTATO:
+if (
+    not PROFILO_LEGACY_SUPPORTATO
+    and st.session_state.get("ml_modalita_accesso") == "SQUADRA"
+):
 
     imposta_workspace_team_multilega()
 
@@ -20453,6 +20339,10 @@ RUOLI_ATTIVI = (
         []
     )
 )
+
+MODALITA_ACCESSO_ATTIVA = str(
+    st.session_state.get("ml_modalita_accesso") or "SQUADRA"
+).upper()
 
 _workspace_runtime_key = (
     str(
@@ -24993,6 +24883,22 @@ st.markdown(
 
 with st.sidebar:
 
+    st.caption(
+        "Accesso: "
+        + str(st.session_state.get("ml_modalita_accesso") or "SQUADRA")
+    )
+    if st.button(
+        "⇄ CAMBIA LIVELLO ACCESSO",
+        use_container_width=True,
+        key="ml136_switch_access"
+    ):
+        st.session_state.pop("ml_accesso_validato", None)
+        st.session_state.pop("ml_modalita_accesso", None)
+        st.session_state.pop("ml_ruoli", None)
+        st.session_state.pop("pagina", None)
+        st.rerun()
+
+
 
     if not PROFILO_LEGACY_SUPPORTATO:
         st.caption(
@@ -25339,7 +25245,7 @@ with st.sidebar:
         'padding:8px 3px 0 3px;'
         'letter-spacing:.2px;'
         '">'
-        'MULTILEGA 4.5 &nbsp;|&nbsp; V135 Asta Mista Verbale-App'
+        'MULTILEGA 5.0 &nbsp;|&nbsp; V136 Accessi Separati'
         '</div>',
         unsafe_allow_html=True
     )
@@ -30555,6 +30461,10 @@ def callback_chiudi_assegna_v133(
 
 
 def render_banditore_asta():
+    if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
+        st.error("Accedi con il livello BANDITORE per usare Gestione Asta.")
+        return
+
     """
     V133 - nessun refresh automatico.
     Entrata/refresh del Banditore: fast snapshot dedicato.
@@ -31819,28 +31729,30 @@ def render_navigazione_e_pagina():
     # NAVBAR
     # ============================================================
 
-    PAGINE = [
-        ("🏠", "DASHBOARD"),
-        ("☷", "LISTONE"),
-        ("🔨", "ASTA"),
-        ("👕", "ROSA"),
-        ("▣", "MODULI"),
-        ("⚽", "FORMAZIONI TIPO"),
-        ("🔴", "VENDUTI AD AVVERSARI")
-    ]
+    if MODALITA_ACCESSO_ATTIVA == "ADMIN":
+        PAGINE = [
+            ("⚙️", "GESTIONE LEGA"),
+        ]
+    elif MODALITA_ACCESSO_ATTIVA == "BANDITORE":
+        PAGINE = [
+            ("🔨", "GESTIONE ASTA"),
+        ]
+    else:
+        PAGINE = [
+            ("🏠", "DASHBOARD"),
+            ("☷", "LISTONE"),
+            ("🔨", "ASTA"),
+            ("👕", "ROSA"),
+            ("▣", "MODULI"),
+            ("⚽", "FORMAZIONI TIPO"),
+            ("🔴", "VENDUTI AD AVVERSARI"),
+            ("👤", "PROFILO"),
+        ]
 
-    PAGINE.append(("👤", "PROFILO"))
-
-    if any(r in RUOLI_ATTIVI for r in ("AUCTIONEER", "ADMIN")):
-        PAGINE.append(("🔨", "BANDITORE"))
-
-    if "ADMIN" in RUOLI_ATTIVI:
-        PAGINE.append(
-            (
-                "⚙️",
-                "GESTIONE LEGA"
-            )
-        )
+    # Se una vecchia pagina è rimasta in sessione, riallinea al contesto.
+    pagine_consentite = {p[1] for p in PAGINE}
+    if st.session_state.get("pagina") not in pagine_consentite:
+        st.session_state["pagina"] = PAGINE[0][1]
 
     def _naviga_a(pagina_destinazione):
         """
@@ -32021,7 +31933,7 @@ def render_navigazione_e_pagina():
 
         render_admin_multilega()
 
-    elif sezione == "BANDITORE":
+    elif sezione == "GESTIONE ASTA":
 
         _t_banditore_route = time.perf_counter()
         render_banditore_asta()
@@ -33508,4 +33420,3 @@ st.session_state["_ml38_last_full_run_seconds"] = round(
 )
 
 render_navigazione_e_pagina()
-
