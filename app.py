@@ -34476,6 +34476,30 @@ def render_banditore_asta():
             )
 
         # Riga secondaria: soltanto navigazione precedente / prossimo.
+        # V193 - i due pulsanti hanno esattamente le stesse dimensioni tipografiche.
+        st.markdown(
+            """
+            <style>
+            .st-key-v193_nav_prev button,
+            .st-key-v193_nav_next button {
+                min-height: 46px !important;
+                height: 46px !important;
+                padding: 0.35rem 0.5rem !important;
+                font-size: 12px !important;
+                font-weight: 400 !important;
+                line-height: 1.15 !important;
+                border-radius: 8px !important;
+            }
+            .st-key-v193_nav_prev button *,
+            .st-key-v193_nav_next button * {
+                font-size: 12px !important;
+                font-weight: 400 !important;
+                line-height: 1.15 !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
         _prev_col, _next_col = st.columns(2)
 
         with _prev_col:
@@ -34484,7 +34508,7 @@ def render_banditore_asta():
                 "⏮ GIOCATORE PRECEDENTE",
                 use_container_width=True,
                 disabled=_precedente is None,
-                key=f"v191_prev_{g['player_id']}",
+                key="v193_nav_prev",
                 help=(
                     f'Ripristina {_precedente["nome"]}, ultimo giocatore skippato.'
                     if _precedente else
@@ -34498,7 +34522,7 @@ def render_banditore_asta():
             if st.button(
                 "⏭ PROSSIMO GIOCATORE",
                 use_container_width=True,
-                key=f"v191_next_{g['player_id']}"
+                key="v193_nav_next"
             ):
                 try:
                     prossimo_giocatore_senza_lotto_v135(
