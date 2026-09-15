@@ -1449,6 +1449,11 @@ DEFAULT_FASCE_GOL = {
     "6": 97.0, "7": 103.0, "8": 109.0, "9": 115.0, "10": 121.0
 }
 
+INCREMENTI_ASTA_AMMESSI_V186 = [
+    0.10, 0.20, 0.50, 1.00, 2.00, 5.00, 10.00, 20.00, 50.00, 100.00,
+    200.00, 500.00, 1000.00, 2000.00, 5000.00
+]
+
 TIPI_ASTA_FANTA_LIVE = [
     "A CHIAMATA",
     "ALFABETICO",
@@ -2104,12 +2109,12 @@ def render_portale_iniziale():
                         step=1.0
                     )
 
-                incremento = st.number_input(
+                incremento = st.selectbox(
                     "Incremento minimo asta",
-                    min_value=0.1,
-                    max_value=100.0,
-                    value=1.0,
-                    step=0.1
+                    INCREMENTI_ASTA_AMMESSI_V186,
+                    index=INCREMENTI_ASTA_AMMESSI_V186.index(1.0),
+                    format_func=lambda x: f"{x:.2f}",
+                    key="ml186_incremento_portale"
                 )
 
             with c:
@@ -14634,8 +14639,10 @@ def aggiorna_specifiche_lega_multilega(
         raise ValueError("I portieri minimi devono essere compresi tra 1 e 20 e non superare la rosa.")
     if (not budget_illimitato) and (budget_iniziale < 1 or budget_iniziale > 100000):
         raise ValueError("Il budget limitato deve essere compreso tra 1 e 100000.")
-    if incremento_minimo < 0.1 or incremento_minimo > 100:
-        raise ValueError("L'incremento minimo asta deve essere compreso tra 0,1 e 100.")
+    if not any(abs(float(incremento_minimo) - x) < 1e-9 for x in INCREMENTI_ASTA_AMMESSI_V186):
+        raise ValueError(
+            "Incremento minimo asta non valido. Seleziona uno dei valori previsti."
+        )
     if not fair_play_finanziario:
         soglia_budget = float(budget_iniziale)
         moltiplicatore = 1
@@ -15497,6 +15504,14 @@ def render_admin_export_rose_lega():
             st.session_state.pop(_export_key, None)
             st.rerun()
 
+def _indice_incremento_asta_v186(valore):
+    valore = float(valore or 1.0)
+    return min(
+        range(len(INCREMENTI_ASTA_AMMESSI_V186)),
+        key=lambda i: abs(INCREMENTI_ASTA_AMMESSI_V186[i] - valore)
+    )
+
+
 def render_admin_multilega():
     if st.session_state.get("ml_modalita_accesso") != "ADMIN":
         st.error("Accedi con il livello ADMIN per usare Gestione Lega.")
@@ -15605,12 +15620,12 @@ def render_admin_multilega():
                         step=1.0
                     )
 
-                incremento_minimo = st.number_input(
+                incremento_minimo = st.selectbox(
                     "Incremento minimo asta",
-                    min_value=0.1,
-                    max_value=100.0,
-                    value=1.0,
-                    step=0.5
+                    INCREMENTI_ASTA_AMMESSI_V186,
+                    index=INCREMENTI_ASTA_AMMESSI_V186.index(1.0),
+                    format_func=lambda x: f"{x:.2f}",
+                    key="ml186_incremento_admin_nuova"
                 )
 
             with c3:
@@ -15893,7 +15908,13 @@ def render_admin_multilega():
                                     step=1.0,
                                     key=f"ml185_budget_val_{_lid}"
                                 )
-                            e_incremento = st.number_input("Incremento minimo asta", min_value=0.1, max_value=100.0, value=float(lega["incremento_minimo"]), step=0.1, key=f"ml185_incremento_{_lid}")
+                            e_incremento = st.selectbox(
+                                "Incremento minimo asta",
+                                INCREMENTI_ASTA_AMMESSI_V186,
+                                index=_indice_incremento_asta_v186(lega["incremento_minimo"]),
+                                format_func=lambda x: f"{x:.2f}",
+                                key=f"ml186_incremento_{_lid}"
+                            )
                         with ec3:
                             e_fpf = st.toggle(
                                 "Fair Play Finanziario",
