@@ -15826,11 +15826,9 @@ def render_admin_multilega():
 
                 r3.metric(
                     "Budget",
-                    formatta_crediti(
-                        lega[
-                            "budget_iniziale"
-                        ]
-                    )
+                    "ILLIMITATO"
+                    if bool(int(lega.get("budget_illimitato") or 0))
+                    else formatta_crediti(lega["budget_iniziale"])
                 )
 
                 r4.metric(
@@ -15842,11 +15840,17 @@ def render_admin_multilega():
                     )
                 )
 
+                _fp_caption = (
+                    f" · F.P.F. soglia {formatta_crediti(lega['soglia_budget'])} "
+                    f"×{lega['moltiplicatore']}"
+                    if bool(int(lega.get("fair_play_finanziario") or 0))
+                    else " · F.P.F. NO"
+                )
                 st.caption(
                     f"{lega['modalita']} · "
                     f"Asta {lega['tipo_asta']} · "
-                    f"Listone {lega['fonte_listone']} · "
-                    f"Oltre soglia ×{lega['moltiplicatore']}"
+                    f"Listone {lega['fonte_listone']}"
+                    f"{_fp_caption}"
                 )
 
                 with st.expander("✏️ Modifica specifiche lega", expanded=False):
@@ -15856,22 +15860,22 @@ def render_admin_multilega():
                     with st.container():
                         ec1, ec2, ec3 = st.columns(3)
                         with ec1:
-                            e_nome = st.text_input("Nome lega", value=str(lega["nome"] or ""))
-                            e_stagione = st.text_input("Stagione", value=str(lega["stagione"] or ""))
+                            e_nome = st.text_input("Nome lega", value=str(lega["nome"] or ""), key=f"ml185_nome_{_lid}")
+                            e_stagione = st.text_input("Stagione", value=str(lega["stagione"] or ""), key=f"ml185_stagione_{_lid}")
                             _mods = ["MANTRA", "CLASSIC"]
                             _mod_now = str(lega["modalita"] or "MANTRA").upper()
-                            e_modalita = st.selectbox("Modalità", _mods, index=_mods.index(_mod_now) if _mod_now in _mods else 0)
-                            e_partecipanti = st.number_input("Numero squadre partecipanti", min_value=2, max_value=30, value=int(lega["partecipanti"]), step=1)
+                            e_modalita = st.selectbox("Modalità", _mods, index=_mods.index(_mod_now) if _mod_now in _mods else 0, key=f"ml185_modalita_{_lid}")
+                            e_partecipanti = st.number_input("Numero squadre partecipanti", min_value=2, max_value=30, value=int(lega["partecipanti"]), step=1, key=f"ml185_partecipanti_{_lid}")
                         with ec2:
-                            e_max = st.number_input("Max componenti rosa", min_value=20, max_value=50, value=int(lega["max_giocatori"]), step=1)
-                            e_portieri = st.number_input("Min portieri", min_value=1, max_value=20, value=int(lega["min_portieri"]), step=1)
+                            e_max = st.number_input("Max componenti rosa", min_value=20, max_value=50, value=int(lega["max_giocatori"]), step=1, key=f"ml185_maxrosa_{_lid}")
+                            e_portieri = st.number_input("Min portieri", min_value=1, max_value=20, value=int(lega["min_portieri"]), step=1, key=f"ml185_minportieri_{_lid}")
                             _e_budget_ill = bool(int(lega.get("budget_illimitato") or 0))
                             _e_budget_tipo = st.radio(
                                 "Budget",
                                 ["BUDGET LIMITATO", "BUDGET ILLIMITATO"],
                                 index=1 if _e_budget_ill else 0,
                                 horizontal=True,
-                                key=f"ml182_budget_tipo_{_lid}",
+                                key=f"ml185_budget_tipo_{_lid}",
                                 help="Con Budget illimitato non esiste alcun tetto massimo di spesa."
                             )
                             e_budget_illimitato = _e_budget_tipo == "BUDGET ILLIMITATO"
@@ -15887,14 +15891,14 @@ def render_admin_multilega():
                                     max_value=100000.0,
                                     value=min(100000.0, _e_budget_val),
                                     step=1.0,
-                                    key=f"ml183_budget_val_{_lid}"
+                                    key=f"ml185_budget_val_{_lid}"
                                 )
-                            e_incremento = st.number_input("Incremento minimo asta", min_value=0.1, max_value=100.0, value=float(lega["incremento_minimo"]), step=0.1)
+                            e_incremento = st.number_input("Incremento minimo asta", min_value=0.1, max_value=100.0, value=float(lega["incremento_minimo"]), step=0.1, key=f"ml185_incremento_{_lid}")
                         with ec3:
                             e_fpf = st.toggle(
                                 "Fair Play Finanziario",
                                 value=bool(int(lega.get("fair_play_finanziario") or 0)),
-                                key=f"ml182_fpf_{_lid}",
+                                key=f"ml185_fpf_{_lid}",
                                 help=(
                                     "Il F.P.F. è una modalità in cui, superando la SOGLIA BUDGET, "
                                     "i crediti spesi oltre la soglia vengono moltiplicati secondo il "
@@ -15902,15 +15906,16 @@ def render_admin_multilega():
                                 )
                             )
                             if e_fpf:
-                                e_soglia = st.number_input("Soglia budget", min_value=0.0, max_value=100000.0, value=min(100000.0,float(lega["soglia_budget"] or 0)), step=1.0)
-                                e_mult = st.number_input("Moltiplicatore oltre soglia", min_value=1, max_value=100, value=max(1,int(lega["moltiplicatore"] or 1)), step=1, format="%d")
+                                e_soglia = st.number_input("Soglia budget", min_value=0.0, max_value=100000.0, value=min(100000.0,float(lega["soglia_budget"] or 0)), step=1.0, key=f"ml185_soglia_{_lid}")
+                                e_mult = st.number_input("Moltiplicatore oltre soglia", min_value=1, max_value=100, value=max(1,int(lega["moltiplicatore"] or 1)), step=1, format="%d", key=f"ml185_moltiplicatore_{_lid}")
                             else:
                                 e_soglia = float(e_budget)
                                 e_mult = 1
                             _tipo_now = str(lega["tipo_asta"] or "")
-                            e_tipo = st.selectbox("Tipologia asta", TIPI_ASTA_FANTA_LIVE, index=TIPI_ASTA_FANTA_LIVE.index(_tipo_now) if _tipo_now in TIPI_ASTA_FANTA_LIVE else 0)
+                            e_tipo = st.selectbox("Tipologia asta", TIPI_ASTA_FANTA_LIVE, index=TIPI_ASTA_FANTA_LIVE.index(_tipo_now) if _tipo_now in TIPI_ASTA_FANTA_LIVE else 0, key=f"ml185_tipoasta_{_lid}")
                             e_fonte = st.selectbox(
                                 "Fonte listone", ["Fantacalcio.it"], index=0,
+                                key=f"ml185_fonte_{_lid}",
                                 help="Provider del catalogo giocatori: anagrafica, ruoli, quotazioni e FVM."
                             )
 
@@ -15919,7 +15924,7 @@ def render_admin_multilega():
                             "SALVA SPECIFICHE LEGA",
                             type="primary",
                             use_container_width=True,
-                            key=f"ml183_save_specs_{_lid}"
+                            key=f"ml185_save_specs_{_lid}"
                         )
 
                     if _save_specs:
