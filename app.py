@@ -33482,8 +33482,9 @@ def giocatore_precedente_skippato_v189(league_id, tipo_asta):
     conn = _portal_raw_connection()
     cur = conn.cursor()
     try:
-        # La fonte SKIPPED viene sovrascritta da LOT quando il giocatore viene astato:
-        # quindi questa query non può richiamare un giocatore già passato da un lotto.
+        # V194 - conta lo stato CORRENTE dello skip, non eventuali vecchi lotti storici.
+        # Se viene aperta una nuova asta sul giocatore, registra_giocatore_chiamato_v147
+        # sovrascrive fonte=LOT e lot_id: da quel momento non è più richiamabile qui.
         cur.execute("""
             SELECT cp.player_id, COALESCE(g.nome,'')
             FROM auction_called_players cp
@@ -33498,12 +33499,6 @@ def giocatore_precedente_skippato_v189(league_id, tipo_asta):
               AND cp.active=1
               AND UPPER(COALESCE(cp.fonte,''))='SKIPPED'
               AND cp.lot_id IS NULL
-              AND NOT EXISTS (
-                    SELECT 1
-                    FROM auction_lots al
-                    WHERE al.league_id=cp.league_id
-                      AND al.player_id=cp.player_id
-              )
             ORDER BY cp.called_at DESC, cp.id DESC
             LIMIT 1
         """, (league_id,))
@@ -34092,7 +34087,8 @@ def snapshot_banditore_idle_v156(league_id):
         except Exception:
             random_queue = []
 
-        # V189 - ultimo SKIP puro, quindi mai passato da un lotto d'asta.
+        # V194 - ultimo SKIP corrente: eventuali vecchi lotti storici non lo bloccano.
+        # Un nuovo lotto, invece, sovrascrive fonte/lot_id e lo rende non richiamabile.
         cur.execute("""
             SELECT cp.player_id,COALESCE(g.nome,'')
             FROM auction_called_players cp
@@ -34106,11 +34102,6 @@ def snapshot_banditore_idle_v156(league_id):
               AND cp.active=1
               AND UPPER(COALESCE(cp.fonte,''))='SKIPPED'
               AND cp.lot_id IS NULL
-              AND NOT EXISTS (
-                    SELECT 1 FROM auction_lots al
-                    WHERE al.league_id=cp.league_id
-                      AND al.player_id=cp.player_id
-              )
             ORDER BY cp.called_at DESC,cp.id DESC
             LIMIT 1
         """, (league_id,))
