@@ -14502,6 +14502,154 @@ STATI_LEGA_AMMESSI = [
 ]
 
 
+
+def aggiorna_specifiche_lega_multilega(
+    league_id, nome, stagione, modalita, partecipanti,
+    max_giocatori, min_portieri, budget_iniziale,
+    incremento_minimo, soglia_budget, moltiplicatore,
+    tipo_asta, fonte_listone
+):
+    """Aggiorna atomicamente le specifiche base della lega amministrata."""
+    league_id = int(league_id)
+    nome = str(nome or "").strip()
+    stagione = str(stagione or "").strip()
+    modalita = str(modalita or "").strip().upper()
+    partecipanti = int(partecipanti)
+    max_giocatori = int(max_giocatori)
+    min_portieri = int(min_portieri)
+    budget_iniziale = float(budget_iniziale)
+    incremento_minimo = float(incremento_minimo)
+    soglia_budget = float(soglia_budget)
+    moltiplicatore = int(moltiplicatore)
+    tipo_asta = str(tipo_asta or "").strip()
+    fonte_listone = str(fonte_listone or "").strip()
+
+    if not nome:
+        raise ValueError("Il nome della lega non può essere vuoto.")
+    if not stagione:
+        raise ValueError("La stagione non può essere vuota.")
+    if modalita not in ("MANTRA", "CLASSIC"):
+        raise ValueError("Modalità lega non valida.")
+    if partecipanti < 2 or partecipanti > 30:
+        raise ValueError("I partecipanti devono essere compresi tra 2 e 30.")
+    if max_giocatori < 1 or max_giocatori > 60:
+        raise ValueError("La rosa massima deve essere compresa tra 1 e 60.")
+    if min_portieri < 0 or min_portieri > max_giocatori:
+        raise ValueError("I portieri minimi non possono superare la rosa massima.")
+    if budget_iniziale <= 0 or incremento_minimo <= 0:
+        raise ValueError("Budget e incremento minimo devono essere maggiori di zero.")
+    if moltiplicatore < 1:
+        raise ValueError("Il moltiplicatore deve essere almeno 1.")
+    if tipo_asta not in TIPI_ASTA_FANTA_LIVE:
+        raise ValueError("Tipologia asta non valida.")
+
+    current_admin = int(st.session_state.get("auth_user_id") or 0)
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""SELECT COUNT(*) FROM league_members
+                       WHERE league_id=? AND user_id=? AND is_admin=1 AND is_active=1""",
+                    (league_id, current_admin))
+        if int(cur.fetchone()[0] or 0) == 0:
+            raise PermissionError("Operazione riservata all'Admin della lega.")
+
+        cur.execute("""SELECT l.nome,l.stagione,l.modalita,
+                              r.partecipanti,r.max_giocatori,r.min_portieri,
+                              r.budget_iniziale,r.incremento_minimo,r.soglia_budget,
+                              r.moltiplicatore_oltre_soglia,r.tipo_asta,r.fonte_listone
+                       FROM leagues l JOIN league_rules r ON r.league_id=l.id
+                       WHERE l.id=? LIMIT 1""", (league_id,))
+        prima = cur.fetchone()
+        if not prima:
+            raise ValueError("Lega non trovata.")
+
+        # Il numero partecipanti corrisponde alle squadre attive. In aumento
+        # vengono creati slot placeholder; in diminuzione si eliminano soltanto
+        # slot liberi, mai squadre già associate a utenti o con giocatori.
+        cur.execute("""SELECT id,nome,owner_user_id,posizione FROM teams
+                       WHERE league_id=? AND is_active=1 ORDER BY posizione,id""", (league_id,))
+        teams = cur.fetchall() or []
+        attuali = len(teams)
+
+        if partecipanti > attuali:
+            cur.execute("SELECT COALESCE(MAX(posizione),0) FROM teams WHERE league_id=?", (league_id,))
+            pos = int(cur.fetchone()[0] or 0)
+            for _ in range(partecipanti - attuali):
+                pos += 1
+                cur.execute("""INSERT INTO teams
+                               (league_id,nome,owner_user_id,posizione,is_active,created_at,updated_at)
+                               VALUES (?,?,NULL,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)""",
+                            (league_id, f"Squadra {pos}", pos))
+
+        elif partecipanti < attuali:
+            da_togliere = attuali - partecipanti
+            eliminabili = []
+            for team_id, team_nome, owner_id, posizione in reversed(teams):
+                if owner_id is not None:
+                    continue
+                cur.execute("""SELECT COUNT(*) FROM league_members
+                               WHERE league_id=? AND team_id=? AND is_active=1""", (league_id, int(team_id)))
+                if int(cur.fetchone()[0] or 0) > 0:
+                    continue
+                # Se esiste league_players, uno slot con giocatori non è eliminabile.
+                try:
+                    cur.execute("SELECT COUNT(*) FROM league_players WHERE league_id=? AND team_id=?", (league_id, int(team_id)))
+                    if int(cur.fetchone()[0] or 0) > 0:
+                        continue
+                except Exception:
+                    pass
+                eliminabili.append(int(team_id))
+                if len(eliminabili) >= da_togliere:
+                    break
+            if len(eliminabili) < da_togliere:
+                raise ValueError(
+                    "Non posso ridurre i partecipanti a %d: esistono squadre già assegnate o con giocatori. "
+                    "Rimuovi prima le squadre interessate dalla sezione Squadre." % partecipanti
+                )
+            for team_id in eliminabili:
+                cur.execute("DELETE FROM league_members WHERE league_id=? AND team_id=?", (league_id, team_id))
+                cur.execute("DELETE FROM teams WHERE league_id=? AND id=?", (league_id, team_id))
+
+        cur.execute("""UPDATE leagues
+                       SET nome=?, stagione=?, modalita=?, updated_at=CURRENT_TIMESTAMP
+                       WHERE id=?""", (nome, stagione, modalita, league_id))
+        cur.execute("""UPDATE league_rules SET
+                       partecipanti=?, max_giocatori=?, min_portieri=?,
+                       budget_iniziale=?, incremento_minimo=?, soglia_budget=?,
+                       moltiplicatore_oltre_soglia=?, tipo_asta=?, fonte_listone=?,
+                       updated_at=CURRENT_TIMESTAMP
+                       WHERE league_id=?""",
+                    (partecipanti, max_giocatori, min_portieri, budget_iniziale,
+                     incremento_minimo, soglia_budget, moltiplicatore, tipo_asta,
+                     fonte_listone, league_id))
+
+        dettagli = {
+            "prima": list(prima),
+            "dopo": {
+                "nome": nome, "stagione": stagione, "modalita": modalita,
+                "partecipanti": partecipanti, "max_giocatori": max_giocatori,
+                "min_portieri": min_portieri, "budget_iniziale": budget_iniziale,
+                "incremento_minimo": incremento_minimo, "soglia_budget": soglia_budget,
+                "moltiplicatore": moltiplicatore, "tipo_asta": tipo_asta,
+                "fonte_listone": fonte_listone
+            }
+        }
+        cur.execute("""INSERT INTO audit_log
+                       (league_id,user_id,team_id,azione,entita,entita_id,dettagli_json,created_at)
+                       VALUES (?,?,NULL,'LEAGUE_SETTINGS_UPDATED','LEAGUE',?,?,CURRENT_TIMESTAMP)""",
+                    (league_id, current_admin, str(league_id),
+                     json.dumps(dettagli, ensure_ascii=False)))
+        conn.commit()
+        invalida_cache_admin_multilega()
+        # Dati condivisi con le altre viste della lega.
+        invalida_cache_dati()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        _portal_close(conn)
+
 def aggiorna_stato_lega_multilega(league_id, nuovo_stato):
     league_id = int(league_id)
     nuovo_stato = str(nuovo_stato).strip().upper()
@@ -15560,6 +15708,44 @@ def render_admin_multilega():
                     f"Listone {lega['fonte_listone']} · "
                     f"Oltre soglia ×{lega['moltiplicatore']}"
                 )
+
+                with st.expander("✏️ Modifica specifiche lega", expanded=False):
+                    _lid = int(lega["league_id"])
+                    with st.form("ml167_edit_league_" + str(_lid)):
+                        ec1, ec2, ec3 = st.columns(3)
+                        with ec1:
+                            e_nome = st.text_input("Nome lega", value=str(lega["nome"] or ""))
+                            e_stagione = st.text_input("Stagione", value=str(lega["stagione"] or ""))
+                            _mods = ["MANTRA", "CLASSIC"]
+                            _mod_now = str(lega["modalita"] or "MANTRA").upper()
+                            e_modalita = st.selectbox("Modalità", _mods, index=_mods.index(_mod_now) if _mod_now in _mods else 0)
+                            e_partecipanti = st.number_input("Partecipanti", min_value=2, max_value=30, value=int(lega["partecipanti"]), step=1)
+                        with ec2:
+                            e_max = st.number_input("Rosa massima", min_value=1, max_value=60, value=int(lega["max_giocatori"]), step=1)
+                            e_portieri = st.number_input("Portieri minimi", min_value=0, max_value=10, value=int(lega["min_portieri"]), step=1)
+                            e_budget = st.number_input("Budget iniziale", min_value=1.0, max_value=10000.0, value=float(lega["budget_iniziale"]), step=10.0)
+                            e_incremento = st.number_input("Incremento minimo asta", min_value=0.1, max_value=100.0, value=float(lega["incremento_minimo"]), step=0.5)
+                        with ec3:
+                            e_soglia = st.number_input("Soglia budget", min_value=0.0, max_value=10000.0, value=float(lega["soglia_budget"]), step=10.0)
+                            e_mult = st.number_input("Moltiplicatore oltre soglia", min_value=1, max_value=10, value=int(lega["moltiplicatore"]), step=1, format="%d")
+                            _tipo_now = str(lega["tipo_asta"] or "")
+                            e_tipo = st.selectbox("Tipologia asta", TIPI_ASTA_FANTA_LIVE, index=TIPI_ASTA_FANTA_LIVE.index(_tipo_now) if _tipo_now in TIPI_ASTA_FANTA_LIVE else 0)
+                            e_fonte = st.text_input("Fonte listone", value=str(lega["fonte_listone"] or ""))
+
+                        st.caption("Se riduci i partecipanti, possono essere rimossi automaticamente solo gli slot squadra ancora liberi e senza giocatori.")
+                        _save_specs = st.form_submit_button("SALVA SPECIFICHE LEGA", type="primary", use_container_width=True)
+
+                    if _save_specs:
+                        try:
+                            aggiorna_specifiche_lega_multilega(
+                                _lid, e_nome, e_stagione, e_modalita, e_partecipanti,
+                                e_max, e_portieri, e_budget, e_incremento, e_soglia,
+                                e_mult, e_tipo, e_fonte
+                            )
+                            st.session_state["ml15_admin_message"] = "Specifiche della lega aggiornate correttamente."
+                            st.rerun()
+                        except Exception as errore:
+                            st.error(str(errore))
 
                 stato_corrente = str(lega.get("stato") or "DRAFT").upper()
                 if stato_corrente not in STATI_LEGA_AMMESSI:
