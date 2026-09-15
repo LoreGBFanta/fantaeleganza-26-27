@@ -34427,7 +34427,7 @@ def render_banditore_asta():
             return
 
         # V190 - CTA principale grande e verde, subito accanto al giocatore proposto.
-        _titolo_col, _apri_col = st.columns([1.35, 1.0], gap="small", vertical_alignment="center")
+        _titolo_col, _apri_col = st.columns([1.15, 1.0], gap="small", vertical_alignment="center")
 
         with _titolo_col:
             st.markdown(f'### Prossimo giocatore: **{g["nome"]}**')
@@ -34436,40 +34436,43 @@ def render_banditore_asta():
             )
 
         with _apri_col:
-            _open_key_v191 = f"v191_open_{g['player_id']}"
-            st.markdown(
-                f"""
-                <style>
-                /* V191: SOLO il CTA Apri Asta. Non altera navbar o cambio livello. */
-                .st-key-{{_open_key_v191}} button {{
-                    background: #16a34a !important;
-                    border-color: #16a34a !important;
-                    color: white !important;
-                    min-height: 64px !important;
-                    font-size: 18px !important;
-                    font-weight: 800 !important;
-                    border-radius: 10px !important;
-                }}
-                .st-key-{{_open_key_v191}} button:hover {{
-                    background: #15803d !important;
-                    border-color: #15803d !important;
-                    color: white !important;
-                }}
-                </style>
-                """,
-                unsafe_allow_html=True,
-            )
+            _open_key_v192 = f"v192_open_{g['player_id']}"
             st.button(
                 "📣 APRI ASTA SUL GIOCATORE",
                 type="primary",
                 use_container_width=True,
-                key=_open_key_v191,
+                key=_open_key_v192,
                 on_click=callback_apri_lotto_v133,
                 args=(
                     league_id,
                     g["player_id"],
                     g["nome"]
                 )
+            )
+            # V192 - CSS inserito DOPO il widget: il selettore :has() identifica
+            # esclusivamente il wrapper che contiene il bottone con questa key.
+            st.markdown(
+                f"""
+                <style>
+                div[data-testid="stElementContainer"]:has(.st-key-{_open_key_v192}) .st-key-{_open_key_v192} button {{
+                    background: #16a34a !important;
+                    border-color: #16a34a !important;
+                    color: #ffffff !important;
+                    min-height: 76px !important;
+                    font-size: 19px !important;
+                    font-weight: 850 !important;
+                    border-radius: 10px !important;
+                }}
+                div[data-testid="stElementContainer"]:has(.st-key-{_open_key_v192}) .st-key-{_open_key_v192} button * {{
+                    color: #ffffff !important;
+                }}
+                div[data-testid="stElementContainer"]:has(.st-key-{_open_key_v192}) .st-key-{_open_key_v192} button:hover {{
+                    background: #15803d !important;
+                    border-color: #15803d !important;
+                }}
+                </style>
+                """,
+                unsafe_allow_html=True,
             )
 
         # Riga secondaria: soltanto navigazione precedente / prossimo.
