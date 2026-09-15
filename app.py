@@ -33445,6 +33445,105 @@ def stile_proiezione_banditore_v165():
     """, unsafe_allow_html=True)
 
 
+
+def cerca_giocatori_disponibili_banditore_v169(league_id, testo, limite=12):
+    """Ricerca rapida server-side dei soli giocatori DISPONIBILI della lega."""
+    league_id = int(league_id)
+    testo = str(testo or "").strip()
+    if len(testo) < 2:
+        return []
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        # Prefisso prima, poi occorrenza: risultati più naturali senza caricare il listone.
+        q = "%" + testo.replace("%", r"\%").replace("_", r"\_") + "%"
+        pref = testo.replace("%", r"\%").replace("_", r"\_") + "%"
+        cur.execute("""
+            SELECT
+                g.player_id,
+                COALESCE(g.nome,''),
+                COALESCE(g.squadra,''),
+                COALESCE(g.ruolo_mantra,'')
+            FROM league_player_catalog g
+            JOIN league_players lp
+              ON lp.league_id=g.league_id
+             AND lp.player_id=g.player_id
+            WHERE g.league_id=?
+              AND UPPER(COALESCE(lp.stato,'DISPONIBILE'))='DISPONIBILE'
+              AND g.nome LIKE ? ESCAPE '\\'
+            ORDER BY
+              CASE WHEN g.nome LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,
+              g.nome COLLATE NOCASE
+            LIMIT ?
+        """, (league_id, q, pref, int(limite)))
+        return [
+            {
+                "player_id": int(r[0]),
+                "nome": str(r[1] or ""),
+                "squadra": str(r[2] or ""),
+                "ruolo_mantra": str(r[3] or ""),
+            }
+            for r in (cur.fetchall() or [])
+        ]
+    finally:
+        _portal_close(conn)
+
+
+def render_ricerca_giocatore_banditore_v169(league_id):
+    """Ricerca manuale e apertura immediata di un giocatore specifico."""
+    st.markdown(
+        "<div style='margin-top:14px;margin-bottom:3px;font-weight:850;'>"
+        "🔎 CHIAMA UN GIOCATORE SPECIFICO</div>",
+        unsafe_allow_html=True,
+    )
+    ricerca = st.text_input(
+        "Cerca giocatore da chiamare",
+        placeholder="Scrivi almeno 2 lettere del nome...",
+        key=f"v169_banditore_player_search_{int(league_id)}",
+        label_visibility="collapsed",
+    ).strip()
+
+    if len(ricerca) < 2:
+        return
+
+    try:
+        risultati = cerca_giocatori_disponibili_banditore_v169(
+            league_id, ricerca, 12
+        )
+    except Exception as errore:
+        st.error("Ricerca giocatore non disponibile: " + str(errore))
+        return
+
+    if not risultati:
+        st.caption("Nessun giocatore disponibile trovato.")
+        return
+
+    opzioni = {int(x["player_id"]): x for x in risultati}
+    ids = list(opzioni.keys())
+    selezionato = st.selectbox(
+        "Giocatore trovato",
+        ids,
+        format_func=lambda pid: (
+            f'{opzioni[pid]["nome"]}  ·  '
+            f'{opzioni[pid]["squadra"]}  ·  '
+            f'{opzioni[pid]["ruolo_mantra"]}'
+        ),
+        key=f"v169_banditore_player_result_{int(league_id)}",
+        label_visibility="collapsed",
+    )
+    g_sel = opzioni[int(selezionato)]
+
+    st.button(
+        f'📣 APRI ASTA SU {g_sel["nome"].upper()}',
+        type="primary",
+        use_container_width=True,
+        key=f'v169_open_specific_{int(league_id)}_{g_sel["player_id"]}',
+        on_click=callback_apri_lotto_v133,
+        args=(int(league_id), int(g_sel["player_id"]), g_sel["nome"]),
+        help="Apre immediatamente il lotto sul giocatore selezionato."
+    )
+
 def render_banditore_asta():
     if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
         st.error("Accedi con il livello BANDITORE per usare Gestione Asta.")
@@ -33586,6 +33685,10 @@ def render_banditore_asta():
                 except Exception as errore:
                     st.session_state["auctioneer_error"] = str(errore)
                     rerun_banditore_fragment_v156()
+
+        # V169 - chiamata manuale di un giocatore specifico.
+        # Posizionata esattamente sotto APRI ASTA / PROSSIMO GIOCATORE.
+        render_ricerca_giocatore_banditore_v169(league_id)
 
         return
 
