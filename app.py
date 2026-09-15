@@ -34691,114 +34691,214 @@ def render_banditore_asta():
             st.info("Nessun altro giocatore da proporre.")
             return
 
-        # V190 - CTA principale grande e verde, subito accanto al giocatore proposto.
-        _titolo_col, _apri_col = st.columns([1.15, 1.0], gap="small", vertical_alignment="center")
+        # V200 - Layout Gestione Asta ridisegnato sulla proposta grafica dell'utente.
+        # Riga 1: etichetta + Nome, Squadra, Ruolo | CTA Apri Asta.
+        # Riga 2: due pulsanti di navigazione HTML IDENTICI per costruzione.
+        _modalita_live = str(st.session_state.get("ml_modalita") or "MANTRA").upper()
+        _ruolo_visualizzato = str(g.get("ruolo_mantra") or "")
+        if _modalita_live == "CLASSIC":
+            # Recupero ruolo classico solo quando necessario, senza alterare il fast path.
+            try:
+                _c = _portal_raw_connection()
+                _cu = _c.cursor()
+                _cu.execute("""
+                    SELECT COALESCE(ruolo_classico,'')
+                    FROM league_player_catalog
+                    WHERE league_id=? AND player_id=?
+                    LIMIT 1
+                """, (int(league_id), int(g["player_id"])))
+                _rr = _cu.fetchone()
+                if _rr:
+                    _ruolo_visualizzato = str(_rr[0] or "")
+            except Exception:
+                pass
+            finally:
+                try:
+                    _portal_close(_c)
+                except Exception:
+                    pass
 
-        with _titolo_col:
-            st.markdown(f'### Prossimo giocatore: **{g["nome"]}**')
-            st.caption(
-                f'{g["squadra"]} · {g["ruolo_mantra"]} · FVM {g["fvm"]:g}'
+        # Trigger Streamlit reali: invisibili, azionati dai due pulsanti HTML.
+        _precedente = snap.get("precedente")
+        _trigger_prev = st.button(
+            "PREV_TRIGGER",
+            key="v200_prev_trigger",
+            disabled=_precedente is None,
+            on_click=callback_nav_prev_v197,
+            args=(league_id, tipo_asta)
+        )
+        _trigger_next = st.button(
+            "NEXT_TRIGGER",
+            key="v200_next_trigger",
+            on_click=callback_nav_next_v197,
+            args=(league_id, g["player_id"], tipo_asta, g["nome"])
+        )
+
+        st.markdown(
+            """
+            <style>
+            /* Nasconde esclusivamente i trigger tecnici V200. */
+            .st-key-v200_prev_trigger,
+            .st-key-v200_next_trigger {
+                display:none !important;
+                height:0 !important;
+                min-height:0 !important;
+                margin:0 !important;
+                padding:0 !important;
+            }
+
+            /* CTA Streamlit: grande, rosso come mockup. */
+            .st-key-v200_open button {
+                width:100% !important;
+                height:54px !important;
+                min-height:54px !important;
+                max-height:54px !important;
+                background:#ff4b4b !important;
+                border-color:#ff4b4b !important;
+                color:white !important;
+                border-radius:9px !important;
+                font-size:20px !important;
+                font-weight:500 !important;
+            }
+            .st-key-v200_open button:hover {
+                background:#e74343 !important;
+                border-color:#e74343 !important;
+                color:white !important;
+            }
+            .st-key-v200_open button * {
+                color:white !important;
+                font-size:20px !important;
+            }
+
+            /* Testata giocatore */
+            .v200-player-label {
+                font-size:17px;
+                line-height:1.1;
+                margin:0 0 4px 0;
+                color:inherit;
+            }
+            .v200-player-line {
+                display:flex;
+                align-items:baseline;
+                flex-wrap:wrap;
+                gap:0;
+                margin:0;
+                line-height:1.05;
+            }
+            .v200-player-name {
+                font-size:39px;
+                font-weight:800;
+            }
+            .v200-player-meta {
+                font-size:39px;
+                font-weight:400;
+            }
+
+            /* I DUE NAV SONO LO STESSO ELEMENTO CSS: dimensioni necessariamente identiche. */
+            .v200-nav-grid {
+                display:grid;
+                grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+                gap:38px;
+                width:100%;
+                margin-top:10px;
+            }
+            .v200-nav-btn {
+                appearance:none;
+                -webkit-appearance:none;
+                width:100%;
+                height:54px;
+                min-height:54px;
+                max-height:54px;
+                box-sizing:border-box;
+                margin:0;
+                padding:0 14px;
+                border:2px solid #111;
+                border-radius:10px;
+                background:white;
+                color:#111;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                font-family:inherit;
+                font-size:21px;
+                font-weight:400;
+                line-height:1;
+                cursor:pointer;
+                text-decoration:none;
+                user-select:none;
+            }
+            .v200-nav-btn:hover {
+                background:#f6f6f6;
+            }
+            .v200-nav-btn.v200-disabled {
+                opacity:.45;
+                cursor:not-allowed;
+            }
+            .v200-nav-icon {
+                display:inline-flex;
+                width:22px;
+                height:22px;
+                align-items:center;
+                justify-content:center;
+                font-size:22px;
+                line-height:22px;
+                flex:0 0 22px;
+            }
+            @media (max-width: 800px) {
+                .v200-player-name,.v200-player-meta {font-size:30px;}
+                .v200-nav-grid {gap:12px;}
+                .v200-nav-btn {font-size:16px;}
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+        _head_left, _head_right = st.columns([1, 1], gap="large", vertical_alignment="center")
+
+        with _head_left:
+            st.markdown(
+                f"""
+                <div class="v200-player-label">Giocatore da chiamare</div>
+                <div class="v200-player-line">
+                    <span class="v200-player-name">{html.escape(str(g["nome"]))}</span>
+                    <span class="v200-player-meta">,&nbsp;{html.escape(str(g["squadra"]))},&nbsp;{html.escape(_ruolo_visualizzato)}</span>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
-        with _apri_col:
-            _open_key_v192 = f"v192_open_{g['player_id']}"
+        with _head_right:
             st.button(
                 "📣 APRI ASTA SUL GIOCATORE",
                 type="primary",
                 use_container_width=True,
-                key=_open_key_v192,
+                key="v200_open",
                 on_click=callback_apri_lotto_v133,
-                args=(
-                    league_id,
-                    g["player_id"],
-                    g["nome"]
-                )
-            )
-            # V192 - CSS inserito DOPO il widget: il selettore :has() identifica
-            # esclusivamente il wrapper che contiene il bottone con questa key.
-            st.markdown(
-                f"""
-                <style>
-                div[data-testid="stElementContainer"]:has(.st-key-{_open_key_v192}) .st-key-{_open_key_v192} button {{
-                    background: #16a34a !important;
-                    border-color: #16a34a !important;
-                    color: #ffffff !important;
-                    min-height: 76px !important;
-                    font-size: 19px !important;
-                    font-weight: 850 !important;
-                    border-radius: 10px !important;
-                }}
-                div[data-testid="stElementContainer"]:has(.st-key-{_open_key_v192}) .st-key-{_open_key_v192} button * {{
-                    color: #ffffff !important;
-                }}
-                div[data-testid="stElementContainer"]:has(.st-key-{_open_key_v192}) .st-key-{_open_key_v192} button:hover {{
-                    background: #15803d !important;
-                    border-color: #15803d !important;
-                }}
-                </style>
-                """,
-                unsafe_allow_html=True,
+                args=(league_id, g["player_id"], g["nome"])
             )
 
-        # V199 - UN SOLO wrapper contiene ENTRAMBI i pulsanti.
-        # Lo stesso identico selettore CSS colpisce quindi entrambi, senza differenze
-        # dovute allo stato disabled o alla struttura interna delle due colonne.
-        with st.container(key="v199_nav_row"):
-            st.markdown("""
-            <style>
-            .st-key-v199_nav_row button {
-                width: 100% !important;
-                height: 46px !important;
-                min-height: 46px !important;
-                max-height: 46px !important;
-                box-sizing: border-box !important;
-                padding: 0 14px !important;
-                margin: 0 !important;
-                border-radius: 8px !important;
-                font-size: 12px !important;
-                font-weight: 400 !important;
-                line-height: 12px !important;
-            }
-            .st-key-v199_nav_row button > div,
-            .st-key-v199_nav_row button p,
-            .st-key-v199_nav_row button span {
-                margin: 0 !important;
-                padding: 0 !important;
-                font-size: 12px !important;
-                font-weight: 400 !important;
-                line-height: 12px !important;
-                min-height: 12px !important;
-                max-height: 12px !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-
-            _prev_col, _next_col = st.columns([1, 1], gap="small")
-
-            with _prev_col:
-                _precedente = snap.get("precedente")
-                st.button(
-                    "◀ GIOCATORE PRECEDENTE",
-                    use_container_width=True,
-                    disabled=_precedente is None,
-                    key="v199_nav_prev",
-                    help=(
-                        f'Ripristina {_precedente["nome"]}, ultimo giocatore skippato.'
-                        if _precedente else
-                        "Nessun giocatore skippato richiamabile."
-                    ),
-                    on_click=callback_nav_prev_v197,
-                    args=(league_id, tipo_asta)
-                )
-
-            with _next_col:
-                st.button(
-                    "▶ PROSSIMO GIOCATORE",
-                    use_container_width=True,
-                    key="v199_nav_next",
-                    on_click=callback_nav_next_v197,
-                    args=(league_id, g["player_id"], tipo_asta, g["nome"])
-                )
+        # Un unico componente HTML genera entrambi i pulsanti.
+        # Il click inoltra l'evento al relativo trigger Streamlit invisibile.
+        _prev_class = "v200-nav-btn" if _precedente is not None else "v200-nav-btn v200-disabled"
+        _prev_js = (
+            """const e=document.querySelector('.st-key-v200_prev_trigger button');if(e){e.click();}"""
+            if _precedente is not None else "return false;"
+        )
+        st.markdown(
+            f"""
+            <div class="v200-nav-grid">
+                <button type="button" class="{_prev_class}" onclick="{_prev_js}">
+                    <span class="v200-nav-icon">←</span><span>GIOCATORE PRECEDENTE</span>
+                </button>
+                <button type="button" class="v200-nav-btn"
+                    onclick="const e=document.querySelector('.st-key-v200_next_trigger button');if(e){{e.click();}}">
+                    <span>PROSSIMO GIOCATORE</span><span class="v200-nav-icon">→</span>
+                </button>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
         render_ricerca_giocatore_banditore_v169(league_id)
 
