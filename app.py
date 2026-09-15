@@ -8589,6 +8589,42 @@ def sigle_specialista_giocatore(
     )
 
 
+@st.dialog("Altri tiratori squadra", width="medium")
+def mostra_altri_tiratori_squadra_v176(nome_giocatore, squadra):
+    """Mostra gli altri specialisti della stessa squadra usando la stessa fonte delle Formazioni Tipo."""
+    dati = _specialisti_squadra(squadra)
+
+    def _altri(lista):
+        risultato = []
+        for indice, nome_fonte in enumerate((lista or [])[:3], start=1):
+            if _stesso_giocatore_specialista(nome_giocatore, nome_fonte, squadra):
+                continue
+            risultato.append((indice, str(nome_fonte)))
+        return risultato
+
+    rigoristi = _altri(dati.get("rigoristi", []))
+    piazzati = _altri(dati.get("calci_piazzati", []))
+
+    st.markdown(f"### {html.escape(str(squadra))}")
+    col_r, col_cp = st.columns(2, gap="medium")
+
+    with col_r:
+        st.markdown("#### ⚽ RIGORISTI")
+        if rigoristi:
+            for indice, nome in rigoristi:
+                st.markdown(f"**R{indice}** · {html.escape(nome)}")
+        else:
+            st.caption("Nessun altro rigorista indicato.")
+
+    with col_cp:
+        st.markdown("#### 🎯 CALCI PIAZZATI")
+        if piazzati:
+            for indice, nome in piazzati:
+                st.markdown(f"**CP{indice}** · {html.escape(nome)}")
+        else:
+            st.caption("Nessun altro tiratore indicato.")
+
+
 def _fc_snapshot_v18():
     return {
         "versione_dati": 21,
@@ -34734,7 +34770,7 @@ def render_card_giocatore_squadra_v171(live):
         </div>
         <div class="fe-team-info-row">
           <div class="fe-team-info" style="background:#f8fafc;border:2px solid #cbd5e1;">
-            <div class="fe-team-info-label">R / CP</div>
+            <div class="fe-team-info-label">RIGORISTA/CALCI PIAZZATI</div>
             <div class="fe-team-info-value" style="color:#071a2f;">{html.escape(str(sigle))}</div>
           </div>
           <div class="fe-team-info" style="background:{disp_bg};border:2px solid {disp_border};">
@@ -34752,6 +34788,15 @@ def render_card_giocatore_squadra_v171(live):
 
     # V175 - strumenti allineati sotto le rispettive caselle.
     _tool_r_cp, _tool_disp, _tool_prio = st.columns([0.72, 1.0, 1.75], gap="small")
+
+    with _tool_r_cp:
+        if st.button(
+            "ALTRI TIRATORI SQUADRA",
+            key=f"v176_tiratori_{player_id}",
+            use_container_width=True,
+            help="Mostra gli altri rigoristi e tiratori di calci piazzati della stessa squadra."
+        ):
+            mostra_altri_tiratori_squadra_v176(nome_raw, squadra_raw)
 
     with _tool_disp:
         if not disponibile:
