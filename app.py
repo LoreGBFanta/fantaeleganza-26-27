@@ -34746,9 +34746,32 @@ def render_controlli_top_admin_banditore_v154():
     )
 )
 def render_navigazione_e_pagina():
-    # V154 - nei livelli ADMIN/BANDITORE i controlli generali stanno in alto,
-    # sopra la barra di navigazione, e la sidebar non viene mostrata.
-    render_controlli_top_admin_banditore_v154()
+    # V166 - ADMIN mantiene i controlli generali in alto.
+    # Nel BANDITORE, destinato alla proiezione, CAMBIA LIVELLO e MENU
+    # vengono invece renderizzati in fondo alla pagina.
+    if MODALITA_ACCESSO_ATTIVA == "ADMIN":
+        render_controlli_top_admin_banditore_v154()
+
+    # V166 - intestazione pubblica del tabellone Banditore.
+    if MODALITA_ACCESSO_ATTIVA == "BANDITORE":
+        _asta_nome_lega = str(
+            st.session_state.get("ml_league_nome") or "LEGA"
+        ).strip()
+        _asta_anno_lega = str(
+            st.session_state.get("ml_stagione") or ""
+        ).strip()
+        _asta_titolo = (
+            f"ASTA {html.escape(_asta_nome_lega)}"
+            + (f" - {html.escape(_asta_anno_lega)}" if _asta_anno_lega else "")
+            + " IN CORSO"
+        )
+        st.markdown(
+            "<div style='width:100%;text-align:center;font-size:clamp(24px,3vw,46px);"
+            "line-height:1.08;font-weight:950;letter-spacing:.5px;margin:2px 0 18px 0;'>"
+            + _asta_titolo
+            + "</div>",
+            unsafe_allow_html=True,
+        )
 
     # ============================================================
     # NAVBAR
@@ -36286,6 +36309,16 @@ def render_navigazione_e_pagina():
                 unsafe_allow_html=True
             )
 
+
+    # ============================================================
+    # V166 - CONTROLLI BANDITORE IN FONDO
+    # ============================================================
+    if MODALITA_ACCESSO_ATTIVA == "BANDITORE":
+        st.markdown(
+            '<div style="height:18px"></div>',
+            unsafe_allow_html=True,
+        )
+        render_controlli_top_admin_banditore_v154()
 
     # ============================================================
     # FOOTER
