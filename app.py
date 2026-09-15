@@ -34851,13 +34851,6 @@ def render_bidding_inline_asta_v126():
             f'**{stato["current_team"]}**'
         )
 
-    st.markdown("#### Offerte per squadra")
-    st.dataframe(
-        _tabella_offerte_live_v132(stato),
-        use_container_width=True,
-        hide_index=True
-    )
-
     team = stato.get("team")
     if team is None:
         return
@@ -34934,6 +34927,16 @@ def render_bidding_inline_asta_v126():
                 custom_key
             )
         )
+
+    # V172 - la tabella offerte resta sempre l'ultimo blocco operativo
+    # della pagina ASTA SQUADRA; quando il form è disponibile compare
+    # quindi subito dopo il pulsante INVIA OFFERTA.
+    st.markdown("#### Offerte per squadra")
+    st.dataframe(
+        _tabella_offerte_live_v132(stato),
+        use_container_width=True,
+        hide_index=True
+    )
 
     elapsed = time.perf_counter() - t0
     if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
