@@ -1549,7 +1549,7 @@ def _render_incremento_asta_v187(prefix, tipo_default="FISSO", base_default=1.0,
             with c2:
                 inc0=float(d.get("incremento",base))
                 incremento=st.selectbox(
-                    f"Incremento oltre soglia {i+1}",
+                    f"Incremento minimo oltre soglia {i+1}",
                     INCREMENTI_ASTA_AMMESSI_V186,
                     index=_indice_incremento_asta_v186(inc0),
                     format_func=lambda x: f"{x:.2f}",
