@@ -34718,37 +34718,13 @@ def render_banditore_asta():
                 except Exception:
                     pass
 
-        # Trigger Streamlit reali: invisibili, azionati dai due pulsanti HTML.
         _precedente = snap.get("precedente")
-        _trigger_prev = st.button(
-            "PREV_TRIGGER",
-            key="v200_prev_trigger",
-            disabled=_precedente is None,
-            on_click=callback_nav_prev_v197,
-            args=(league_id, tipo_asta)
-        )
-        _trigger_next = st.button(
-            "NEXT_TRIGGER",
-            key="v200_next_trigger",
-            on_click=callback_nav_next_v197,
-            args=(league_id, g["player_id"], tipo_asta, g["nome"])
-        )
 
         st.markdown(
             """
             <style>
-            /* Nasconde esclusivamente i trigger tecnici V200. */
-            .st-key-v200_prev_trigger,
-            .st-key-v200_next_trigger {
-                display:none !important;
-                height:0 !important;
-                min-height:0 !important;
-                margin:0 !important;
-                padding:0 !important;
-            }
-
-            /* CTA Streamlit: grande, rosso come mockup. */
-            .st-key-v200_open button {
+            /* V202 - CTA Apri Asta */
+            .st-key-v202_open button {
                 width:100% !important;
                 height:54px !important;
                 min-height:54px !important;
@@ -34762,26 +34738,57 @@ def render_banditore_asta():
                 font-size:22px !important;
                 font-weight:600 !important;
             }
-            .st-key-v200_open button:hover {
+            .st-key-v202_open button:hover {
                 background:#e74343 !important;
                 border-color:#e74343 !important;
                 color:white !important;
             }
-            .st-key-v200_open button * {
+            .st-key-v202_open button * {
                 color:white !important;
                 font-size:22px !important;
                 font-weight:600 !important;
                 line-height:1 !important;
             }
 
-            /* Testata giocatore */
-            .v200-player-label {
+            /* V202 - due REALI st.button, entrambi attivi e con la stessa classe geometrica. */
+            .st-key-v202_prev button,
+            .st-key-v202_next button {
+                width:100% !important;
+                height:54px !important;
+                min-height:54px !important;
+                max-height:54px !important;
+                box-sizing:border-box !important;
+                margin:0 !important;
+                padding:0 14px !important;
+                border-width:1px !important;
+                border-style:solid !important;
+                border-color:rgba(49,51,63,.2) !important;
+                border-radius:10px !important;
+                background:white !important;
+                color:#111 !important;
+            }
+            .st-key-v202_prev button p,
+            .st-key-v202_next button p {
+                margin:0 !important;
+                padding:0 !important;
+                font-size:21px !important;
+                font-weight:400 !important;
+                line-height:1 !important;
+            }
+            .st-key-v202_prev button:hover,
+            .st-key-v202_next button:hover {
+                border-color:rgba(49,51,63,.35) !important;
+                background:#f7f7f7 !important;
+                color:#111 !important;
+            }
+
+            .v202-player-label {
                 font-size:17px;
                 line-height:1.1;
                 margin:0 0 4px 0;
                 color:inherit;
             }
-            .v200-player-line {
+            .v202-player-line {
                 display:flex;
                 align-items:baseline;
                 flex-wrap:wrap;
@@ -34789,84 +34796,26 @@ def render_banditore_asta():
                 margin:0;
                 line-height:1.05;
             }
-            .v200-player-name {
-                font-size:39px;
-                font-weight:800;
-            }
-            .v200-player-meta {
-                font-size:39px;
-                font-weight:400;
-            }
-
-            /* I DUE NAV SONO LO STESSO ELEMENTO CSS: dimensioni necessariamente identiche. */
-            .v200-nav-grid {
-                display:grid;
-                grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-                gap:38px;
-                width:100%;
-                margin-top:10px;
-            }
-            .v200-nav-btn {
-                appearance:none;
-                -webkit-appearance:none;
-                width:100%;
-                height:54px;
-                min-height:54px;
-                max-height:54px;
-                box-sizing:border-box;
-                margin:0;
-                padding:0 14px;
-                border:1px solid rgba(49, 51, 63, 0.2);
-                border-radius:10px;
-                background:white;
-                color:#111;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                font-family:inherit;
-                font-size:21px;
-                font-weight:400;
-                line-height:1;
-                cursor:pointer;
-                text-decoration:none;
-                user-select:none;
-            }
-            .v200-nav-btn:hover {
-                background:#f6f6f6;
-            }
-            .v200-nav-btn.v200-disabled {
-                opacity:.45;
-                cursor:not-allowed;
-            }
-            .v200-nav-icon {
-                display:inline-flex;
-                width:22px;
-                height:22px;
-                align-items:center;
-                justify-content:center;
-                font-size:22px;
-                line-height:22px;
-                flex:0 0 22px;
-            }
-            @media (max-width: 800px) {
-                .v200-player-name,.v200-player-meta {font-size:30px;}
-                .v200-nav-grid {gap:12px;}
-                .v200-nav-btn {font-size:16px;}
+            .v202-player-name {font-size:39px;font-weight:800;}
+            .v202-player-meta {font-size:39px;font-weight:400;}
+            @media (max-width:800px) {
+                .v202-player-name,.v202-player-meta {font-size:30px;}
+                .st-key-v202_prev button p,.st-key-v202_next button p {font-size:16px !important;}
             }
             </style>
             """,
             unsafe_allow_html=True
         )
 
-        _head_left, _head_right = st.columns([1, 1], gap="large", vertical_alignment="center")
+        _head_left, _head_right = st.columns([1,1],gap="large",vertical_alignment="center")
 
         with _head_left:
             st.markdown(
                 f"""
-                <div class="v200-player-label">Giocatore da chiamare</div>
-                <div class="v200-player-line">
-                    <span class="v200-player-name">{html.escape(str(g["nome"]))}</span>
-                    <span class="v200-player-meta">,&nbsp;{html.escape(str(g["squadra"]))},&nbsp;{html.escape(_ruolo_visualizzato)}</span>
+                <div class="v202-player-label">Giocatore da chiamare</div>
+                <div class="v202-player-line">
+                    <span class="v202-player-name">{html.escape(str(g["nome"]))}</span>
+                    <span class="v202-player-meta">,&nbsp;{html.escape(str(g["squadra"]))},&nbsp;{html.escape(_ruolo_visualizzato)}</span>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -34877,32 +34826,40 @@ def render_banditore_asta():
                 "📣 APRI ASTA SUL GIOCATORE",
                 type="primary",
                 use_container_width=True,
-                key="v200_open",
+                key="v202_open",
                 on_click=callback_apri_lotto_v133,
-                args=(league_id, g["player_id"], g["nome"])
+                args=(league_id,g["player_id"],g["nome"])
             )
 
-        # Un unico componente HTML genera entrambi i pulsanti.
-        # Il click inoltra l'evento al relativo trigger Streamlit invisibile.
-        _prev_class = "v200-nav-btn" if _precedente is not None else "v200-nav-btn v200-disabled"
-        _prev_js = (
-            """const e=document.querySelector('.st-key-v200_prev_trigger button');if(e){e.click();}"""
-            if _precedente is not None else "return false;"
-        )
-        st.markdown(
-            f"""
-            <div class="v200-nav-grid">
-                <button type="button" class="{_prev_class}" onclick="{_prev_js}">
-                    <span class="v200-nav-icon">←</span><span>GIOCATORE PRECEDENTE</span>
-                </button>
-                <button type="button" class="v200-nav-btn"
-                    onclick="const e=document.querySelector('.st-key-v200_next_trigger button');if(e){{e.click();}}">
-                    <span>PROSSIMO GIOCATORE</span><span class="v200-nav-icon">→</span>
-                </button>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        # V202 - pulsanti NATIVI Streamlit: niente HTML/JS intermedio.
+        # Sono entrambi sempre attivi, così Streamlit genera lo stesso DOM e le
+        # dimensioni restano identiche. PREV senza skip restituisce solo il messaggio.
+        _prev_col,_next_col=st.columns([1,1],gap="small")
+
+        with _prev_col:
+            st.button(
+                "← GIOCATORE PRECEDENTE",
+                type="secondary",
+                use_container_width=True,
+                key="v202_prev",
+                on_click=callback_nav_prev_v197,
+                args=(league_id,tipo_asta),
+                help=(
+                    f'Ripristina {_precedente["nome"]}, ultimo giocatore skippato.'
+                    if _precedente else
+                    "Nessun giocatore skippato richiamabile."
+                )
+            )
+
+        with _next_col:
+            st.button(
+                "PROSSIMO GIOCATORE →",
+                type="secondary",
+                use_container_width=True,
+                key="v202_next",
+                on_click=callback_nav_next_v197,
+                args=(league_id,g["player_id"],tipo_asta,g["nome"])
+            )
 
         render_ricerca_giocatore_banditore_v169(league_id)
 
