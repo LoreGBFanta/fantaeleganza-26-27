@@ -35248,23 +35248,38 @@ def stile_tooltip_hover_banditore_v168():
     st.markdown(
         """
         <style>
-        /* Tooltip Streamlit: visibile esclusivamente mentre il relativo target è in hover. */
+        /* V178 - Tooltip azioni: ritardo di 2 secondi e chiusura immediata all'uscita.
+           Streamlit/BaseWeb può montare il tooltip subito: lo teniamo trasparente
+           per 2s mentre il target resta in hover. */
+        [data-baseweb="popover"]:has([role="tooltip"]),
+        [data-baseweb="tooltip"] {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+            transition: opacity 0s linear 2s, visibility 0s linear 2s !important;
+        }
+
+        body:has([data-testid="stTooltipHoverTarget"]:hover)
+        [data-baseweb="popover"]:has([role="tooltip"]),
+        body:has([data-testid="stTooltipHoverTarget"]:hover)
+        [data-baseweb="tooltip"] {
+            opacity: 1 !important;
+            visibility: visible !important;
+            transition-delay: 2s !important;
+        }
+
+        /* Appena il cursore esce da qualunque target, il messaggio sparisce subito
+           e non può restare bloccato per focus/click. */
         body:not(:has([data-testid="stTooltipHoverTarget"]:hover))
         [data-baseweb="popover"]:has([role="tooltip"]),
         body:not(:has([data-testid="stTooltipHoverTarget"]:hover))
-        [data-baseweb="tooltip"] {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-        }
-
-        /* Evita che focus/click mantengano graficamente il tooltip aperto. */
+        [data-baseweb="tooltip"],
         [data-testid="stTooltipHoverTarget"]:not(:hover) + [data-baseweb="popover"],
         [data-testid="stTooltipHoverTarget"]:not(:hover) [data-baseweb="tooltip"] {
-            display: none !important;
-            visibility: hidden !important;
             opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+            transition-delay: 0s !important;
         }
         </style>
         """,
