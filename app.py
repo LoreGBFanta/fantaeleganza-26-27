@@ -2092,6 +2092,7 @@ def render_portale_iniziale():
                     help="Con Budget illimitato non esiste alcun tetto massimo di spesa."
                 )
                 budget_illimitato_portale = _budget_tipo_portale == "BUDGET ILLIMITATO"
+                # V184 - il campo non viene renderizzato affatto in modalità illimitata.
                 if budget_illimitato_portale:
                     budget = 1_000_000_000_000.0
                 else:
@@ -2124,6 +2125,7 @@ def render_portale_iniziale():
                         "ogni credito speso oltre soglia pesa 3 crediti."
                     )
                 )
+                # V184 - i due parametri F.P.F. esistono a video solo quando F.P.F. è attivo.
                 if fair_play_finanziario_portale:
                     soglia = st.number_input(
                         "Soglia budget",
@@ -15531,10 +15533,9 @@ def render_admin_multilega():
         )
 
 
-        with st.form(
-            "ml03_crea_lega",
-            clear_on_submit=False
-        ):
+        # V184 - niente st.form: Budget e F.P.F. devono aggiornare
+        # immediatamente la UI al click.
+        with st.container():
 
             c1, c2, c3 = st.columns(3)
 
@@ -15570,17 +15571,17 @@ def render_admin_multilega():
             with c2:
 
                 max_giocatori = st.number_input(
-                    "Rosa massima",
-                    min_value=1,
-                    max_value=60,
+                    "Max componenti rosa",
+                    min_value=20,
+                    max_value=50,
                     value=30,
                     step=1
                 )
 
                 min_portieri = st.number_input(
-                    "Portieri minimi",
-                    min_value=0,
-                    max_value=10,
+                    "Min portieri",
+                    min_value=1,
+                    max_value=20,
                     value=2,
                     step=1
                 )
@@ -15589,6 +15590,7 @@ def render_admin_multilega():
                     "Budget",
                     ["BUDGET LIMITATO", "BUDGET ILLIMITATO"],
                     horizontal=True,
+                    key="ml184_admin_budget_tipo",
                     help="Con Budget illimitato non esiste alcun tetto massimo di spesa."
                 )
                 budget_illimitato = _budget_tipo == "BUDGET ILLIMITATO"
@@ -15616,6 +15618,7 @@ def render_admin_multilega():
                 fair_play_finanziario = st.toggle(
                     "Fair Play Finanziario",
                     value=False,
+                    key="ml184_admin_fpf",
                     help=(
                         "Il F.P.F. è una modalità in cui, superando la SOGLIA BUDGET, "
                         "i crediti spesi oltre la soglia vengono moltiplicati secondo il "
@@ -15660,10 +15663,11 @@ def render_admin_multilega():
                     )
                 )
 
-            crea = st.form_submit_button(
+            crea = st.button(
                 "CREA LEGA",
                 type="primary",
-                use_container_width=True
+                use_container_width=True,
+                key="ml184_crea_lega_admin"
             )
 
             if crea:
