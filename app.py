@@ -30765,7 +30765,7 @@ def reset_spese_squadra_asta_v153(league_id, team_id):
 
 
 def reset_assegnazioni_asta_v179(league_id):
-    """Reset globale delle assegnazioni della lega, senza cancellare le chiamate."""
+    """V180 - Reset globale dell'asta: assegnazioni e storico chiamate tornano a zero."""
     league_id = int(league_id)
     user_id = int(st.session_state.get("auth_user_id") or 0)
     assicura_schema_storico_asta_v147(league_id)
@@ -30826,8 +30826,28 @@ def reset_assegnazioni_asta_v179(league_id):
             WHERE league_id=? AND stato='ASSIGNED'
         """, (league_id,))
 
-        # Eventuali esclusioni dovute a svincoli/eliminazioni non devono nascondere
-        # giocatori dopo il reset generale delle assegnazioni.
+        # V180 - RESET ASSEGNAZIONI deve riportare anche lo STORICO ASTA a zero.
+        # Non cancelliamo fisicamente auction_called_players: li rendiamo inattivi.
+        # In questo modo il backfill idempotente dei vecchi lotti non può farli
+        # ricomparire al successivo riavvio, mentre una nuova chiamata li riattiva.
+        cur.execute("""
+            UPDATE auction_called_players
+            SET active=0, updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=? AND COALESCE(active,1)=1
+        """, (league_id,))
+
+        # Azzera anche la memoria dei giocatori saltati/chiamati dalla modalità
+        # RANDOM/ALFABETICO, così il nuovo ciclo d'asta riparte davvero da zero.
+        try:
+            cur.execute("""
+                UPDATE auction_mode_state
+                SET skipped_players_json='[]', updated_at=CURRENT_TIMESTAMP
+                WHERE league_id=?
+            """, (league_id,))
+        except Exception:
+            pass
+
+        # Nessuna vecchia esclusione deve interferire con il nuovo ciclo d'asta.
         cur.execute("DELETE FROM auction_history_exclusions WHERE league_id=?", (league_id,))
 
         cur.execute("SELECT id FROM teams WHERE league_id=? AND is_active=1", (league_id,))
@@ -30844,6 +30864,7 @@ def reset_assegnazioni_asta_v179(league_id):
             json.dumps({
                 "assegnazioni_resettate": numero_assegnazioni,
                 "valore_assegnazioni": valore_assegnazioni,
+                "storico_chiamate_azzerato": True,
                 "squadre_ricalcolate": len(team_ids)
             }, ensure_ascii=False)
         ))
@@ -30883,8 +30904,8 @@ def dialog_reset_assegnazioni_v179(league_id):
     st.error(
         "OPERAZIONE GLOBALE: tutte le assegnazioni correnti verranno annullate. "
         "I giocatori assegnati torneranno DISPONIBILI, le rose verranno svuotate "
-        "e i budget delle squadre saranno ricalcolati. Le chiamate effettuate "
-        "restano nello Storico Asta, ma senza squadra e prezzo di assegnazione."
+        "e i budget delle squadre saranno ricalcolati. Anche lo Storico Asta "
+        "e il contatore CHIAMATI verranno azzerati: il nuovo ciclo ripartirà da 0."
     )
     st.info(
         f"Assegnazioni correnti: **{numero}** · valore complessivo: "
@@ -30915,7 +30936,8 @@ def dialog_reset_assegnazioni_v179(league_id):
                 st.session_state.pop("_ultime_operazioni_sessione", None)
                 st.session_state.pop("_costi_svincoli_sessione", None)
                 st.session_state["v179_storico_reset_assignments_msg"] = (
-                    f'Reset completato: {esito["assegnazioni_resettate"]} assegnazioni annullate.'
+                    f'Reset completato: {esito["assegnazioni_resettate"]} assegnazioni annullate. '
+                    'Storico asta e contatore chiamati azzerati.'
                 )
                 st.rerun()
             except Exception as errore:
