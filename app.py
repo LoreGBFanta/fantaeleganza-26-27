@@ -15742,6 +15742,11 @@ def render_admin_multilega():
                                 e_max, e_portieri, e_budget, e_incremento, e_soglia,
                                 e_mult, e_tipo, e_fonte
                             )
+                            # V168 - se è la lega attualmente selezionata, aggiorna subito
+                            # anche l'identità conservata nella sessione corrente.
+                            if int(st.session_state.get("ml_league_id") or 0) == _lid:
+                                st.session_state["ml_league_nome"] = str(e_nome).strip()
+                                st.session_state["ml_stagione"] = str(e_stagione).strip()
                             st.session_state["ml15_admin_message"] = "Specifiche della lega aggiornate correttamente."
                             st.rerun()
                         except Exception as errore:
@@ -34931,6 +34936,59 @@ def render_controlli_top_admin_banditore_v154():
         )
     )
 )
+
+def carica_identita_lega_live_v168(league_id):
+    """Legge nome e stagione direttamente dal DB: niente valori stale di sessione."""
+    league_id = int(league_id)
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT nome, stagione FROM leagues WHERE id=? LIMIT 1",
+            (league_id,)
+        )
+        r = cur.fetchone()
+        if not r:
+            return "LEGA", ""
+        return str(r[0] or "LEGA").strip(), str(r[1] or "").strip()
+    finally:
+        _portal_close(conn)
+
+
+def stile_tooltip_hover_banditore_v168():
+    """
+    Nel BANDITORE i tooltip devono esistere solo durante l'hover.
+    Chrome/Edge supportano :has(); se Streamlit lascia montato un popover
+    dopo il passaggio del mouse, viene nascosto appena il puntatore esce.
+    """
+    if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
+        return
+    st.markdown(
+        """
+        <style>
+        /* Tooltip Streamlit: visibile esclusivamente mentre il relativo target è in hover. */
+        body:not(:has([data-testid="stTooltipHoverTarget"]:hover))
+        [data-baseweb="popover"]:has([role="tooltip"]),
+        body:not(:has([data-testid="stTooltipHoverTarget"]:hover))
+        [data-baseweb="tooltip"] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* Evita che focus/click mantengano graficamente il tooltip aperto. */
+        [data-testid="stTooltipHoverTarget"]:not(:hover) + [data-baseweb="popover"],
+        [data-testid="stTooltipHoverTarget"]:not(:hover) [data-baseweb="tooltip"] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def render_navigazione_e_pagina():
     # V166 - ADMIN mantiene i controlli generali in alto.
     # Nel BANDITORE, destinato alla proiezione, CAMBIA LIVELLO e MENU
@@ -34938,14 +34996,23 @@ def render_navigazione_e_pagina():
     if MODALITA_ACCESSO_ATTIVA == "ADMIN":
         render_controlli_top_admin_banditore_v154()
 
-    # V166 - intestazione pubblica del tabellone Banditore.
+    # V168 - intestazione pubblica Banditore sempre letta dal DB.
+    # Non usa ml_league_nome/ml_stagione perché possono appartenere a una
+    # sessione aperta prima della modifica effettuata dall'Admin.
     if MODALITA_ACCESSO_ATTIVA == "BANDITORE":
-        _asta_nome_lega = str(
-            st.session_state.get("ml_league_nome") or "LEGA"
-        ).strip()
-        _asta_anno_lega = str(
-            st.session_state.get("ml_stagione") or ""
-        ).strip()
+        try:
+            _asta_nome_lega, _asta_anno_lega = carica_identita_lega_live_v168(
+                int(st.session_state.get("ml_league_id"))
+            )
+            # Riallinea anche la sessione corrente per le altre viste.
+            st.session_state["ml_league_nome"] = _asta_nome_lega
+            st.session_state["ml_stagione"] = _asta_anno_lega
+        except Exception:
+            _asta_nome_lega = str(st.session_state.get("ml_league_nome") or "LEGA").strip()
+            _asta_anno_lega = str(st.session_state.get("ml_stagione") or "").strip()
+
+        stile_tooltip_hover_banditore_v168()
+
         _asta_titolo = (
             f"ASTA {html.escape(_asta_nome_lega)}"
             + (f" - {html.escape(_asta_anno_lega)}" if _asta_anno_lega else "")
@@ -35027,7 +35094,8 @@ def render_navigazione_e_pagina():
                 ),
                 key=f"nav_{pagina_nav}",
                 on_click=_naviga_a,
-                args=(pagina_nav,)
+                args=(pagina_nav,),
+                help=f"Apri la sezione {pagina_nav.title()}."
             )
 
     sezione = st.session_state.pagina
