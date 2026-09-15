@@ -2092,16 +2092,16 @@ def render_portale_iniziale():
                     help="Con Budget illimitato non esiste alcun tetto massimo di spesa."
                 )
                 budget_illimitato_portale = _budget_tipo_portale == "BUDGET ILLIMITATO"
-                budget = st.number_input(
-                    "Valore budget",
-                    min_value=1.0,
-                    max_value=100000.0,
-                    value=500.0,
-                    step=1.0,
-                    disabled=budget_illimitato_portale
-                )
                 if budget_illimitato_portale:
                     budget = 1_000_000_000_000.0
+                else:
+                    budget = st.number_input(
+                        "Valore budget",
+                        min_value=1.0,
+                        max_value=100000.0,
+                        value=500.0,
+                        step=1.0
+                    )
 
                 incremento = st.number_input(
                     "Incremento minimo asta",
@@ -15592,16 +15592,16 @@ def render_admin_multilega():
                     help="Con Budget illimitato non esiste alcun tetto massimo di spesa."
                 )
                 budget_illimitato = _budget_tipo == "BUDGET ILLIMITATO"
-                budget_iniziale = st.number_input(
-                    "Valore budget",
-                    min_value=1.0,
-                    max_value=100000.0,
-                    value=500.0,
-                    step=1.0,
-                    disabled=budget_illimitato
-                )
                 if budget_illimitato:
                     budget_iniziale = 1_000_000_000_000.0
+                else:
+                    budget_iniziale = st.number_input(
+                        "Valore budget",
+                        min_value=1.0,
+                        max_value=100000.0,
+                        value=500.0,
+                        step=1.0
+                    )
 
                 incremento_minimo = st.number_input(
                     "Incremento minimo asta",
@@ -15847,7 +15847,9 @@ def render_admin_multilega():
 
                 with st.expander("✏️ Modifica specifiche lega", expanded=False):
                     _lid = int(lega["league_id"])
-                    with st.form("ml167_edit_league_" + str(_lid)):
+                    # V183 - container dinamico: radio Budget e toggle F.P.F.
+                    # aggiornano immediatamente i campi dipendenti.
+                    with st.container():
                         ec1, ec2, ec3 = st.columns(3)
                         with ec1:
                             e_nome = st.text_input("Nome lega", value=str(lega["nome"] or ""))
@@ -15872,9 +15874,17 @@ def render_admin_multilega():
                             _e_budget_val = float(lega["budget_iniziale"] or 500)
                             if _e_budget_ill:
                                 _e_budget_val = 500.0
-                            e_budget = st.number_input("Valore budget", min_value=1.0, max_value=100000.0, value=min(100000.0,_e_budget_val), step=1.0, disabled=e_budget_illimitato)
                             if e_budget_illimitato:
                                 e_budget = 1_000_000_000_000.0
+                            else:
+                                e_budget = st.number_input(
+                                    "Valore budget",
+                                    min_value=1.0,
+                                    max_value=100000.0,
+                                    value=min(100000.0, _e_budget_val),
+                                    step=1.0,
+                                    key=f"ml183_budget_val_{_lid}"
+                                )
                             e_incremento = st.number_input("Incremento minimo asta", min_value=0.1, max_value=100.0, value=float(lega["incremento_minimo"]), step=0.1)
                         with ec3:
                             e_fpf = st.toggle(
@@ -15901,7 +15911,12 @@ def render_admin_multilega():
                             )
 
                         st.caption("Se riduci i partecipanti, possono essere rimossi automaticamente solo gli slot squadra ancora liberi e senza giocatori.")
-                        _save_specs = st.form_submit_button("SALVA SPECIFICHE LEGA", type="primary", use_container_width=True)
+                        _save_specs = st.button(
+                            "SALVA SPECIFICHE LEGA",
+                            type="primary",
+                            use_container_width=True,
+                            key=f"ml183_save_specs_{_lid}"
+                        )
 
                     if _save_specs:
                         try:
