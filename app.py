@@ -1046,11 +1046,13 @@ def crea_lega_da_portale(
                 moltiplicatore_oltre_soglia,
                 tipo_asta,
                 fonte_listone,
+                budget_illimitato,
+                fair_play_finanziario,
                 regolamento_bloccato,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """, (
             league_id,
@@ -1094,7 +1096,9 @@ def crea_lega_da_portale(
             ],
             dati_lega[
                 "fonte_listone"
-            ]
+            ],
+            1 if dati_lega.get("budget_illimitato") else 0,
+            1 if dati_lega.get("fair_play_finanziario") else 0
         ))
 
         for posizione, squadra in enumerate(
@@ -1493,6 +1497,9 @@ def inizializza_schema_regolamento_avanzato():
         ("mod_capitano","INTEGER NOT NULL DEFAULT 0"),
         ("mod_rendimento_tipo","TEXT NOT NULL DEFAULT 'BONUS'"),
         ("mod_rendimento_fasce_json","TEXT"),
+        # V182 - configurazione finanziaria esplicita della lega
+        ("budget_illimitato","INTEGER NOT NULL DEFAULT 0"),
+        ("fair_play_finanziario","INTEGER NOT NULL DEFAULT 0"),
     ]
 
     # --------------------------------------------------------
@@ -2052,9 +2059,9 @@ def render_portale_iniziale():
                 )
 
                 partecipanti = st.number_input(
-                    "Numero squadre",
+                    "Numero squadre partecipanti",
                     min_value=2,
-                    max_value=20,
+                    max_value=30,
                     value=10,
                     step=1
                 )
@@ -2062,60 +2069,94 @@ def render_portale_iniziale():
             with b:
 
                 max_giocatori = st.number_input(
-                    "Rosa massima",
-                    min_value=1,
-                    max_value=60,
+                    "Max componenti rosa",
+                    min_value=20,
+                    max_value=50,
                     value=30,
                     step=1
                 )
 
                 min_portieri = st.number_input(
-                    "Portieri minimi",
-                    min_value=0,
-                    max_value=10,
+                    "Min portieri",
+                    min_value=1,
+                    max_value=20,
                     value=2,
                     step=1
                 )
 
-                budget = st.number_input(
-                    "Budget iniziale",
-                    min_value=1.0,
-                    value=500.0,
-                    step=10.0
+                _budget_tipo_portale = st.radio(
+                    "Budget",
+                    ["BUDGET LIMITATO", "BUDGET ILLIMITATO"],
+                    horizontal=True,
+                    key="ml182_portal_budget_tipo",
+                    help="Con Budget illimitato non esiste alcun tetto massimo di spesa."
                 )
+                budget_illimitato_portale = _budget_tipo_portale == "BUDGET ILLIMITATO"
+                budget = st.number_input(
+                    "Valore budget",
+                    min_value=1.0,
+                    max_value=100000.0,
+                    value=500.0,
+                    step=1.0,
+                    disabled=budget_illimitato_portale
+                )
+                if budget_illimitato_portale:
+                    budget = 1_000_000_000_000.0
 
                 incremento = st.number_input(
-                    "Incremento minimo",
+                    "Incremento minimo asta",
                     min_value=0.1,
+                    max_value=100.0,
                     value=1.0,
-                    step=0.5
+                    step=0.1
                 )
 
             with c:
 
-                soglia = st.number_input(
-                    "Soglia budget",
-                    min_value=0.0,
-                    value=500.0,
-                    step=10.0
+                fair_play_finanziario_portale = st.toggle(
+                    "Fair Play Finanziario",
+                    value=False,
+                    key="ml182_portal_fpf",
+                    help=(
+                        "Il F.P.F. è una modalità in cui, superando la SOGLIA BUDGET, "
+                        "i crediti spesi oltre la soglia vengono moltiplicati secondo il "
+                        "MOLTIPLICATORE OLTRE SOGLIA. Se il moltiplicatore è 3, "
+                        "ogni credito speso oltre soglia pesa 3 crediti."
+                    )
                 )
-
-                moltiplicatore = st.number_input(
-                    "Moltiplicatore oltre soglia",
-                    min_value=1,
-                    value=1,
-                    step=1,
-                    format="%d"
-                )
+                if fair_play_finanziario_portale:
+                    soglia = st.number_input(
+                        "Soglia budget",
+                        min_value=0.0,
+                        max_value=100000.0,
+                        value=500.0,
+                        step=1.0
+                    )
+                    moltiplicatore = st.number_input(
+                        "Moltiplicatore oltre soglia",
+                        min_value=1,
+                        max_value=100,
+                        value=3,
+                        step=1,
+                        format="%d"
+                    )
+                else:
+                    soglia = float(budget)
+                    moltiplicatore = 1
 
                 tipo_asta = st.selectbox(
-                    "Tipo asta",
+                    "Tipologia asta",
                     TIPI_ASTA_FANTA_LIVE
                 )
 
-                fonte = st.text_input(
+                fonte = st.selectbox(
                     "Fonte listone",
-                    value="Fantacalcio.it"
+                    ["Fantacalcio.it"],
+                    index=0,
+                    help=(
+                        "Indica il provider del catalogo giocatori: anagrafica, "
+                        "ruoli, quotazioni e FVM. Al momento FantaEleganza usa Fantacalcio.it."
+                    )
                 )
 
             st.markdown("#### Bonus / Malus")
@@ -2350,7 +2391,13 @@ def render_portale_iniziale():
                         "fonte_listone":
                             str(
                                 fonte
-                            ).strip()
+                            ).strip(),
+
+                        "budget_illimitato":
+                            bool(budget_illimitato_portale),
+
+                        "fair_play_finanziario":
+                            bool(fair_play_finanziario_portale)
                     },
                     squadre
                 )
@@ -13823,7 +13870,9 @@ def crea_lega_multilega(
     soglia_budget,
     moltiplicatore_oltre_soglia,
     tipo_asta,
-    fonte_listone
+    fonte_listone,
+    budget_illimitato=False,
+    fair_play_finanziario=False
 ):
     """
     Crea atomicamente:
@@ -13911,7 +13960,9 @@ def crea_lega_multilega(
             float(soglia_budget),
             float(moltiplicatore_oltre_soglia),
             tipo_asta,
-            fonte_listone.strip()
+            fonte_listone.strip(),
+            1 if budget_illimitato else 0,
+            1 if fair_play_finanziario else 0
         ))
 
         # L'Admin inizialmente appartiene alla lega senza essere
@@ -14058,6 +14109,8 @@ def leghe_amministrate_multilega():
                 r.moltiplicatore_oltre_soglia,
                 COALESCE(r.tipo_asta, ''),
                 COALESCE(r.fonte_listone, ''),
+                COALESCE(r.budget_illimitato,0),
+                COALESCE(r.fair_play_finanziario,0),
                 r.regolamento_bloccato,
                 (
                     SELECT COUNT(*)
@@ -14100,6 +14153,8 @@ def leghe_amministrate_multilega():
             "moltiplicatore",
             "tipo_asta",
             "fonte_listone",
+            "budget_illimitato",
+            "fair_play_finanziario",
             "regolamento_bloccato",
             "squadre_attive"
         ]
@@ -14543,7 +14598,8 @@ def aggiorna_specifiche_lega_multilega(
     league_id, nome, stagione, modalita, partecipanti,
     max_giocatori, min_portieri, budget_iniziale,
     incremento_minimo, soglia_budget, moltiplicatore,
-    tipo_asta, fonte_listone
+    tipo_asta, fonte_listone, budget_illimitato=False,
+    fair_play_finanziario=False
 ):
     """Aggiorna atomicamente le specifiche base della lega amministrata."""
     league_id = int(league_id)
@@ -14558,7 +14614,9 @@ def aggiorna_specifiche_lega_multilega(
     soglia_budget = float(soglia_budget)
     moltiplicatore = int(moltiplicatore)
     tipo_asta = str(tipo_asta or "").strip()
-    fonte_listone = str(fonte_listone or "").strip()
+    fonte_listone = str(fonte_listone or "").strip() or "Fantacalcio.it"
+    budget_illimitato = bool(budget_illimitato)
+    fair_play_finanziario = bool(fair_play_finanziario)
 
     if not nome:
         raise ValueError("Il nome della lega non può essere vuoto.")
@@ -14568,12 +14626,19 @@ def aggiorna_specifiche_lega_multilega(
         raise ValueError("Modalità lega non valida.")
     if partecipanti < 2 or partecipanti > 30:
         raise ValueError("I partecipanti devono essere compresi tra 2 e 30.")
-    if max_giocatori < 1 or max_giocatori > 60:
-        raise ValueError("La rosa massima deve essere compresa tra 1 e 60.")
-    if min_portieri < 0 or min_portieri > max_giocatori:
-        raise ValueError("I portieri minimi non possono superare la rosa massima.")
-    if budget_iniziale <= 0 or incremento_minimo <= 0:
-        raise ValueError("Budget e incremento minimo devono essere maggiori di zero.")
+    if max_giocatori < 20 or max_giocatori > 50:
+        raise ValueError("I componenti massimi della rosa devono essere compresi tra 20 e 50.")
+    if min_portieri < 1 or min_portieri > 20 or min_portieri > max_giocatori:
+        raise ValueError("I portieri minimi devono essere compresi tra 1 e 20 e non superare la rosa.")
+    if (not budget_illimitato) and (budget_iniziale < 1 or budget_iniziale > 100000):
+        raise ValueError("Il budget limitato deve essere compreso tra 1 e 100000.")
+    if incremento_minimo < 0.1 or incremento_minimo > 100:
+        raise ValueError("L'incremento minimo asta deve essere compreso tra 0,1 e 100.")
+    if not fair_play_finanziario:
+        soglia_budget = float(budget_iniziale)
+        moltiplicatore = 1
+    elif soglia_budget < 0:
+        raise ValueError("La soglia budget del Fair Play Finanziario non può essere negativa.")
     if moltiplicatore < 1:
         raise ValueError("Il moltiplicatore deve essere almeno 1.")
     if tipo_asta not in TIPI_ASTA_FANTA_LIVE:
@@ -14592,7 +14657,8 @@ def aggiorna_specifiche_lega_multilega(
         cur.execute("""SELECT l.nome,l.stagione,l.modalita,
                               r.partecipanti,r.max_giocatori,r.min_portieri,
                               r.budget_iniziale,r.incremento_minimo,r.soglia_budget,
-                              r.moltiplicatore_oltre_soglia,r.tipo_asta,r.fonte_listone
+                              r.moltiplicatore_oltre_soglia,r.tipo_asta,r.fonte_listone,
+                               COALESCE(r.budget_illimitato,0),COALESCE(r.fair_play_finanziario,0)
                        FROM leagues l JOIN league_rules r ON r.league_id=l.id
                        WHERE l.id=? LIMIT 1""", (league_id,))
         prima = cur.fetchone()
@@ -14653,6 +14719,7 @@ def aggiorna_specifiche_lega_multilega(
                        partecipanti=?, max_giocatori=?, min_portieri=?,
                        budget_iniziale=?, incremento_minimo=?, soglia_budget=?,
                        moltiplicatore_oltre_soglia=?, tipo_asta=?, fonte_listone=?,
+                       budget_illimitato=?, fair_play_finanziario=?,
                        updated_at=CURRENT_TIMESTAMP
                        WHERE league_id=?""",
                     (partecipanti, max_giocatori, min_portieri, budget_iniziale,
@@ -14667,7 +14734,9 @@ def aggiorna_specifiche_lega_multilega(
                 "min_portieri": min_portieri, "budget_iniziale": budget_iniziale,
                 "incremento_minimo": incremento_minimo, "soglia_budget": soglia_budget,
                 "moltiplicatore": moltiplicatore, "tipo_asta": tipo_asta,
-                "fonte_listone": fonte_listone
+                "fonte_listone": fonte_listone,
+                "budget_illimitato": budget_illimitato,
+                "fair_play_finanziario": fair_play_finanziario
             }
         }
         cur.execute("""INSERT INTO audit_log
@@ -15491,7 +15560,7 @@ def render_admin_multilega():
                 )
 
                 partecipanti = st.number_input(
-                    "Partecipanti",
+                    "Numero squadre partecipanti",
                     min_value=2,
                     max_value=30,
                     value=10,
@@ -15516,13 +15585,23 @@ def render_admin_multilega():
                     step=1
                 )
 
-                budget_iniziale = st.number_input(
-                    "Budget iniziale",
-                    min_value=1.0,
-                    max_value=10000.0,
-                    value=500.0,
-                    step=10.0
+                _budget_tipo = st.radio(
+                    "Budget",
+                    ["BUDGET LIMITATO", "BUDGET ILLIMITATO"],
+                    horizontal=True,
+                    help="Con Budget illimitato non esiste alcun tetto massimo di spesa."
                 )
+                budget_illimitato = _budget_tipo == "BUDGET ILLIMITATO"
+                budget_iniziale = st.number_input(
+                    "Valore budget",
+                    min_value=1.0,
+                    max_value=100000.0,
+                    value=500.0,
+                    step=1.0,
+                    disabled=budget_illimitato
+                )
+                if budget_illimitato:
+                    budget_iniziale = 1_000_000_000_000.0
 
                 incremento_minimo = st.number_input(
                     "Incremento minimo asta",
@@ -15534,22 +15613,35 @@ def render_admin_multilega():
 
             with c3:
 
-                soglia_budget = st.number_input(
-                    "Soglia budget",
-                    min_value=0.0,
-                    max_value=10000.0,
-                    value=500.0,
-                    step=10.0
+                fair_play_finanziario = st.toggle(
+                    "Fair Play Finanziario",
+                    value=False,
+                    help=(
+                        "Il F.P.F. è una modalità in cui, superando la SOGLIA BUDGET, "
+                        "i crediti spesi oltre la soglia vengono moltiplicati secondo il "
+                        "MOLTIPLICATORE OLTRE SOGLIA. Esempio: con moltiplicatore 3, "
+                        "ogni credito oltre soglia pesa 3 crediti."
+                    )
                 )
-
-                moltiplicatore = st.number_input(
-                    "Moltiplicatore oltre soglia",
-                    min_value=1,
-                    max_value=10,
-                    value=1,
-                    step=1,
-                    format="%d"
-                )
+                if fair_play_finanziario:
+                    soglia_budget = st.number_input(
+                        "Soglia budget",
+                        min_value=0.0,
+                        max_value=100000.0,
+                        value=500.0,
+                        step=1.0
+                    )
+                    moltiplicatore = st.number_input(
+                        "Moltiplicatore oltre soglia",
+                        min_value=1,
+                        max_value=100,
+                        value=3,
+                        step=1,
+                        format="%d"
+                    )
+                else:
+                    soglia_budget = float(budget_iniziale)
+                    moltiplicatore = 1
 
                 tipo_asta = st.selectbox(
                     "Tipologia asta",
@@ -15557,9 +15649,15 @@ def render_admin_multilega():
                     index=0
                 )
 
-                fonte_listone = st.text_input(
+                fonte_listone = st.selectbox(
                     "Fonte listone",
-                    value="Fantacalcio.it"
+                    ["Fantacalcio.it"],
+                    index=0,
+                    help=(
+                        "Indica il provider da cui provengono anagrafica, ruoli, "
+                        "quotazioni e FVM del catalogo giocatori. Al momento "
+                        "FantaEleganza utilizza il listone Fantacalcio.it."
+                    )
                 )
 
             crea = st.form_submit_button(
@@ -15600,7 +15698,9 @@ def render_admin_multilega():
                                 soglia_budget,
                                 moltiplicatore,
                                 tipo_asta,
-                                fonte_listone
+                                fonte_listone,
+                                budget_illimitato,
+                                fair_play_finanziario
                             )
                         )
 
@@ -15755,18 +15855,50 @@ def render_admin_multilega():
                             _mods = ["MANTRA", "CLASSIC"]
                             _mod_now = str(lega["modalita"] or "MANTRA").upper()
                             e_modalita = st.selectbox("Modalità", _mods, index=_mods.index(_mod_now) if _mod_now in _mods else 0)
-                            e_partecipanti = st.number_input("Partecipanti", min_value=2, max_value=30, value=int(lega["partecipanti"]), step=1)
+                            e_partecipanti = st.number_input("Numero squadre partecipanti", min_value=2, max_value=30, value=int(lega["partecipanti"]), step=1)
                         with ec2:
-                            e_max = st.number_input("Rosa massima", min_value=1, max_value=60, value=int(lega["max_giocatori"]), step=1)
-                            e_portieri = st.number_input("Portieri minimi", min_value=0, max_value=10, value=int(lega["min_portieri"]), step=1)
-                            e_budget = st.number_input("Budget iniziale", min_value=1.0, max_value=10000.0, value=float(lega["budget_iniziale"]), step=10.0)
-                            e_incremento = st.number_input("Incremento minimo asta", min_value=0.1, max_value=100.0, value=float(lega["incremento_minimo"]), step=0.5)
+                            e_max = st.number_input("Max componenti rosa", min_value=20, max_value=50, value=int(lega["max_giocatori"]), step=1)
+                            e_portieri = st.number_input("Min portieri", min_value=1, max_value=20, value=int(lega["min_portieri"]), step=1)
+                            _e_budget_ill = bool(int(lega.get("budget_illimitato") or 0))
+                            _e_budget_tipo = st.radio(
+                                "Budget",
+                                ["BUDGET LIMITATO", "BUDGET ILLIMITATO"],
+                                index=1 if _e_budget_ill else 0,
+                                horizontal=True,
+                                key=f"ml182_budget_tipo_{_lid}",
+                                help="Con Budget illimitato non esiste alcun tetto massimo di spesa."
+                            )
+                            e_budget_illimitato = _e_budget_tipo == "BUDGET ILLIMITATO"
+                            _e_budget_val = float(lega["budget_iniziale"] or 500)
+                            if _e_budget_ill:
+                                _e_budget_val = 500.0
+                            e_budget = st.number_input("Valore budget", min_value=1.0, max_value=100000.0, value=min(100000.0,_e_budget_val), step=1.0, disabled=e_budget_illimitato)
+                            if e_budget_illimitato:
+                                e_budget = 1_000_000_000_000.0
+                            e_incremento = st.number_input("Incremento minimo asta", min_value=0.1, max_value=100.0, value=float(lega["incremento_minimo"]), step=0.1)
                         with ec3:
-                            e_soglia = st.number_input("Soglia budget", min_value=0.0, max_value=10000.0, value=float(lega["soglia_budget"]), step=10.0)
-                            e_mult = st.number_input("Moltiplicatore oltre soglia", min_value=1, max_value=10, value=int(lega["moltiplicatore"]), step=1, format="%d")
+                            e_fpf = st.toggle(
+                                "Fair Play Finanziario",
+                                value=bool(int(lega.get("fair_play_finanziario") or 0)),
+                                key=f"ml182_fpf_{_lid}",
+                                help=(
+                                    "Il F.P.F. è una modalità in cui, superando la SOGLIA BUDGET, "
+                                    "i crediti spesi oltre la soglia vengono moltiplicati secondo il "
+                                    "MOLTIPLICATORE OLTRE SOGLIA."
+                                )
+                            )
+                            if e_fpf:
+                                e_soglia = st.number_input("Soglia budget", min_value=0.0, max_value=100000.0, value=min(100000.0,float(lega["soglia_budget"] or 0)), step=1.0)
+                                e_mult = st.number_input("Moltiplicatore oltre soglia", min_value=1, max_value=100, value=max(1,int(lega["moltiplicatore"] or 1)), step=1, format="%d")
+                            else:
+                                e_soglia = float(e_budget)
+                                e_mult = 1
                             _tipo_now = str(lega["tipo_asta"] or "")
                             e_tipo = st.selectbox("Tipologia asta", TIPI_ASTA_FANTA_LIVE, index=TIPI_ASTA_FANTA_LIVE.index(_tipo_now) if _tipo_now in TIPI_ASTA_FANTA_LIVE else 0)
-                            e_fonte = st.text_input("Fonte listone", value=str(lega["fonte_listone"] or ""))
+                            e_fonte = st.selectbox(
+                                "Fonte listone", ["Fantacalcio.it"], index=0,
+                                help="Provider del catalogo giocatori: anagrafica, ruoli, quotazioni e FVM."
+                            )
 
                         st.caption("Se riduci i partecipanti, possono essere rimossi automaticamente solo gli slot squadra ancora liberi e senza giocatori.")
                         _save_specs = st.form_submit_button("SALVA SPECIFICHE LEGA", type="primary", use_container_width=True)
@@ -15776,7 +15908,7 @@ def render_admin_multilega():
                             aggiorna_specifiche_lega_multilega(
                                 _lid, e_nome, e_stagione, e_modalita, e_partecipanti,
                                 e_max, e_portieri, e_budget, e_incremento, e_soglia,
-                                e_mult, e_tipo, e_fonte
+                                e_mult, e_tipo, e_fonte, e_budget_illimitato, e_fpf
                             )
                             # V168 - se è la lega attualmente selezionata, aggiorna subito
                             # anche l'identità conservata nella sessione corrente.
@@ -21060,6 +21192,15 @@ if (
              AND lp.player_id=c.player_id
             WHERE c.league_id=?
         """, _conn_sid, params=(_sid_tid, _sid_tid, _sid_lid))
+
+        # V182 - la colonna operativa RM segue la modalità della lega.
+        # In CLASSIC tutti i componenti esistenti vedono P/D/C/A; in MANTRA
+        # continuano a vedere i ruoli Mantra originali.
+        if str(st.session_state.get("ml_modalita") or "MANTRA").upper() == "CLASSIC":
+            df_completo["RM"] = df_completo["R"].astype(str)
+            df_completo["FVM M"] = df_completo["FVM"]
+            df_completo["Qt.A M"] = df_completo["Qt.A"]
+            df_completo["Qt.I M"] = df_completo["Qt.I"]
 
         df_rosa_globale = df_completo[df_completo["Stato"] == "MIO"].copy()
         _prezzi_sidebar = pd.to_numeric(
@@ -28366,7 +28507,9 @@ def regole_bidding_multilega(league_id):
                 COALESCE(budget_iniziale,500),
                 COALESCE(soglia_budget,budget_iniziale,500),
                 COALESCE(moltiplicatore_oltre_soglia,1),
-                COALESCE(tipo_asta,'CHIAMATA')
+                COALESCE(tipo_asta,'CHIAMATA'),
+                COALESCE(budget_illimitato,0),
+                COALESCE(fair_play_finanziario,0)
             FROM league_rules
             WHERE league_id=?
             LIMIT 1
@@ -28512,6 +28655,20 @@ def _spesa_effettiva_regole(valore, soglia, moltiplicatore):
     )
 
 
+def _plafond_nominale_fpf_v182(budget, soglia, moltiplicatore, fair_play, budget_illimitato):
+    """Massimo totale di crediti nominali acquistabili rispettando budget + FPF."""
+    if bool(budget_illimitato):
+        return 1_000_000_000_000.0
+    budget = max(0.0, float(budget or 0))
+    if not bool(fair_play):
+        return budget
+    soglia = max(0.0, float(soglia or 0))
+    moltiplicatore = max(1.0, float(moltiplicatore or 1))
+    if budget <= soglia:
+        return budget
+    return soglia + (budget - soglia) / moltiplicatore
+
+
 def calcola_vincoli_offerta_team_multilega(
     league_id,
     lot_id,
@@ -28617,6 +28774,8 @@ def calcola_vincoli_offerta_team_multilega(
         soglia = float(rr[4] or budget_default)
         moltiplicatore = max(1.0, float(rr[5] or 1))
         tipo_asta = str(rr[6] or "").strip().upper()
+        budget_illimitato = bool(int(rr[7] or 0))
+        fair_play_finanziario = bool(int(rr[8] or 0))
 
         if tipo_asta == "DRAFT":
             raise ValueError("La modalità Draft non prevede offerte.")
@@ -28695,12 +28854,12 @@ def calcola_vincoli_offerta_team_multilega(
 
         riserva_minima = float(slot_residui)
 
-        # V174 - il massimo spendibile usa i crediti reali residui della squadra.
-        # Formula: budget - acquisti già effettuati - 1 credito per ogni
-        # slot che resterà da riempire DOPO l'eventuale acquisto corrente.
-        # Soglia/moltipl. non devono ridurre artificialmente il plafond d'asta.
-        budget_residuo_reale = float(budget) - float(valore_acquisti)
-        massimo = budget_residuo_reale - riserva_minima
+        # V182 - plafond coerente con BUDGET LIMITATO/ILLIMITATO e F.P.F.
+        plafond_nominale = _plafond_nominale_fpf_v182(
+            budget, soglia, moltiplicatore,
+            fair_play_finanziario, budget_illimitato
+        )
+        massimo = plafond_nominale - float(valore_acquisti) - riserva_minima
         massimo = float(max(0, math.floor(massimo + 1e-9)))
 
         can_bid = True
@@ -28738,6 +28897,8 @@ def calcola_vincoli_offerta_team_multilega(
             "valore_acquisti": valore_acquisti,
             "soglia": soglia,
             "moltiplicatore": moltiplicatore,
+            "budget_illimitato": budget_illimitato,
+            "fair_play_finanziario": fair_play_finanziario,
             "min_portieri": min_portieri,
             "portieri_attuali": portieri_attuali,
             "portieri_dopo": portieri_dopo,
@@ -28790,14 +28951,17 @@ def verifica_offerta_team_multilega(
     valore_con_riserva = round(
         valore_con_offerta + float(info["riserva_minima"]), 2
     )
-    # V174 - stessa regola usata dal valore mostrato a video: i crediti
-    # impegnati + la riserva minima non possono superare il budget reale.
-    spesa_con_riserva = valore_con_riserva
+    # V182 - il limite reale considera anche l'eventuale Fair Play Finanziario.
+    spesa_con_riserva = _spesa_effettiva_regole(
+        valore_con_riserva,
+        info.get("soglia", info["budget"]),
+        info.get("moltiplicatore", 1)
+    ) if info.get("fair_play_finanziario") else valore_con_riserva
 
-    if valore_con_riserva > float(info["budget"]) + 1e-9:
+    if (not info.get("budget_illimitato")) and spesa_con_riserva > float(info["budget"]) + 1e-9:
         raise ValueError(
             "Budget insufficiente considerando la riserva minima "
-            "per completare la rosa."
+            "e le regole del Fair Play Finanziario."
         )
 
     return {
@@ -31956,6 +32120,8 @@ def snapshot_lotto_live_v132(league_id, team_id=None):
                 COALESCE(lr.budget_iniziale,500),
                 COALESCE(lr.soglia_budget,lr.budget_iniziale,500),
                 COALESCE(lr.moltiplicatore_oltre_soglia,1),
+                COALESCE(lr.budget_illimitato,0),
+                COALESCE(lr.fair_play_finanziario,0),
 
                 COALESCE(rs.budget,lr.budget_iniziale,500),
                 COALESCE(rs.valore_acquisti,0),
@@ -32044,10 +32210,12 @@ def snapshot_lotto_live_v132(league_id, team_id=None):
             budget_default = float(team_row[19] or 500)
             soglia = float(team_row[20] or budget_default)
             moltiplicatore = max(1.0, float(team_row[21] or 1))
-            budget = float(team_row[22] or budget_default)
-            valore = float(team_row[23] or 0)
-            numero_rosa = int(team_row[24] or 0)
-            portieri = int(team_row[25] or 0)
+            budget_illimitato = bool(int(team_row[22] or 0))
+            fair_play_finanziario = bool(int(team_row[23] or 0))
+            budget = float(team_row[24] or budget_default)
+            valore = float(team_row[25] or 0)
+            numero_rosa = int(team_row[26] or 0)
+            portieri = int(team_row[27] or 0)
 
             minimo = (
                 1.0
@@ -32066,19 +32234,19 @@ def snapshot_lotto_live_v132(league_id, team_id=None):
             # Conserva almeno 1 credito per ogni slot successivo.
             riserva = float(slot_dopo)
 
-            # V174 - massimo spendibile = budget reale residuo - riserva slot.
-            budget_residuo_reale = float(budget) - float(valore)
+            # V182 - budget illimitato e F.P.F. applicati anche allo snapshot live.
+            plafond_nominale = _plafond_nominale_fpf_v182(
+                budget, soglia, moltiplicatore,
+                fair_play_finanziario, budget_illimitato
+            )
             massimo = float(max(
                 0,
-                math.floor(budget_residuo_reale - riserva + 1e-9)
+                math.floor(plafond_nominale - float(valore) - riserva + 1e-9)
             ))
 
             spesa = float(
-                _spesa_effettiva_regole(
-                    valore,
-                    soglia,
-                    moltiplicatore
-                )
+                _spesa_effettiva_regole(valore, soglia, moltiplicatore)
+                if fair_play_finanziario else valore
             )
 
             can_bid = True
@@ -33382,7 +33550,11 @@ def render_card_giocatore_live_v140(live):
     """V165 - testata ad alta leggibilità pensata per TV/proiettore."""
     nome = html.escape(str(live.get("nome") or "—"))
     squadra = html.escape(str(live.get("squadra") or "—"))
-    ruolo = html.escape(str(live.get("ruolo_mantra") or "—"))
+    _modo_lega = str(st.session_state.get("ml_modalita") or "MANTRA").upper()
+    ruolo = html.escape(str(
+        live.get("ruolo_classico") if _modo_lega == "CLASSIC"
+        else live.get("ruolo_mantra")
+    ) or "—")
     st.markdown(
         f"""
         <div class="fe-proj-player">
@@ -34234,6 +34406,8 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
                 COALESCE(lr.soglia_budget,lr.budget_iniziale,500),
                 COALESCE(lr.moltiplicatore_oltre_soglia,1),
                 COALESCE(lr.tipo_asta,'CHIAMATA'),
+                COALESCE(lr.budget_illimitato,0),
+                COALESCE(lr.fair_play_finanziario,0),
 
                 COALESCE((
                     SELECT COUNT(*)
@@ -34310,6 +34484,8 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
         soglia = float(r[20] or budget)
         moltiplicatore = max(1.0, float(r[21] or 1))
         tipo_asta = str(r[22] or "CHIAMATA").strip().upper()
+        budget_illimitato = bool(int(r[23] or 0))
+        fair_play_finanziario = bool(int(r[24] or 0))
 
         aliases = {
             "A CHIAMATA":"CHIAMATA",
@@ -34317,9 +34493,9 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
         }
         tipo_asta = aliases.get(tipo_asta, tipo_asta)
 
-        numero_rosa = int(r[23] or 0)
-        valore_acquisti = float(r[24] or 0)
-        portieri_attuali = int(r[25] or 0)
+        numero_rosa = int(r[25] or 0)
+        valore_acquisti = float(r[26] or 0)
+        portieri_attuali = int(r[27] or 0)
 
         giocatore_portiere = (
             ruolo_classico == "P"
@@ -34345,9 +34521,12 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
 
         riserva_minima = float(slot_residui)
 
-        # V174 - massimo spendibile coerente con il budget reale della squadra.
-        budget_residuo_reale = float(budget) - float(valore_acquisti)
-        massimo = budget_residuo_reale - riserva_minima
+        # V182 - massimo spendibile coerente con Budget e Fair Play Finanziario.
+        plafond_nominale = _plafond_nominale_fpf_v182(
+            budget, soglia, moltiplicatore,
+            fair_play_finanziario, budget_illimitato
+        )
+        massimo = plafond_nominale - float(valore_acquisti) - riserva_minima
         massimo = float(max(0, math.floor(massimo + 1e-9)))
 
         can_bid = True
@@ -34891,7 +35070,11 @@ def render_card_giocatore_squadra_v171(live):
     """
     nome_raw = str(live.get("nome") or "—")
     squadra_raw = str(live.get("squadra") or "—")
-    ruolo_raw = str(live.get("ruolo_mantra") or "—")
+    _modo_lega = str(st.session_state.get("ml_modalita") or "MANTRA").upper()
+    ruolo_raw = str(
+        live.get("ruolo_classico") if _modo_lega == "CLASSIC"
+        else live.get("ruolo_mantra")
+    ) or "—"
     player_id = int(live.get("player_id") or 0)
 
     # Recupera la riga completa già caricata per il livello SQUADRA.
