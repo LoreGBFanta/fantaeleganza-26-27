@@ -34791,7 +34791,7 @@ def render_card_giocatore_squadra_v171(live):
 
     with _tool_r_cp:
         if st.button(
-            "ALTRI TIRATORI SQUADRA",
+            "⚽ 🎯 ALTRI TIRATORI SQUADRA",
             key=f"v176_tiratori_{player_id}",
             use_container_width=True,
             help="Mostra gli altri rigoristi e tiratori di calci piazzati della stessa squadra."
