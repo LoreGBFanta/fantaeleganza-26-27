@@ -34657,6 +34657,137 @@ def callback_bid_personalizzato_v130(
     )
 
 
+
+def render_card_giocatore_squadra_v171(live):
+    """
+    Card ASTA del livello SQUADRA.
+    Riprende le informazioni storiche della card pre-live:
+    - Giocatore / Squadra / Ruolo
+    - R / CP
+    - disponibilità / infortunio
+    - priorità acquisto con la logica storica FACOLTATIVO/NECESSARIO/FONDAMENTALE.
+    Non mostra FVM, quotazione o budget/offerta consigliata.
+    """
+    nome_raw = str(live.get("nome") or "—")
+    squadra_raw = str(live.get("squadra") or "—")
+    ruolo_raw = str(live.get("ruolo_mantra") or "—")
+    player_id = int(live.get("player_id") or 0)
+
+    # Recupera la riga completa già caricata per il livello SQUADRA.
+    giocatore = None
+    try:
+        _df = globals().get("df_completo")
+        if _df is not None and not _df.empty and "Id" in _df.columns:
+            _m = _df[pd.to_numeric(_df["Id"], errors="coerce") == player_id]
+            if not _m.empty:
+                giocatore = _m.iloc[0]
+    except Exception:
+        giocatore = None
+
+    # Rigorista / calci piazzati: stessa funzione storica.
+    try:
+        sigle = sigle_specialista_giocatore(nome_raw, squadra_raw) or "—"
+    except Exception:
+        sigle = "—"
+
+    # Disponibilità / infortunio: stessa fonte e stessa logica storica.
+    try:
+        info_disp = info_disponibilita_giocatore(nome_raw, squadra_raw)
+    except Exception:
+        info_disp = {"disponibile": True, "dettaglio": ""}
+
+    disponibile = bool(info_disp.get("disponibile", True))
+    disp_icon = "✓" if disponibile else "❌"
+    disp_testo = "DISPONIBILE" if disponibile else "INFORTUNATO"
+    disp_fg = "#166534" if disponibile else "#991b1b"
+    disp_bg = "#dcfce7" if disponibile else "#fee2e2"
+    disp_border = "#22c55e" if disponibile else "#ef4444"
+
+    # Priorità: usa esattamente la funzione storica già presente nel progetto.
+    priorita = {
+        "Etichetta": "ACQUISTO FACOLTATIVO",
+        "Ruolo": "",
+        "Copertura": 0,
+        "Disponibili": 0,
+    }
+    try:
+        _df = globals().get("df_completo")
+        _rosa = globals().get("df_rosa_globale")
+        if giocatore is not None and _df is not None and _rosa is not None:
+            priorita = valuta_priorita_acquisto(giocatore, _rosa, _df)
+    except Exception:
+        pass
+
+    etichetta = str(priorita.get("Etichetta") or "ACQUISTO FACOLTATIVO")
+    try:
+        bg_prio, fg_prio, border_prio = stile_priorita_acquisto(etichetta)
+    except Exception:
+        bg_prio, fg_prio, border_prio = "#dcfce7", "#166534", "#22c55e"
+
+    # Layout uguale al Banditore ma volutamente più compatto.
+    st.markdown(
+        f"""
+        <style>
+        .fe-team-player{{background:#071a2f;border-radius:14px;padding:15px 18px;margin:6px 0 10px}}
+        .fe-team-player-row{{display:grid;grid-template-columns:minmax(0,2.15fr) minmax(180px,1.15fr) minmax(120px,.62fr);gap:10px;align-items:stretch}}
+        .fe-team-player-main{{display:flex;flex-direction:column;justify-content:center;min-width:0;padding-right:6px}}
+        .fe-team-player-label{{font-size:11px;font-weight:800;letter-spacing:.13em;color:#9fb0c3;margin-bottom:2px}}
+        .fe-team-player-name{{font-size:clamp(26px,3vw,40px);line-height:1.02;font-weight:950;color:#fff;letter-spacing:-.025em;overflow-wrap:anywhere}}
+        .fe-team-player-box{{background:#fff;border-radius:9px;padding:9px 13px;min-height:60px;display:flex;flex-direction:column;justify-content:center}}
+        .fe-team-player-box span{{font-size:10px;font-weight:800;letter-spacing:.08em;color:#64748b}}
+        .fe-team-player-box strong{{font-size:clamp(17px,1.7vw,23px);line-height:1.08;color:#071a2f;margin-top:2px}}
+        .fe-team-info-row{{display:grid;grid-template-columns:.72fr 1fr 1.75fr;gap:10px;margin:0 0 14px}}
+        .fe-team-info{{border-radius:10px;padding:9px 12px;min-height:64px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center}}
+        .fe-team-info-label{{font-size:10px;font-weight:800;letter-spacing:.07em;color:#64748b;margin-bottom:3px}}
+        .fe-team-info-value{{font-size:18px;line-height:1.08;font-weight:900}}
+        @media(max-width:800px){{
+          .fe-team-player-row{{grid-template-columns:1fr 1fr}}
+          .fe-team-player-main{{grid-column:1 / -1}}
+          .fe-team-info-row{{grid-template-columns:1fr}}
+        }}
+        </style>
+        <div class="fe-team-player">
+          <div class="fe-team-player-row">
+            <div class="fe-team-player-main">
+              <div class="fe-team-player-label">GIOCATORE</div>
+              <div class="fe-team-player-name">{html.escape(nome_raw)}</div>
+            </div>
+            <div class="fe-team-player-box"><span>SQUADRA</span><strong>{html.escape(squadra_raw)}</strong></div>
+            <div class="fe-team-player-box"><span>RUOLO</span><strong>{html.escape(ruolo_raw)}</strong></div>
+          </div>
+        </div>
+        <div class="fe-team-info-row">
+          <div class="fe-team-info" style="background:#f8fafc;border:2px solid #cbd5e1;">
+            <div class="fe-team-info-label">R / CP</div>
+            <div class="fe-team-info-value" style="color:#071a2f;">{html.escape(str(sigle))}</div>
+          </div>
+          <div class="fe-team-info" style="background:{disp_bg};border:2px solid {disp_border};">
+            <div class="fe-team-info-label">DISPONIBILITÀ</div>
+            <div class="fe-team-info-value" style="color:{disp_fg};">{disp_icon} {disp_testo}</div>
+          </div>
+          <div class="fe-team-info" style="background:{bg_prio};border:2px solid {border_prio};">
+            <div class="fe-team-info-label">PRIORITÀ ACQUISTO</div>
+            <div class="fe-team-info-value" style="color:{fg_prio};">{html.escape(etichetta)}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Come nella versione storica, l'infortunio è apribile per vedere il dettaglio.
+    if not disponibile:
+        if st.button(
+            "❌ DETTAGLIO INFORTUNIO E TEMPI DI RECUPERO",
+            key=f"v171_infortunio_{player_id}",
+            help="Mostra infortunio e tempi di recupero del giocatore."
+        ):
+            mostra_dettaglio_infortunio(
+                nome_raw,
+                squadra_raw,
+                str(info_disp.get("dettaglio") or "")
+            )
+
+
 def render_bidding_inline_asta_v126():
     """
     V132 - ASTA squadra: un solo fragment live, una sola query per refresh.
@@ -34703,7 +34834,9 @@ def render_bidding_inline_asta_v126():
         )
         return
 
-    render_card_giocatore_live_v140(stato)
+    # V171 - card specifica per la SQUADRA: stesso linguaggio grafico del
+    # Banditore, più compatto, con le informazioni tecniche storiche.
+    render_card_giocatore_squadra_v171(stato)
 
     if stato["current_bid"] is None:
         st.info("Nessuna offerta registrata.")
