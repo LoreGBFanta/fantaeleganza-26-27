@@ -34753,12 +34753,14 @@ def render_banditore_asta():
                 height:54px !important;
                 min-height:54px !important;
                 max-height:54px !important;
+                box-sizing:border-box !important;
+                padding:0 24px !important;
                 background:#ff4b4b !important;
                 border-color:#ff4b4b !important;
                 color:white !important;
                 border-radius:9px !important;
-                font-size:20px !important;
-                font-weight:500 !important;
+                font-size:22px !important;
+                font-weight:600 !important;
             }
             .st-key-v200_open button:hover {
                 background:#e74343 !important;
@@ -34767,7 +34769,9 @@ def render_banditore_asta():
             }
             .st-key-v200_open button * {
                 color:white !important;
-                font-size:20px !important;
+                font-size:22px !important;
+                font-weight:600 !important;
+                line-height:1 !important;
             }
 
             /* Testata giocatore */
@@ -34812,7 +34816,7 @@ def render_banditore_asta():
                 box-sizing:border-box;
                 margin:0;
                 padding:0 14px;
-                border:2px solid #111;
+                border:1px solid rgba(49, 51, 63, 0.2);
                 border-radius:10px;
                 background:white;
                 color:#111;
