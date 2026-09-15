@@ -34740,68 +34740,48 @@ def render_banditore_asta():
                 unsafe_allow_html=True,
             )
 
-        # V198 - dimensioni forzate sui CONTAINER, non sulle key dei button.
-        # In Streamlit il bottone disabled può avere un DOM/stile differente:
-        # usando due container con key stabile imponiamo la stessa geometria ad entrambi.
-        st.markdown("""
-        <style>
-        .st-key-v198_prev_wrap div[data-testid="stButton"] > button,
-        .st-key-v198_next_wrap div[data-testid="stButton"] > button {
-            width: 100% !important;
-            height: 46px !important;
-            min-height: 46px !important;
-            max-height: 46px !important;
-            box-sizing: border-box !important;
-            padding: 0 14px !important;
-            border-radius: 8px !important;
-        }
+        # V199 - UN SOLO wrapper contiene ENTRAMBI i pulsanti.
+        # Lo stesso identico selettore CSS colpisce quindi entrambi, senza differenze
+        # dovute allo stato disabled o alla struttura interna delle due colonne.
+        with st.container(key="v199_nav_row"):
+            st.markdown("""
+            <style>
+            .st-key-v199_nav_row button {
+                width: 100% !important;
+                height: 46px !important;
+                min-height: 46px !important;
+                max-height: 46px !important;
+                box-sizing: border-box !important;
+                padding: 0 14px !important;
+                margin: 0 !important;
+                border-radius: 8px !important;
+                font-size: 12px !important;
+                font-weight: 400 !important;
+                line-height: 12px !important;
+            }
+            .st-key-v199_nav_row button > div,
+            .st-key-v199_nav_row button p,
+            .st-key-v199_nav_row button span {
+                margin: 0 !important;
+                padding: 0 !important;
+                font-size: 12px !important;
+                font-weight: 400 !important;
+                line-height: 12px !important;
+                min-height: 12px !important;
+                max-height: 12px !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
 
-        .st-key-v198_prev_wrap div[data-testid="stButton"] > button p,
-        .st-key-v198_next_wrap div[data-testid="stButton"] > button p {
-            margin: 0 !important;
-            padding: 0 !important;
-            font-size: 12px !important;
-            font-weight: 400 !important;
-            line-height: 12px !important;
-            height: 12px !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            gap: 5px !important;
-        }
+            _prev_col, _next_col = st.columns([1, 1], gap="small")
 
-        /* Icone CSS speculari: stessa identica base 10x10 px. */
-        .st-key-v198_prev_wrap div[data-testid="stButton"] > button p::before,
-        .st-key-v198_next_wrap div[data-testid="stButton"] > button p::before {
-            content: "" !important;
-            display: inline-block !important;
-            width: 0 !important;
-            height: 0 !important;
-            flex: 0 0 auto !important;
-        }
-        .st-key-v198_prev_wrap div[data-testid="stButton"] > button p::before {
-            border-top: 5px solid transparent !important;
-            border-bottom: 5px solid transparent !important;
-            border-right: 10px solid currentColor !important;
-        }
-        .st-key-v198_next_wrap div[data-testid="stButton"] > button p::before {
-            border-top: 5px solid transparent !important;
-            border-bottom: 5px solid transparent !important;
-            border-left: 10px solid currentColor !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        _prev_col, _next_col = st.columns([1, 1], gap="small")
-
-        with _prev_col:
-            _precedente = snap.get("precedente")
-            with st.container(key="v198_prev_wrap"):
+            with _prev_col:
+                _precedente = snap.get("precedente")
                 st.button(
-                    "GIOCATORE PRECEDENTE",
+                    "◀ GIOCATORE PRECEDENTE",
                     use_container_width=True,
                     disabled=_precedente is None,
-                    key="v198_nav_prev",
+                    key="v199_nav_prev",
                     help=(
                         f'Ripristina {_precedente["nome"]}, ultimo giocatore skippato.'
                         if _precedente else
@@ -34811,12 +34791,11 @@ def render_banditore_asta():
                     args=(league_id, tipo_asta)
                 )
 
-        with _next_col:
-            with st.container(key="v198_next_wrap"):
+            with _next_col:
                 st.button(
-                    "PROSSIMO GIOCATORE",
+                    "▶ PROSSIMO GIOCATORE",
                     use_container_width=True,
-                    key="v198_nav_next",
+                    key="v199_nav_next",
                     on_click=callback_nav_next_v197,
                     args=(league_id, g["player_id"], tipo_asta, g["nome"])
                 )
