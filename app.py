@@ -34196,11 +34196,8 @@ def snapshot_banditore_idle_v156(league_id):
 
 
 def rerun_banditore_fragment_v156():
-    """Preferisce il rerun del solo fragment; fallback al rerun standard."""
-    try:
-        st.rerun(scope="fragment")
-    except TypeError:
-        st.rerun()
+    """V191 - Gestione Asta non è un fragment: usa sempre il rerun standard."""
+    st.rerun()
 
 
 def stile_proiezione_banditore_v165():
@@ -34430,7 +34427,7 @@ def render_banditore_asta():
             return
 
         # V190 - CTA principale grande e verde, subito accanto al giocatore proposto.
-        _titolo_col, _apri_col = st.columns([2.15, 1.0], vertical_alignment="center")
+        _titolo_col, _apri_col = st.columns([1.35, 1.0], gap="small", vertical_alignment="center")
 
         with _titolo_col:
             st.markdown(f'### Prossimo giocatore: **{g["nome"]}**')
@@ -34439,19 +34436,25 @@ def render_banditore_asta():
             )
 
         with _apri_col:
+            _open_key_v191 = f"v191_open_{g['player_id']}"
             st.markdown(
-                """
+                f"""
                 <style>
-                div[data-testid="stButton"]:has(button[kind="primary"]) button[kind="primary"] {
+                /* V191: SOLO il CTA Apri Asta. Non altera navbar o cambio livello. */
+                .st-key-{{_open_key_v191}} button {{
                     background: #16a34a !important;
                     border-color: #16a34a !important;
                     color: white !important;
-                }
-                div[data-testid="stButton"]:has(button[kind="primary"]) button[kind="primary"]:hover {
+                    min-height: 64px !important;
+                    font-size: 18px !important;
+                    font-weight: 800 !important;
+                    border-radius: 10px !important;
+                }}
+                .st-key-{{_open_key_v191}} button:hover {{
                     background: #15803d !important;
                     border-color: #15803d !important;
                     color: white !important;
-                }
+                }}
                 </style>
                 """,
                 unsafe_allow_html=True,
@@ -34460,7 +34463,7 @@ def render_banditore_asta():
                 "📣 APRI ASTA SUL GIOCATORE",
                 type="primary",
                 use_container_width=True,
-                key=f"v190_open_{g['player_id']}",
+                key=_open_key_v191,
                 on_click=callback_apri_lotto_v133,
                 args=(
                     league_id,
@@ -34478,7 +34481,7 @@ def render_banditore_asta():
                 "⏮ GIOCATORE PRECEDENTE",
                 use_container_width=True,
                 disabled=_precedente is None,
-                key=f"v190_prev_{g['player_id']}",
+                key=f"v191_prev_{g['player_id']}",
                 help=(
                     f'Ripristina {_precedente["nome"]}, ultimo giocatore skippato.'
                     if _precedente else
@@ -34492,7 +34495,7 @@ def render_banditore_asta():
             if st.button(
                 "⏭ PROSSIMO GIOCATORE",
                 use_container_width=True,
-                key=f"v190_next_{g['player_id']}"
+                key=f"v191_next_{g['player_id']}"
             ):
                 try:
                     prossimo_giocatore_senza_lotto_v135(
