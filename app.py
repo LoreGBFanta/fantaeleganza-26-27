@@ -28653,7 +28653,8 @@ def calcola_vincoli_offerta_team_multilega(
             )
 
         massimo = valore_totale_massimo - valore_acquisti - riserva_minima
-        massimo = max(0.0, math.floor((massimo + 1e-9) * 100) / 100)
+        # V173 - l'offerta massima è sempre un credito intero, arrotondato per difetto.
+        massimo = float(max(0, math.floor(massimo + 1e-9)))
 
         can_bid = True
         motivo = ""
@@ -31832,13 +31833,13 @@ def snapshot_lotto_live_v132(league_id, team_id=None):
                     soglia + (budget - soglia) / moltiplicatore
                 )
 
-            massimo = max(
-                0.0,
-                float(int(
-                    (valore_totale_massimo - valore - riserva)
-                    * 100 + 1e-9
-                )) / 100.0
-            )
+            # V173 - l'offerta massima è sempre un credito intero, arrotondato per difetto.
+            massimo = float(max(
+                0,
+                math.floor(
+                    valore_totale_massimo - valore - riserva + 1e-9
+                )
+            ))
 
             spesa = float(
                 _spesa_effettiva_regole(
@@ -34124,10 +34125,8 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
             - valore_acquisti
             - riserva_minima
         )
-        massimo = max(
-            0.0,
-            math.floor((massimo + 1e-9) * 100) / 100
-        )
+        # V173 - l'offerta massima è sempre un credito intero, arrotondato per difetto.
+        massimo = float(max(0, math.floor(massimo + 1e-9)))
 
         can_bid = True
         motivo = ""
