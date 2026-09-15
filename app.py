@@ -34429,19 +34429,38 @@ def render_banditore_asta():
             st.info("Nessun altro giocatore da proporre.")
             return
 
-        st.markdown(f'### Prossimo giocatore: **{g["nome"]}**')
-        st.caption(
-            f'{g["squadra"]} · {g["ruolo_mantra"]} · FVM {g["fvm"]:g}'
-        )
+        # V190 - CTA principale grande e verde, subito accanto al giocatore proposto.
+        _titolo_col, _apri_col = st.columns([2.15, 1.0], vertical_alignment="center")
 
-        _open_col, _prev_col, _next_col = st.columns([1.35, 1.0, 1.0])
+        with _titolo_col:
+            st.markdown(f'### Prossimo giocatore: **{g["nome"]}**')
+            st.caption(
+                f'{g["squadra"]} · {g["ruolo_mantra"]} · FVM {g["fvm"]:g}'
+            )
 
-        with _open_col:
+        with _apri_col:
+            st.markdown(
+                """
+                <style>
+                div[data-testid="stButton"]:has(button[kind="primary"]) button[kind="primary"] {
+                    background: #16a34a !important;
+                    border-color: #16a34a !important;
+                    color: white !important;
+                }
+                div[data-testid="stButton"]:has(button[kind="primary"]) button[kind="primary"]:hover {
+                    background: #15803d !important;
+                    border-color: #15803d !important;
+                    color: white !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
             st.button(
                 "📣 APRI ASTA SUL GIOCATORE",
                 type="primary",
                 use_container_width=True,
-                key=f"v135_open_{g['player_id']}",
+                key=f"v190_open_{g['player_id']}",
                 on_click=callback_apri_lotto_v133,
                 args=(
                     league_id,
@@ -34450,13 +34469,16 @@ def render_banditore_asta():
                 )
             )
 
+        # Riga secondaria: soltanto navigazione precedente / prossimo.
+        _prev_col, _next_col = st.columns(2)
+
         with _prev_col:
             _precedente = snap.get("precedente")
             if st.button(
                 "⏮ GIOCATORE PRECEDENTE",
                 use_container_width=True,
                 disabled=_precedente is None,
-                key=f"v189_prev_{g['player_id']}",
+                key=f"v190_prev_{g['player_id']}",
                 help=(
                     f'Ripristina {_precedente["nome"]}, ultimo giocatore skippato.'
                     if _precedente else
@@ -34470,7 +34492,7 @@ def render_banditore_asta():
             if st.button(
                 "⏭ PROSSIMO GIOCATORE",
                 use_container_width=True,
-                key=f"v156_next_{g['player_id']}"
+                key=f"v190_next_{g['player_id']}"
             ):
                 try:
                     prossimo_giocatore_senza_lotto_v135(
