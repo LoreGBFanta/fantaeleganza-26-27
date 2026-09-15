@@ -34750,18 +34750,38 @@ def render_card_giocatore_squadra_v171(live):
         unsafe_allow_html=True,
     )
 
-    # Come nella versione storica, l'infortunio è apribile per vedere il dettaglio.
-    if not disponibile:
-        if st.button(
-            "❌ DETTAGLIO INFORTUNIO E TEMPI DI RECUPERO",
-            key=f"v171_infortunio_{player_id}",
-            help="Mostra infortunio e tempi di recupero del giocatore."
-        ):
-            mostra_dettaglio_infortunio(
-                nome_raw,
-                squadra_raw,
-                str(info_disp.get("dettaglio") or "")
-            )
+    # V175 - strumenti allineati sotto le rispettive caselle.
+    _tool_r_cp, _tool_disp, _tool_prio = st.columns([0.72, 1.0, 1.75], gap="small")
+
+    with _tool_disp:
+        if not disponibile:
+            if st.button(
+                "❌ DETTAGLIO INFORTUNIO E TEMPI DI RECUPERO",
+                key=f"v175_infortunio_{player_id}",
+                use_container_width=True,
+                help="Mostra infortunio e tempi di recupero del giocatore."
+            ):
+                mostra_dettaglio_infortunio(
+                    nome_raw,
+                    squadra_raw,
+                    str(info_disp.get("dettaglio") or "")
+                )
+
+    with _tool_prio:
+        if giocatore is not None:
+            if st.button(
+                "📋 GIOCATORI ANCORA DISPONIBILI",
+                key=f"v175_rimasti_{player_id}",
+                use_container_width=True,
+                help="Mostra i giocatori ancora disponibili per ruolo, ordinati dal più importante."
+            ):
+                _df_popup = globals().get("df_completo")
+                if _df_popup is not None:
+                    mostra_dettaglio_priorita_acquisto(
+                        giocatore,
+                        priorita,
+                        _df_popup
+                    )
 
 
 def render_bidding_inline_asta_v126():
