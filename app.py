@@ -27687,6 +27687,28 @@ def azione_storico_rosa_v149(league_id, player_id, azione):
                 WHERE league_id=? AND player_id=?
             """, (league_id,player_id))
 
+            # V189 - ELIMINA dallo Storico significa anche "nuovamente chiamabile".
+            # Se il giocatore era stato skippato in precedenza, togliamo quel blocco.
+            cur.execute("""
+                SELECT COALESCE(skipped_players_json,'[]')
+                FROM auction_mode_state
+                WHERE league_id=?
+                LIMIT 1
+            """, (league_id,))
+            _sr = cur.fetchone()
+            try:
+                _sk = {int(x) for x in json.loads(_sr[0] if _sr else '[]')}
+            except Exception:
+                _sk = set()
+            if player_id in _sk:
+                _sk.discard(player_id)
+                cur.execute("""
+                    UPDATE auction_mode_state
+                    SET skipped_players_json=?,
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE league_id=?
+                """, (json.dumps(sorted(_sk)), league_id))
+
         # Storico assegnazione non più attivo.
         cur.execute("""
             UPDATE auction_assignment_history
@@ -33446,6 +33468,138 @@ def prossimo_giocatore_senza_lotto_v135(
         _portal_close(conn)
 
 
+
+def giocatore_precedente_skippato_v189(league_id, tipo_asta):
+    """
+    Ripristina l'ultimo giocatore saltato con PROSSIMO GIOCATORE senza apertura lotto.
+    Un giocatore che ha avuto un lotto non è ripristinabile da qui.
+    """
+    league_id = int(league_id)
+    tipo_asta = str(tipo_asta or "").strip().upper()
+    if tipo_asta not in ("RANDOM", "ALFABETICO"):
+        raise ValueError("GIOCATORE PRECEDENTE è disponibile solo nelle modalità RANDOM/ALFABETICO.")
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        # La fonte SKIPPED viene sovrascritta da LOT quando il giocatore viene astato:
+        # quindi questa query non può richiamare un giocatore già passato da un lotto.
+        cur.execute("""
+            SELECT cp.player_id, COALESCE(g.nome,'')
+            FROM auction_called_players cp
+            JOIN league_players lp
+              ON lp.league_id=cp.league_id
+             AND lp.player_id=cp.player_id
+             AND lp.stato='DISPONIBILE'
+            LEFT JOIN league_player_catalog g
+              ON g.league_id=cp.league_id
+             AND g.player_id=cp.player_id
+            WHERE cp.league_id=?
+              AND cp.active=1
+              AND UPPER(COALESCE(cp.fonte,''))='SKIPPED'
+              AND cp.lot_id IS NULL
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM auction_lots al
+                    WHERE al.league_id=cp.league_id
+                      AND al.player_id=cp.player_id
+              )
+            ORDER BY cp.called_at DESC, cp.id DESC
+            LIMIT 1
+        """, (league_id,))
+        row = cur.fetchone()
+        if not row:
+            raise ValueError("Non ci sono giocatori skippati richiamabili.")
+
+        player_id = int(row[0])
+        nome = str(row[1] or "")
+
+        cur.execute("""
+            SELECT COALESCE(skipped_players_json,'[]'),
+                   COALESCE(random_queue_json,'[]')
+            FROM auction_mode_state
+            WHERE league_id=?
+            LIMIT 1
+        """, (league_id,))
+        state = cur.fetchone() or ('[]','[]')
+        try:
+            skipped = {int(x) for x in json.loads(state[0] or '[]')}
+        except Exception:
+            skipped = set()
+        try:
+            random_queue = [int(x) for x in json.loads(state[1] or '[]')]
+        except Exception:
+            random_queue = []
+
+        skipped.discard(player_id)
+
+        # In RANDOM il ripristinato deve diventare davvero il prossimo, non solo
+        # rientrare genericamente nella coda casuale.
+        if tipo_asta == "RANDOM":
+            random_queue = [x for x in random_queue if int(x) != player_id]
+            random_queue.insert(0, player_id)
+
+        cur.execute("""
+            UPDATE auction_mode_state
+            SET skipped_players_json=?,
+                random_queue_json=?,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=?
+        """, (
+            json.dumps(sorted(skipped)),
+            json.dumps(random_queue),
+            league_id
+        ))
+
+        # Lo skip viene annullato anche nello Storico/contatore.
+        cur.execute("""
+            UPDATE auction_called_players
+            SET active=0,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=?
+              AND player_id=?
+              AND UPPER(COALESCE(fonte,''))='SKIPPED'
+              AND lot_id IS NULL
+        """, (league_id, player_id))
+
+        cur.execute("""
+            INSERT INTO audit_log (
+                league_id,user_id,azione,entita,entita_id,
+                dettagli_json,created_at
+            )
+            VALUES (?,?,'PLAYER_SKIP_UNDONE','PLAYER',?,?,CURRENT_TIMESTAMP)
+        """, (
+            league_id,
+            int(st.session_state.get("auth_user_id") or 0),
+            str(player_id),
+            json.dumps({"nome": nome, "modalita": tipo_asta}, ensure_ascii=False)
+        ))
+
+        conn.commit()
+        return {"player_id": player_id, "nome": nome}
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def callback_giocatore_precedente_v189(league_id, tipo_asta):
+    try:
+        r = giocatore_precedente_skippato_v189(league_id, tipo_asta)
+        invalida_cache_banditore_v156(league_id)
+        st.session_state["auctioneer_msg"] = (
+            f'{r["nome"]} ripristinato come giocatore precedente.'
+        )
+        st.session_state.pop("auctioneer_error", None)
+    except Exception as errore:
+        st.session_state["auctioneer_error"] = str(errore)
+
+
 def callback_prossimo_giocatore_v135(
     league_id, player_id, tipo_asta, nome, call_id=None
 ):
@@ -33938,6 +34092,35 @@ def snapshot_banditore_idle_v156(league_id):
         except Exception:
             random_queue = []
 
+        # V189 - ultimo SKIP puro, quindi mai passato da un lotto d'asta.
+        cur.execute("""
+            SELECT cp.player_id,COALESCE(g.nome,'')
+            FROM auction_called_players cp
+            JOIN league_players lp
+              ON lp.league_id=cp.league_id
+             AND lp.player_id=cp.player_id
+             AND lp.stato='DISPONIBILE'
+            LEFT JOIN league_player_catalog g
+              ON g.league_id=cp.league_id AND g.player_id=cp.player_id
+            WHERE cp.league_id=?
+              AND cp.active=1
+              AND UPPER(COALESCE(cp.fonte,''))='SKIPPED'
+              AND cp.lot_id IS NULL
+              AND NOT EXISTS (
+                    SELECT 1 FROM auction_lots al
+                    WHERE al.league_id=cp.league_id
+                      AND al.player_id=cp.player_id
+              )
+            ORDER BY cp.called_at DESC,cp.id DESC
+            LIMIT 1
+        """, (league_id,))
+        _prev = cur.fetchone()
+        if _prev:
+            out["precedente"] = {
+                "player_id": int(_prev[0]),
+                "nome": str(_prev[1] or "")
+            }
+
         if tipo_asta == "ALFABETICO":
             cur.execute("""
                 SELECT
@@ -34251,7 +34434,7 @@ def render_banditore_asta():
             f'{g["squadra"]} · {g["ruolo_mantra"]} · FVM {g["fvm"]:g}'
         )
 
-        _open_col, _next_col = st.columns(2)
+        _open_col, _prev_col, _next_col = st.columns([1.35, 1.0, 1.0])
 
         with _open_col:
             st.button(
@@ -34266,6 +34449,22 @@ def render_banditore_asta():
                     g["nome"]
                 )
             )
+
+        with _prev_col:
+            _precedente = snap.get("precedente")
+            if st.button(
+                "⏮ GIOCATORE PRECEDENTE",
+                use_container_width=True,
+                disabled=_precedente is None,
+                key=f"v189_prev_{g['player_id']}",
+                help=(
+                    f'Ripristina {_precedente["nome"]}, ultimo giocatore skippato.'
+                    if _precedente else
+                    "Nessun giocatore skippato richiamabile."
+                )
+            ):
+                callback_giocatore_precedente_v189(league_id, tipo_asta)
+                rerun_banditore_fragment_v156()
 
         with _next_col:
             if st.button(
