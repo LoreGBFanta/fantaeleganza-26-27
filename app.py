@@ -27094,7 +27094,10 @@ def registra_giocatore_chiamato_v147(
         ON CONFLICT(league_id,player_id)
         DO UPDATE SET
             fonte=excluded.fonte,
-            lot_id=COALESCE(excluded.lot_id,auction_called_players.lot_id),
+            lot_id=CASE
+                WHEN UPPER(COALESCE(excluded.fonte,''))='SKIPPED' THEN NULL
+                ELSE COALESCE(excluded.lot_id,auction_called_players.lot_id)
+            END,
             active=1,
             called_at=CURRENT_TIMESTAMP,
             updated_at=CURRENT_TIMESTAMP
@@ -33405,9 +33408,26 @@ def prossimo_giocatore_senza_lotto_v135(
     conn = _portal_raw_connection()
     cur = conn.cursor()
     try:
-        registra_giocatore_chiamato_v147(
-            cur, league_id, player_id, "SKIPPED", None
-        )
+        # V196 FAST SKIP: un solo UPSERT, senza la DELETE accessoria usata
+        # per le vere chiamate/lotti.
+        cur.execute("""
+            INSERT INTO auction_called_players (
+                league_id,player_id,fonte,lot_id,
+                called_by_user_id,called_at,updated_at,active
+            )
+            VALUES (?,?,'SKIPPED',NULL,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,1)
+            ON CONFLICT(league_id,player_id)
+            DO UPDATE SET
+                fonte='SKIPPED',
+                lot_id=NULL,
+                active=1,
+                called_by_user_id=excluded.called_by_user_id,
+                called_at=CURRENT_TIMESTAMP,
+                updated_at=CURRENT_TIMESTAMP
+        """, (
+            league_id, player_id,
+            int(st.session_state.get("auth_user_id") or 0)
+        ))
 
         if tipo_asta in ("RANDOM","ALFABETICO"):
             cur.execute("""
@@ -33498,7 +33518,6 @@ def giocatore_precedente_skippato_v189(league_id, tipo_asta):
             WHERE cp.league_id=?
               AND cp.active=1
               AND UPPER(COALESCE(cp.fonte,''))='SKIPPED'
-              AND cp.lot_id IS NULL
             ORDER BY cp.called_at DESC, cp.id DESC
             LIMIT 1
         """, (league_id,))
@@ -33554,7 +33573,6 @@ def giocatore_precedente_skippato_v189(league_id, tipo_asta):
             WHERE league_id=?
               AND player_id=?
               AND UPPER(COALESCE(fonte,''))='SKIPPED'
-              AND lot_id IS NULL
         """, (league_id, player_id))
 
         cur.execute("""
@@ -33586,7 +33604,7 @@ def giocatore_precedente_skippato_v189(league_id, tipo_asta):
 def callback_giocatore_precedente_v189(league_id, tipo_asta):
     try:
         r = giocatore_precedente_skippato_v189(league_id, tipo_asta)
-        invalida_cache_banditore_v156(league_id)
+        invalida_cache_navigazione_asta_v196(league_id)
         st.session_state["auctioneer_msg"] = (
             f'{r["nome"]} ripristinato come giocatore precedente.'
         )
@@ -33602,7 +33620,7 @@ def callback_prossimo_giocatore_v135(
         prossimo_giocatore_senza_lotto_v135(
             league_id, player_id, tipo_asta, call_id
         )
-        invalida_cache_banditore_v156(league_id)
+        invalida_cache_navigazione_asta_v196(league_id)
         st.session_state["auctioneer_msg"] = (
             f"{nome} saltato. Passaggio al prossimo giocatore."
         )
@@ -33957,6 +33975,13 @@ def invalida_cache_banditore_v156(league_id):
         st.session_state.pop(_k, None)
 
 
+def invalida_cache_navigazione_asta_v196(league_id):
+    """Invalida solo i dati che cambiano con PRECEDENTE/PROSSIMO."""
+    league_id = int(league_id)
+    st.session_state.pop(f"_v156_counter_{league_id}", None)
+    st.session_state.pop(f"_v156_idle_{league_id}", None)
+
+
 def contatore_chiamati_fast_v156(league_id, ttl=1.5):
     """Contatore con micro-cache: evita una query remota a ogni click/rerender."""
     league_id = int(league_id)
@@ -34101,7 +34126,6 @@ def snapshot_banditore_idle_v156(league_id):
             WHERE cp.league_id=?
               AND cp.active=1
               AND UPPER(COALESCE(cp.fonte,''))='SKIPPED'
-              AND cp.lot_id IS NULL
             ORDER BY cp.called_at DESC,cp.id DESC
             LIMIT 1
         """, (league_id,))
@@ -34187,8 +34211,8 @@ def snapshot_banditore_idle_v156(league_id):
 
 
 def rerun_banditore_fragment_v156():
-    """V191 - Gestione Asta non è un fragment: usa sempre il rerun standard."""
-    st.rerun()
+    """V196 - Gestione Asta è un vero fragment: aggiorna solo l'area asta."""
+    st.rerun(scope="fragment")
 
 
 def stile_proiezione_banditore_v165():
@@ -34316,6 +34340,7 @@ def render_ricerca_giocatore_banditore_v169(league_id):
         help="Apre immediatamente il lotto sul giocatore selezionato."
     )
 
+@st.fragment
 def render_banditore_asta():
     if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
         st.error("Accedi con il livello BANDITORE per usare Gestione Asta.")
@@ -34473,42 +34498,29 @@ def render_banditore_asta():
 
         with _prev_col:
             _precedente = snap.get("precedente")
-            if st.button(
+            st.button(
                 "◀ GIOCATORE PRECEDENTE",
                 use_container_width=True,
                 disabled=_precedente is None,
-                key="v195_nav_prev",
+                key="v196_nav_prev",
                 help=(
                     f'Ripristina {_precedente["nome"]}, ultimo giocatore skippato.'
                     if _precedente else
                     "Nessun giocatore skippato richiamabile."
-                )
-            ):
-                callback_giocatore_precedente_v189(league_id, tipo_asta)
-                rerun_banditore_fragment_v156()
+                ),
+                on_click=callback_giocatore_precedente_v189,
+                args=(league_id, tipo_asta)
+            )
 
         with _next_col:
-            if st.button(
+            st.button(
                 "▶ PROSSIMO GIOCATORE",
                 use_container_width=True,
-                key="v195_nav_next"
-            ):
-                try:
-                    prossimo_giocatore_senza_lotto_v135(
-                        league_id, g["player_id"], tipo_asta, None
-                    )
-                    invalida_cache_banditore_v156(league_id)
-                    st.session_state["auctioneer_msg"] = (
-                        f'{g["nome"]} saltato. Passaggio al prossimo giocatore.'
-                    )
-                    st.session_state.pop("auctioneer_error", None)
-                    rerun_banditore_fragment_v156()
-                except Exception as errore:
-                    st.session_state["auctioneer_error"] = str(errore)
-                    rerun_banditore_fragment_v156()
+                key="v196_nav_next",
+                on_click=callback_prossimo_giocatore_v135,
+                args=(league_id, g["player_id"], tipo_asta, g["nome"], None)
+            )
 
-        # V169 - chiamata manuale di un giocatore specifico.
-        # Posizionata esattamente sotto APRI ASTA / PROSSIMO GIOCATORE.
         render_ricerca_giocatore_banditore_v169(league_id)
 
         return
