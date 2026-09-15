@@ -33153,11 +33153,11 @@ def render_card_giocatore_live_v140(live):
     st.markdown(
         f"""
         <div class="fe-proj-player">
-          <div class="fe-proj-main">
-            <div class="fe-proj-label">GIOCATORE</div>
-            <div class="fe-proj-name">{nome}</div>
-          </div>
-          <div class="fe-proj-meta">
+          <div class="fe-proj-row">
+            <div class="fe-proj-main">
+              <div class="fe-proj-label">GIOCATORE</div>
+              <div class="fe-proj-name">{nome}</div>
+            </div>
             <div class="fe-proj-box"><span>SQUADRA</span><strong>{squadra}</strong></div>
             <div class="fe-proj-box"><span>RUOLO</span><strong>{ruolo}</strong></div>
           </div>
@@ -33425,10 +33425,11 @@ def stile_proiezione_banditore_v165():
     st.markdown(r"""
     <style>
     .fe-proj-player{background:#071a2f;border-radius:18px;padding:24px 28px;margin:8px 0 22px;box-shadow:0 6px 18px rgba(7,26,47,.18)}
+    .fe-proj-row{display:grid;grid-template-columns:minmax(0,2.15fr) minmax(220px,1.25fr) minmax(150px,.62fr);gap:14px;align-items:stretch}
+    .fe-proj-main{display:flex;flex-direction:column;justify-content:center;min-width:0;padding-right:8px}
     .fe-proj-label{font-size:15px;font-weight:800;letter-spacing:.14em;color:#9fb0c3;margin-bottom:4px}
     .fe-proj-name{font-size:clamp(38px,5vw,68px);line-height:1.02;font-weight:950;color:#fff;letter-spacing:-.03em;overflow-wrap:anywhere}
-    .fe-proj-meta{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-top:22px}
-    .fe-proj-box{background:#fff;border-radius:12px;padding:13px 18px;min-height:72px;display:flex;flex-direction:column;justify-content:center}
+    .fe-proj-box{background:#fff;border-radius:12px;padding:13px 18px;min-height:86px;display:flex;flex-direction:column;justify-content:center}
     .fe-proj-box span{font-size:13px;font-weight:800;letter-spacing:.09em;color:#64748b}
     .fe-proj-box strong{font-size:clamp(22px,2.5vw,34px);line-height:1.1;color:#071a2f;margin-top:3px}
     .fe-proj-bids-title{font-size:18px;font-weight:900;letter-spacing:.08em;color:#071a2f;margin:6px 0 8px}
@@ -33440,7 +33441,8 @@ def stile_proiezione_banditore_v165():
     .fe-proj-bids td:first-child{border-radius:10px 0 0 10px}.fe-proj-bids td:last-child{border-radius:0 10px 10px 0}
     .fe-proj-bids .fe-bid-amount{font-size:clamp(27px,3vw,40px);font-weight:950}
     .fe-proj-bids .fe-no-bids{text-align:center!important;color:#64748b;font-weight:700;padding:20px}
-    @media(max-width:700px){.fe-proj-meta{grid-template-columns:1fr}.fe-proj-player{padding:18px}.fe-proj-bids td{padding:10px 8px}.fe-proj-bids th{padding-left:8px}}
+    @media(max-width:900px){.fe-proj-row{grid-template-columns:1fr 1fr}.fe-proj-main{grid-column:1 / -1}.fe-proj-player{padding:18px}}
+    @media(max-width:700px){.fe-proj-row{grid-template-columns:1fr}.fe-proj-main{grid-column:auto}.fe-proj-bids td{padding:10px 8px}.fe-proj-bids th{padding-left:8px}}
     </style>
     """, unsafe_allow_html=True)
 
