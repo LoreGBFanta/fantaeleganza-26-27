@@ -28516,7 +28516,8 @@ def calcola_vincoli_offerta_team_multilega(
     league_id,
     lot_id,
     team_id,
-    user_id=None
+    user_id=None,
+    _conn=None
 ):
     import math
 
@@ -28528,7 +28529,8 @@ def calcola_vincoli_offerta_team_multilega(
         else (st.session_state.get("auth_user_id") or 0)
     )
 
-    conn = _portal_raw_connection()
+    _own_conn = _conn is None
+    conn = _conn if _conn is not None else _portal_raw_connection()
     cur = conn.cursor()
     try:
         cur.execute("""
@@ -28743,7 +28745,8 @@ def calcola_vincoli_offerta_team_multilega(
             "giocatore_portiere": giocatore_portiere,
         }
     finally:
-        _portal_close(conn)
+        if _own_conn:
+            _portal_close(conn)
 
 
 def verifica_offerta_team_multilega(
@@ -28751,7 +28754,8 @@ def verifica_offerta_team_multilega(
     lot_id,
     team_id,
     amount,
-    user_id=None
+    user_id=None,
+    _conn=None
 ):
     amount = round(float(amount), 2)
 
@@ -28759,7 +28763,7 @@ def verifica_offerta_team_multilega(
         raise ValueError("L'offerta deve essere superiore a zero.")
 
     info = calcola_vincoli_offerta_team_multilega(
-        league_id, lot_id, team_id, user_id
+        league_id, lot_id, team_id, user_id, _conn=_conn
     )
 
     if not info.get("can_bid", False):
@@ -28820,15 +28824,16 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
     assicura_schema_timer_v129(league_id)
     user_id = int(st.session_state.get("auth_user_id") or 0)
 
-    # Validazione completa di membership, budget, rosa e regole.
-    info = verifica_offerta_team_multilega(
-        league_id, lot_id, team_id, amount, user_id
-    )
-
+    # V181 - una sola connessione remota per validazione + scrittura del bid.
+    # Evita un secondo handshake/checkout DB a ogni click di offerta.
     conn = _portal_raw_connection()
     cur = conn.cursor()
 
     try:
+        info = verifica_offerta_team_multilega(
+            league_id, lot_id, team_id, amount, user_id, _conn=conn
+        )
+
         # Snapshot autorevole immediatamente prima della scrittura.
         cur.execute("""
             SELECT
@@ -28882,6 +28887,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
                     current_bid IS NULL
                     OR current_bid<=?
                   )
+            RETURNING current_bid,current_team_id,COALESCE(version,0),stato
         """, (
             amount,
             team_id,
@@ -28890,14 +28896,6 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             version,
             current_bid
         ))
-
-        # rowcount può non essere affidabile su tutti i driver: rileggiamo.
-        cur.execute("""
-            SELECT current_bid,current_team_id,COALESCE(version,0),stato
-            FROM auction_lots
-            WHERE id=? AND league_id=?
-            LIMIT 1
-        """, (lot_id, league_id))
         check = cur.fetchone()
 
         if (
@@ -30850,10 +30848,20 @@ def reset_assegnazioni_asta_v179(league_id):
         # Nessuna vecchia esclusione deve interferire con il nuovo ciclo d'asta.
         cur.execute("DELETE FROM auction_history_exclusions WHERE league_id=?", (league_id,))
 
-        cur.execute("SELECT id FROM teams WHERE league_id=? AND is_active=1", (league_id,))
-        team_ids = [int(x[0]) for x in (cur.fetchall() or [])]
-        for team_id in team_ids:
-            _ricalcola_budget_team_v147(cur, league_id, team_id)
+        # V181 - dopo un reset globale non serve ricalcolare una squadra alla volta:
+        # tutte le rose sono vuote, quindi valore acquisti e spesa sono entrambi zero.
+        cur.execute("""
+            UPDATE team_budgets
+            SET valore_acquisti=0,
+                spesa_effettiva=0,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=?
+        """, (league_id,))
+        cur.execute(
+            "SELECT COUNT(*) FROM teams WHERE league_id=? AND is_active=1",
+            (league_id,)
+        )
+        squadre_ricalcolate = int((cur.fetchone() or (0,))[0] or 0)
 
         cur.execute("""
             INSERT INTO audit_log (
@@ -30865,7 +30873,7 @@ def reset_assegnazioni_asta_v179(league_id):
                 "assegnazioni_resettate": numero_assegnazioni,
                 "valore_assegnazioni": valore_assegnazioni,
                 "storico_chiamate_azzerato": True,
-                "squadre_ricalcolate": len(team_ids)
+                "squadre_ricalcolate": squadre_ricalcolate
             }, ensure_ascii=False)
         ))
         conn.commit()
@@ -31830,7 +31838,8 @@ def snapshot_banditore_live_v133(league_id):
 
 def snapshot_lotto_live_v132(league_id, team_id=None):
     """
-    V132 - snapshot LIVE ottimizzato.
+    V181 - snapshot LIVE ottimizzato: statistiche rosa calcolate solo
+    per la squadra collegata, non per tutte le squadre a ogni refresh.
 
     Una sola query remota restituisce:
     - lotto e giocatore corrente;
@@ -31913,6 +31922,7 @@ def snapshot_lotto_live_v132(league_id, team_id=None):
                  AND pc.player_id=lp.player_id
                 WHERE t.league_id=?
                   AND t.is_active=1
+                  AND t.id=?
                 GROUP BY
                     t.id,tb.budget_impostato,lr.budget_iniziale
             )
@@ -31974,6 +31984,7 @@ def snapshot_lotto_live_v132(league_id, team_id=None):
             league_id,
             league_id,
             league_id,
+            team_id,
             league_id,
             league_id,
             league_id
