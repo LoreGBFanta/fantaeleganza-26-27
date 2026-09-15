@@ -28645,15 +28645,12 @@ def calcola_vincoli_offerta_team_multilega(
 
         riserva_minima = float(slot_residui)
 
-        if budget <= soglia:
-            valore_totale_massimo = budget
-        else:
-            valore_totale_massimo = (
-                soglia + (budget - soglia) / moltiplicatore
-            )
-
-        massimo = valore_totale_massimo - valore_acquisti - riserva_minima
-        # V173 - l'offerta massima è sempre un credito intero, arrotondato per difetto.
+        # V174 - il massimo spendibile usa i crediti reali residui della squadra.
+        # Formula: budget - acquisti già effettuati - 1 credito per ogni
+        # slot che resterà da riempire DOPO l'eventuale acquisto corrente.
+        # Soglia/moltipl. non devono ridurre artificialmente il plafond d'asta.
+        budget_residuo_reale = float(budget) - float(valore_acquisti)
+        massimo = budget_residuo_reale - riserva_minima
         massimo = float(max(0, math.floor(massimo + 1e-9)))
 
         can_bid = True
@@ -28741,13 +28738,11 @@ def verifica_offerta_team_multilega(
     valore_con_riserva = round(
         valore_con_offerta + float(info["riserva_minima"]), 2
     )
-    spesa_con_riserva = _spesa_effettiva_regole(
-        valore_con_riserva,
-        float(info["soglia"]),
-        float(info["moltiplicatore"])
-    )
+    # V174 - stessa regola usata dal valore mostrato a video: i crediti
+    # impegnati + la riserva minima non possono superare il budget reale.
+    spesa_con_riserva = valore_con_riserva
 
-    if spesa_con_riserva > float(info["budget"]) + 1e-9:
+    if valore_con_riserva > float(info["budget"]) + 1e-9:
         raise ValueError(
             "Budget insufficiente considerando la riserva minima "
             "per completare la rosa."
@@ -31826,19 +31821,11 @@ def snapshot_lotto_live_v132(league_id, team_id=None):
             # Conserva almeno 1 credito per ogni slot successivo.
             riserva = float(slot_dopo)
 
-            if budget <= soglia:
-                valore_totale_massimo = budget
-            else:
-                valore_totale_massimo = (
-                    soglia + (budget - soglia) / moltiplicatore
-                )
-
-            # V173 - l'offerta massima è sempre un credito intero, arrotondato per difetto.
+            # V174 - massimo spendibile = budget reale residuo - riserva slot.
+            budget_residuo_reale = float(budget) - float(valore)
             massimo = float(max(
                 0,
-                math.floor(
-                    valore_totale_massimo - valore - riserva + 1e-9
-                )
+                math.floor(budget_residuo_reale - riserva + 1e-9)
             ))
 
             spesa = float(
@@ -34113,19 +34100,9 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
 
         riserva_minima = float(slot_residui)
 
-        if budget <= soglia:
-            valore_totale_massimo = budget
-        else:
-            valore_totale_massimo = (
-                soglia + (budget - soglia) / moltiplicatore
-            )
-
-        massimo = (
-            valore_totale_massimo
-            - valore_acquisti
-            - riserva_minima
-        )
-        # V173 - l'offerta massima è sempre un credito intero, arrotondato per difetto.
+        # V174 - massimo spendibile coerente con il budget reale della squadra.
+        budget_residuo_reale = float(budget) - float(valore_acquisti)
+        massimo = budget_residuo_reale - riserva_minima
         massimo = float(max(0, math.floor(massimo + 1e-9)))
 
         can_bid = True
