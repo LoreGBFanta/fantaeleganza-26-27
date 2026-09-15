@@ -26383,7 +26383,7 @@ def assicura_schema_storico_asta_v147(league_id):
     """
     league_id = int(league_id)
 
-    # V163 - schema check una sola volta per sessione/lega.
+    # V164 - schema check una sola volta per sessione/lega.
     # Le CREATE/PRAGMA su DB remoto erano una delle principali cause di latenza
     # dello Storico Asta. Il suffisso versione forza comunque una verifica dopo
     # ogni aggiornamento strutturale del codice.
@@ -26602,30 +26602,20 @@ def contatore_chiamati_v147(league_id):
 
 
 def _storico_asta_db_v156(league_id):
+    """V164: query storico minimale, senza scansione/window di auction_lots."""
     league_id = int(league_id)
     assicura_schema_storico_asta_v147(league_id)
 
     conn = _portal_raw_connection()
     try:
-        df = pd.read_sql_query("""
-            WITH ranked_lots AS (
-                SELECT
-                    league_id,player_id,UPPER(COALESCE(stato,'')) AS stato,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY league_id,player_id
-                        ORDER BY id DESC
-                    ) AS rn
-                FROM auction_lots
-                WHERE league_id=?
-            )
+        return pd.read_sql_query("""
             SELECT
                 cp.player_id AS "__PLAYER_ID",
                 c.nome AS "NOME GIOCATORE",
                 c.ruolo_mantra AS "RUOLO",
                 c.squadra AS "SQUADRA",
                 lp.prezzo_assegnazione AS "PREZZO",
-                COALESCE(t.nome,'—') AS "ASSEGNATO A",
-                COALESCE(rl.stato,'') AS "__LOT_STATE"
+                COALESCE(t.nome,'—') AS "ASSEGNATO A"
             FROM auction_called_players cp
             JOIN league_player_catalog c
               ON c.league_id=cp.league_id
@@ -26636,10 +26626,6 @@ def _storico_asta_db_v156(league_id):
             LEFT JOIN teams t
               ON t.league_id=cp.league_id
              AND t.id=lp.assigned_team_id
-            LEFT JOIN ranked_lots rl
-              ON rl.league_id=cp.league_id
-             AND rl.player_id=cp.player_id
-             AND rl.rn=1
             WHERE cp.league_id=?
               AND COALESCE(cp.active,1)=1
               AND NOT EXISTS (
@@ -26649,12 +26635,9 @@ def _storico_asta_db_v156(league_id):
                     AND hx.player_id=cp.player_id
               )
             ORDER BY cp.called_at DESC, cp.id DESC
-        """, conn, params=(league_id, league_id))
+        """, conn, params=(league_id,))
     finally:
         _portal_close(conn)
-
-    return df
-
 
 def _squadre_storico_db_v156(league_id):
     league_id = int(league_id)
@@ -26677,7 +26660,26 @@ def _squadre_storico_db_v156(league_id):
 
 
 
-def storico_asta_v147(league_id, ttl=4.0):
+def totale_giocatori_lega_fast_v164(league_id, ttl=300.0):
+    """Totale listone quasi-statico: una query al massimo ogni 5 minuti/sessione."""
+    league_id = int(league_id)
+    key = f"_v164_total_catalog_{league_id}"
+    now = time.monotonic()
+    cached = st.session_state.get(key)
+    if isinstance(cached, dict) and now - float(cached.get("ts", 0)) < float(ttl):
+        return int(cached.get("value", 0))
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM league_player_catalog WHERE league_id=?", (league_id,))
+        value = int((cur.fetchone() or (0,))[0] or 0)
+    finally:
+        _portal_close(conn)
+    st.session_state[key] = {"ts": now, "value": value}
+    return value
+
+
+def storico_asta_v147(league_id, ttl=15.0):
     league_id = int(league_id)
     key = f"_v156_history_{league_id}"
     now = time.monotonic()
@@ -26689,7 +26691,7 @@ def storico_asta_v147(league_id, ttl=4.0):
     return df
 
 
-def squadre_storico_v147(league_id, ttl=30.0):
+def squadre_storico_v147(league_id, ttl=300.0):
     league_id = int(league_id)
     key = f"_v156_history_teams_{league_id}"
     now = time.monotonic()
@@ -27402,29 +27404,22 @@ def render_storico_asta_v147():
             st.session_state.pop("v151_storico_error")
         )
 
-    # V159 - Il contatore avanzamento asta appartiene allo Storico Asta.
-    try:
-        _chiamati, _totale, _pct = contatore_chiamati_fast_v156(league_id)
-        _cc1, _cc2 = st.columns([1.2, 3.8])
-        with _cc1:
-            st.metric(
-                "CHIAMATI / TOTALE",
-                f"{_chiamati} / {_totale}"
-            )
-        with _cc2:
-            st.markdown(
-                f"**Chiamata completa al {_pct:g}%**"
-            )
-            st.progress(
-                min(1.0, max(0.0, _pct / 100.0))
-            )
-    except Exception:
-        # Nessun elemento UI aggiuntivo nel Banditore in caso di errore del contatore.
-        pass
-
+    # V164 PERFORMANCE MAX: una sola lettura autorevole dello storico.
+    # Il numero dei chiamati coincide con le righe visibili dello storico, quindi
+    # non eseguiamo piu' una seconda COUNT remota ad ogni apertura pagina.
     try:
         storico = storico_asta_v147(league_id)
         teams = squadre_storico_v147(league_id)
+        _chiamati = int(len(storico))
+        _totale = totale_giocatori_lega_fast_v164(league_id)
+        _pct = round((_chiamati / _totale) * 100, 1) if _totale > 0 else 0.0
+
+        _cc1, _cc2 = st.columns([1.2, 3.8])
+        with _cc1:
+            st.metric("CHIAMATI / TOTALE", f"{_chiamati} / {_totale}")
+        with _cc2:
+            st.markdown(f"**Chiamata completa al {_pct:g}%**")
+            st.progress(min(1.0, max(0.0, _pct / 100.0)))
     except Exception as errore:
         st.error("Impossibile caricare lo storico asta: " + str(errore))
         return
@@ -30799,10 +30794,17 @@ def tipo_asta_lega_multilega(league_id):
 def inizializza_stato_modalita_asta(league_id):
     """
     Stato persistente minimo necessario per RANDOM / ALFABETICO / CHIAMATA / DRAFT.
-    Non sostituisce ancora il motore LIVE, ma evita che la logica futura venga
-    costruita assumendo una sola tipologia d'asta.
+
+    V164 PERFORMANCE MAX: la migrazione DDL viene eseguita una sola volta per
+    sessione/lega. Prima questa funzione faceva CREATE + ALTER + INSERT + COMMIT
+    ad ogni apertura/rerender di Gestione Asta quando non c'era un lotto attivo.
+    Su DB cloud era uno dei costi piu' alti dell'interfaccia Banditore.
     """
     league_id = int(league_id)
+    _guard = f"_v164_auction_mode_schema_ready_{league_id}"
+    if st.session_state.get(_guard):
+        return
+
     conn = _portal_raw_connection()
     cur = conn.cursor()
     try:
@@ -30836,6 +30838,7 @@ def inizializza_stato_modalita_asta(league_id):
             ON CONFLICT(league_id) DO NOTHING
         """, (league_id,))
         conn.commit()
+        st.session_state[_guard] = True
     finally:
         _portal_close(conn)
 
@@ -33362,9 +33365,6 @@ def render_banditore_asta():
         else:
             st.warning("Chiusura del lotto in corso.")
 
-        elapsed = time.perf_counter() - t0
-        if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
-            st.caption(f"⏱ Banditore: {elapsed:.2f} s")
         return
 
     # Nessun lotto attivo: carica solo ciò che serve al prossimo.
@@ -35014,17 +35014,6 @@ def render_navigazione_e_pagina():
 
         _t_banditore_route = time.perf_counter()
         render_banditore_asta()
-        _banditore_route_elapsed = (
-            time.perf_counter() - _t_banditore_route
-        )
-        if (
-            "ADMIN" in RUOLI_ATTIVI
-            and _banditore_route_elapsed >= 0.75
-        ):
-            st.caption(
-                f"⏱ Apertura Banditore: "
-                f"{_banditore_route_elapsed:.2f} s"
-            )
 
     elif sezione == "STORICO ASTA":
 
