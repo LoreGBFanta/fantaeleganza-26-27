@@ -31332,132 +31332,79 @@ def snapshot_banditore_multilega(league_id):
 
 
 def snapshot_banditore_live_v133(league_id):
-    """
-    V133 - snapshot Banditore minimale.
-
-    Nessun calcolo rosa/budget/portieri:
-    durante un lotto attivo il Banditore legge soltanto lotto, giocatore,
-    migliore offerta e migliore offerta di ogni squadra.
-    """
+    """V165 - snapshot proiezione Banditore: lotto + ultime 3 offerte reali."""
     league_id = int(league_id)
-
     conn = _portal_raw_connection()
     cur = conn.cursor()
     try:
+        # Query minimale sul lotto corrente: nessun riepilogo per tutte le squadre.
         cur.execute("""
-            WITH current_lot AS (
-                SELECT
-                    l.id AS lot_id,
-                    l.player_id,
-                    l.stato,
-                    l.current_bid,
-                    l.current_team_id,
-                    COALESCE(l.bid_count,0) AS bid_count,
-                    COALESCE(l.version,0) AS version
-                FROM auction_sessions s
-                JOIN auction_lots l
-                  ON l.id=s.current_lot_id
-                 AND l.league_id=s.league_id
-                WHERE s.league_id=?
-                  AND l.stato IN ('OPEN','CLOSING')
-                LIMIT 1
-            ),
-            team_bids AS (
-                SELECT
-                    b.team_id,
-                    MAX(b.amount) AS amount
-                FROM bids b
-                JOIN current_lot cl ON cl.lot_id=b.lot_id
-                WHERE b.league_id=?
-                GROUP BY b.team_id
-            )
             SELECT
-                cl.lot_id,
-                cl.player_id,
-                cl.stato,
-                cl.current_bid,
-                cl.current_team_id,
-                cl.bid_count,
-                cl.version,
+                l.id,
+                l.player_id,
+                l.stato,
+                l.current_bid,
+                l.current_team_id,
+                COALESCE(l.bid_count,0),
+                COALESCE(l.version,0),
                 COALESCE(pc.nome,''),
                 COALESCE(pc.squadra,''),
                 COALESCE(pc.ruolo_mantra,''),
-                COALESCE(pc.fvm_mantra,pc.fvm,0),
-                COALESCE(
-                    pc.quotazione_attuale_mantra,
-                    pc.quotazione_attuale,
-                    0
-                ),
-                t.id,
-                COALESCE(t.nome,''),
-                tb.amount
-            FROM current_lot cl
+                COALESCE(t.nome,'')
+            FROM auction_sessions s
+            JOIN auction_lots l
+              ON l.id=s.current_lot_id
+             AND l.league_id=s.league_id
             JOIN league_player_catalog pc
-              ON pc.league_id=?
-             AND pc.player_id=cl.player_id
-            JOIN teams t
-              ON t.league_id=?
-             AND t.is_active=1
-            LEFT JOIN team_bids tb
-              ON tb.team_id=t.id
-            ORDER BY
-                CASE WHEN tb.amount IS NULL THEN 1 ELSE 0 END,
-                tb.amount DESC,
-                t.posizione,
-                t.id
-        """, (
-            league_id,
-            league_id,
-            league_id,
-            league_id
-        ))
-
-        rows = cur.fetchall() or []
-        if not rows:
+              ON pc.league_id=l.league_id
+             AND pc.player_id=l.player_id
+            LEFT JOIN teams t
+              ON t.id=l.current_team_id
+             AND t.league_id=l.league_id
+            WHERE s.league_id=?
+              AND l.stato IN ('OPEN','CLOSING')
+            LIMIT 1
+        """, (league_id,))
+        r = cur.fetchone()
+        if not r:
             return None
 
-        r0 = rows[0]
-        current_team_id = int(r0[4]) if r0[4] is not None else None
-        current_team = ""
+        lot_id = int(r[0])
+        # Le ultime tre offerte effettivamente inviate, dalla più recente.
+        cur.execute("""
+            SELECT COALESCE(t.nome,''), b.amount, b.created_at
+            FROM bids b
+            JOIN teams t
+              ON t.id=b.team_id
+             AND t.league_id=b.league_id
+            WHERE b.league_id=? AND b.lot_id=?
+            ORDER BY b.id DESC
+            LIMIT 3
+        """, (league_id, lot_id))
         offerte = []
-
-        for r in rows:
-            tid = int(r[12])
-            nome = str(r[13] or "")
-            amount = float(r[14]) if r[14] is not None else None
-            if current_team_id is not None and tid == current_team_id:
-                current_team = nome
+        for br in (cur.fetchall() or []):
             offerte.append({
-                "team_id": tid,
-                "Squadra": nome,
-                "Offerta": amount,
-                "Migliore": (
-                    "🏆"
-                    if current_team_id is not None and tid == current_team_id
-                    else ""
-                )
+                "Squadra": str(br[0] or ""),
+                "Offerta": float(br[1] or 0),
+                "Orario": str(br[2] or ""),
             })
 
         return {
-            "lot_id": int(r0[0]),
-            "player_id": int(r0[1]),
-            "stato": str(r0[2] or "").upper(),
-            "current_bid": float(r0[3]) if r0[3] is not None else None,
-            "current_team_id": current_team_id,
-            "current_team": current_team,
-            "bid_count": int(r0[5] or 0),
-            "version": int(r0[6] or 0),
-            "nome": str(r0[7] or ""),
-            "squadra": str(r0[8] or ""),
-            "ruolo_mantra": str(r0[9] or ""),
-            "fvm": float(r0[10] or 0),
-            "quotazione": float(r0[11] or 0),
+            "lot_id": lot_id,
+            "player_id": int(r[1]),
+            "stato": str(r[2] or "").upper(),
+            "current_bid": float(r[3]) if r[3] is not None else None,
+            "current_team_id": int(r[4]) if r[4] is not None else None,
+            "current_team": str(r[10] or ""),
+            "bid_count": int(r[5] or 0),
+            "version": int(r[6] or 0),
+            "nome": str(r[7] or ""),
+            "squadra": str(r[8] or ""),
+            "ruolo_mantra": str(r[9] or ""),
             "offerte": offerte,
         }
-
     finally:
         _portal_close(conn)
-
 
 
 def snapshot_lotto_live_v132(league_id, team_id=None):
@@ -33008,37 +32955,51 @@ def callback_chiudi_assegna_v133(
 
 
 def render_card_giocatore_live_v140(live):
-    """Card giocatore live autonoma e senza query DB."""
-    nome = html.escape(str(live.get("nome") or ""))
-    squadra = html.escape(str(live.get("squadra") or ""))
-    ruolo = html.escape(
-        str(
-            live.get("ruolo_mantra")
-            or live.get("ruolo_classico")
-            or ""
-        )
+    """V165 - testata ad alta leggibilità pensata per TV/proiettore."""
+    nome = html.escape(str(live.get("nome") or "—"))
+    squadra = html.escape(str(live.get("squadra") or "—"))
+    ruolo = html.escape(str(live.get("ruolo_mantra") or "—"))
+    st.markdown(
+        f"""
+        <div class="fe-proj-player">
+          <div class="fe-proj-main">
+            <div class="fe-proj-label">GIOCATORE</div>
+            <div class="fe-proj-name">{nome}</div>
+          </div>
+          <div class="fe-proj-meta">
+            <div class="fe-proj-box"><span>SQUADRA</span><strong>{squadra}</strong></div>
+            <div class="fe-proj-box"><span>RUOLO</span><strong>{ruolo}</strong></div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    fvm = float(live.get("fvm") or 0)
-    quotazione = float(live.get("quotazione") or 0)
+
+
+def render_ultime_offerte_proiezione_v165(live):
+    """Ultime 3 offerte in formato grande, senza dataframe/toolbar Streamlit."""
+    rows = []
+    for bid in (live.get("offerte") or [])[:3]:
+        raw_time = str(bid.get("Orario") or "")
+        # SQLite CURRENT_TIMESTAMP -> YYYY-MM-DD HH:MM:SS: sul proiettore basta HH:MM:SS.
+        ora = raw_time.split(" ")[-1][:8] if raw_time else "—"
+        squadra = html.escape(str(bid.get("Squadra") or "—"))
+        offerta = float(bid.get("Offerta") or 0)
+        rows.append(
+            f'<tr><td>{squadra}</td><td class="fe-bid-amount">{offerta:g}</td><td>{html.escape(ora)}</td></tr>'
+        )
+    if not rows:
+        rows.append('<tr><td colspan="3" class="fe-no-bids">In attesa della prima offerta</td></tr>')
 
     st.markdown(
-        (
-            '<div style="background:#fff;border:1px solid #dbe2ea;'
-            'border-radius:14px;padding:16px 18px;margin:4px 0 12px 0;'
-            'box-shadow:0 2px 8px rgba(15,23,42,.05)">'
-            '<div style="font-size:24px;font-weight:900;color:#071a2f">'
-            + nome +
-            '</div>'
-            '<div style="margin-top:5px;color:#64748b;font-size:14px">'
-            + squadra +
-            (' · ' + ruolo if ruolo else '') +
-            '</div>'
-            '<div style="margin-top:10px;color:#071a2f;font-size:13px">'
-            '<b>FVM:</b> ' + f'{fvm:g}' +
-            ' &nbsp; · &nbsp; <b>Quotazione:</b> ' + f'{quotazione:g}' +
-            '</div></div>'
-        ),
-        unsafe_allow_html=True
+        """
+        <div class="fe-proj-bids-title">ULTIME OFFERTE</div>
+        <table class="fe-proj-bids">
+          <thead><tr><th>NOME SQUADRA</th><th>OFFERTA</th><th>ORARIO OFFERTA</th></tr></thead>
+          <tbody>""" + "".join(rows) + """</tbody>
+        </table>
+        """,
+        unsafe_allow_html=True,
     )
 
 
@@ -33269,6 +33230,30 @@ def rerun_banditore_fragment_v156():
         st.rerun()
 
 
+def stile_proiezione_banditore_v165():
+    st.markdown(r"""
+    <style>
+    .fe-proj-player{background:#071a2f;border-radius:18px;padding:24px 28px;margin:8px 0 22px;box-shadow:0 6px 18px rgba(7,26,47,.18)}
+    .fe-proj-label{font-size:15px;font-weight:800;letter-spacing:.14em;color:#9fb0c3;margin-bottom:4px}
+    .fe-proj-name{font-size:clamp(38px,5vw,68px);line-height:1.02;font-weight:950;color:#fff;letter-spacing:-.03em;overflow-wrap:anywhere}
+    .fe-proj-meta{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-top:22px}
+    .fe-proj-box{background:#fff;border-radius:12px;padding:13px 18px;min-height:72px;display:flex;flex-direction:column;justify-content:center}
+    .fe-proj-box span{font-size:13px;font-weight:800;letter-spacing:.09em;color:#64748b}
+    .fe-proj-box strong{font-size:clamp(22px,2.5vw,34px);line-height:1.1;color:#071a2f;margin-top:3px}
+    .fe-proj-bids-title{font-size:18px;font-weight:900;letter-spacing:.08em;color:#071a2f;margin:6px 0 8px}
+    table.fe-proj-bids{width:100%;border-collapse:separate;border-spacing:0 7px;table-layout:fixed}
+    .fe-proj-bids th{font-size:14px;letter-spacing:.06em;text-align:left;color:#64748b;padding:0 16px 4px}
+    .fe-proj-bids th:nth-child(2),.fe-proj-bids td:nth-child(2){width:22%;text-align:center}
+    .fe-proj-bids th:nth-child(3),.fe-proj-bids td:nth-child(3){width:25%;text-align:center}
+    .fe-proj-bids td{background:#f4f7fa;padding:14px 16px;font-size:clamp(20px,2vw,29px);font-weight:800;color:#071a2f}
+    .fe-proj-bids td:first-child{border-radius:10px 0 0 10px}.fe-proj-bids td:last-child{border-radius:0 10px 10px 0}
+    .fe-proj-bids .fe-bid-amount{font-size:clamp(27px,3vw,40px);font-weight:950}
+    .fe-proj-bids .fe-no-bids{text-align:center!important;color:#64748b;font-weight:700;padding:20px}
+    @media(max-width:700px){.fe-proj-meta{grid-template-columns:1fr}.fe-proj-player{padding:18px}.fe-proj-bids td{padding:10px 8px}.fe-proj-bids th{padding-left:8px}}
+    </style>
+    """, unsafe_allow_html=True)
+
+
 def render_banditore_asta():
     if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
         st.error("Accedi con il livello BANDITORE per usare Gestione Asta.")
@@ -33278,6 +33263,7 @@ def render_banditore_asta():
         st.error("Questa sezione è riservata a Banditore o Admin.")
         return
 
+    stile_proiezione_banditore_v165()
     league_id = int(st.session_state.get("ml_league_id"))
     assicura_schema_storico_asta_v147(league_id)
     t0 = time.perf_counter()
@@ -33313,21 +33299,7 @@ def render_banditore_asta():
 
     if live is not None:
         render_card_giocatore_live_v140(live)
-
-        if live["current_bid"] is None:
-            st.info("Nessuna squadra ha ancora effettuato un'offerta.")
-        else:
-            st.success(
-                f'🏆 Migliore offerta: **{live["current_bid"]:g}** crediti · '
-                f'**{live["current_team"]}**'
-            )
-
-        st.markdown("#### Offerte per squadra")
-        st.dataframe(
-            _tabella_offerte_live_v132(live),
-            use_container_width=True,
-            hide_index=True
-        )
+        render_ultime_offerte_proiezione_v165(live)
 
         if live["stato"] == "OPEN":
             if live["current_bid"] is None:
@@ -33344,12 +33316,6 @@ def render_banditore_asta():
                     )
                 )
             else:
-                st.caption(
-                    "La squadra aggiudicataria deve inserire nell'app "
-                    "l'offerta conclusiva. Quando la vedi come migliore offerta, "
-                    "conferma l'aggiudicazione."
-                )
-
                 st.button(
                     "✅ CONFERMA AGGIUDICAZIONE E CHIUDI LOTTO",
                     type="primary",
