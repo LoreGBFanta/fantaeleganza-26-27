@@ -1042,6 +1042,8 @@ def crea_lega_da_portale(
                 min_portieri,
                 budget_iniziale,
                 incremento_minimo,
+                tipo_incremento_asta,
+                incrementi_scalari_json,
                 soglia_budget,
                 moltiplicatore_oltre_soglia,
                 tipo_asta,
@@ -1052,7 +1054,7 @@ def crea_lega_da_portale(
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """, (
             league_id,
@@ -1081,6 +1083,8 @@ def crea_lega_da_portale(
                     "incremento_minimo"
                 ]
             ),
+            str(dati_lega.get("tipo_incremento_asta") or "FISSO"),
+            json.dumps(dati_lega.get("incrementi_scalari") or [], ensure_ascii=False),
             float(
                 dati_lega[
                     "soglia_budget"
@@ -1454,6 +1458,107 @@ INCREMENTI_ASTA_AMMESSI_V186 = [
     200.00, 500.00, 1000.00, 2000.00, 5000.00
 ]
 
+def _normalizza_incrementi_scalari_v187(tipo, incremento_base, fasce):
+    tipo = str(tipo or "FISSO").strip().upper()
+    if tipo not in ("FISSO", "SCALARE"):
+        tipo = "FISSO"
+    base = float(incremento_base or 1.0)
+    if not any(abs(base-x) < 1e-9 for x in INCREMENTI_ASTA_AMMESSI_V186):
+        raise ValueError("Incremento iniziale non valido.")
+    if tipo == "FISSO":
+        return "FISSO", base, []
+    pulite = []
+    for item in (fasce or []):
+        soglia = float(item.get("soglia", 0))
+        incremento = float(item.get("incremento", 0))
+        if soglia <= 0:
+            raise ValueError("Ogni soglia dell'incremento scalare deve essere maggiore di zero.")
+        if not any(abs(incremento-x) < 1e-9 for x in INCREMENTI_ASTA_AMMESSI_V186):
+            raise ValueError("Incremento scalare non valido.")
+        pulite.append({"soglia": soglia, "incremento": incremento})
+    pulite.sort(key=lambda x: x["soglia"])
+    if not pulite:
+        raise ValueError("L'incremento scalare richiede almeno una soglia.")
+    if len({x["soglia"] for x in pulite}) != len(pulite):
+        raise ValueError("Le soglie dell'incremento scalare devono essere diverse.")
+    return "SCALARE", base, pulite
+
+
+def _incremento_corrente_v187(current_bid, incremento_base, tipo, fasce_json):
+    """Incremento da applicare alla prossima offerta in base al prezzo corrente del lotto."""
+    base = float(incremento_base or 1.0)
+    if str(tipo or "FISSO").upper() != "SCALARE":
+        return base
+    try:
+        fasce = json.loads(fasce_json or "[]") if isinstance(fasce_json, str) else (fasce_json or [])
+    except Exception:
+        fasce = []
+    corrente = float(current_bid or 0)
+    incremento = base
+    for fascia in sorted(fasce, key=lambda x: float(x.get("soglia", 0))):
+        if corrente >= float(fascia.get("soglia", 0)):
+            incremento = float(fascia.get("incremento", incremento))
+        else:
+            break
+    return incremento
+
+
+def _render_incremento_asta_v187(prefix, tipo_default="FISSO", base_default=1.0, fasce_default=None):
+    """UI dinamica: FISSO oppure SCALARE con incremento iniziale + soglie."""
+    tipo_default = str(tipo_default or "FISSO").upper()
+    tipo = st.radio(
+        "Tipo incremento minimo asta",
+        ["FISSO", "SCALARE"],
+        index=1 if tipo_default == "SCALARE" else 0,
+        horizontal=True,
+        key=f"{prefix}_tipo_inc",
+        help=(
+            "FISSO: lo stesso incremento vale per tutta l'asta. "
+            "SCALARE: l'incremento cambia quando l'offerta corrente raggiunge le soglie impostate."
+        )
+    )
+    base = st.selectbox(
+        "Incremento minimo asta" if tipo == "FISSO" else "Incremento iniziale",
+        INCREMENTI_ASTA_AMMESSI_V186,
+        index=_indice_incremento_asta_v186(base_default),
+        format_func=lambda x: f"{x:.2f}",
+        key=f"{prefix}_base_inc"
+    )
+    fasce = []
+    if tipo == "SCALARE":
+        defaults = fasce_default or [{"soglia": 50.0, "incremento": 2.0}]
+        n = st.number_input(
+            "Numero soglie incremento",
+            min_value=1, max_value=8, value=max(1, min(8, len(defaults))), step=1,
+            key=f"{prefix}_n_soglie"
+        )
+        st.caption("Al raggiungimento di ogni soglia, la prossima offerta usa l'incremento associato.")
+        for i in range(int(n)):
+            d = defaults[i] if i < len(defaults) else {
+                "soglia": float((i+1)*50),
+                "incremento": float(base)
+            }
+            c1,c2=st.columns(2)
+            with c1:
+                soglia=st.number_input(
+                    f"Soglia offerta {i+1}",
+                    min_value=0.10, max_value=1000000.0,
+                    value=max(0.10,float(d.get("soglia",(i+1)*50))),
+                    step=1.0, key=f"{prefix}_soglia_{i}"
+                )
+            with c2:
+                inc0=float(d.get("incremento",base))
+                incremento=st.selectbox(
+                    f"Incremento oltre soglia {i+1}",
+                    INCREMENTI_ASTA_AMMESSI_V186,
+                    index=_indice_incremento_asta_v186(inc0),
+                    format_func=lambda x: f"{x:.2f}",
+                    key=f"{prefix}_inc_{i}"
+                )
+            fasce.append({"soglia":float(soglia),"incremento":float(incremento)})
+    return tipo, float(base), fasce
+
+
 TIPI_ASTA_FANTA_LIVE = [
     "A CHIAMATA",
     "ALFABETICO",
@@ -1505,6 +1610,9 @@ def inizializza_schema_regolamento_avanzato():
         # V182 - configurazione finanziaria esplicita della lega
         ("budget_illimitato","INTEGER NOT NULL DEFAULT 0"),
         ("fair_play_finanziario","INTEGER NOT NULL DEFAULT 0"),
+        # V187 - incremento asta fisso oppure scalare per soglie di offerta
+        ("tipo_incremento_asta","TEXT NOT NULL DEFAULT 'FISSO'"),
+        ("incrementi_scalari_json","TEXT NOT NULL DEFAULT '[]'"),
     ]
 
     # --------------------------------------------------------
@@ -2109,12 +2217,8 @@ def render_portale_iniziale():
                         step=1.0
                     )
 
-                incremento = st.selectbox(
-                    "Incremento minimo asta",
-                    INCREMENTI_ASTA_AMMESSI_V186,
-                    index=INCREMENTI_ASTA_AMMESSI_V186.index(1.0),
-                    format_func=lambda x: f"{x:.2f}",
-                    key="ml186_incremento_portale"
+                tipo_incremento_portale, incremento, incrementi_scalari_portale = _render_incremento_asta_v187(
+                    "ml187_portale", "FISSO", 1.0, []
                 )
 
             with c:
@@ -2378,9 +2482,13 @@ def render_portale_iniziale():
                             ),
 
                         "incremento_minimo":
-                            float(
-                                incremento
-                            ),
+                            float(incremento),
+
+                        "tipo_incremento_asta":
+                            tipo_incremento_portale,
+
+                        "incrementi_scalari":
+                            incrementi_scalari_portale,
 
                         "soglia_budget":
                             float(
@@ -13879,7 +13987,9 @@ def crea_lega_multilega(
     tipo_asta,
     fonte_listone,
     budget_illimitato=False,
-    fair_play_finanziario=False
+    fair_play_finanziario=False,
+    tipo_incremento_asta="FISSO",
+    incrementi_scalari=None
 ):
     """
     Crea atomicamente:
@@ -13889,6 +13999,10 @@ def crea_lega_multilega(
     - membership ADMIN del creatore
     - audit log
     """
+
+    tipo_incremento_asta, incremento_minimo, incrementi_scalari = _normalizza_incrementi_scalari_v187(
+        tipo_incremento_asta, incremento_minimo, incrementi_scalari
+    )
 
     conn = get_connection()
     cur = conn.cursor()
@@ -13947,15 +14061,19 @@ def crea_lega_multilega(
                 min_portieri,
                 budget_iniziale,
                 incremento_minimo,
+                tipo_incremento_asta,
+                incrementi_scalari_json,
                 soglia_budget,
                 moltiplicatore_oltre_soglia,
                 tipo_asta,
                 fonte_listone,
+                budget_illimitato,
+                fair_play_finanziario,
                 regolamento_bloccato,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """, (
             league_id,
@@ -13964,6 +14082,8 @@ def crea_lega_multilega(
             int(min_portieri),
             float(budget_iniziale),
             float(incremento_minimo),
+            tipo_incremento_asta,
+            json.dumps(incrementi_scalari, ensure_ascii=False),
             float(soglia_budget),
             float(moltiplicatore_oltre_soglia),
             tipo_asta,
@@ -14116,6 +14236,8 @@ def leghe_amministrate_multilega():
                 r.moltiplicatore_oltre_soglia,
                 COALESCE(r.tipo_asta, ''),
                 COALESCE(r.fonte_listone, ''),
+                COALESCE(r.tipo_incremento_asta,'FISSO'),
+                COALESCE(r.incrementi_scalari_json,'[]'),
                 COALESCE(r.budget_illimitato,0),
                 COALESCE(r.fair_play_finanziario,0),
                 r.regolamento_bloccato,
@@ -14160,6 +14282,8 @@ def leghe_amministrate_multilega():
             "moltiplicatore",
             "tipo_asta",
             "fonte_listone",
+            "tipo_incremento_asta",
+            "incrementi_scalari_json",
             "budget_illimitato",
             "fair_play_finanziario",
             "regolamento_bloccato",
@@ -14606,7 +14730,8 @@ def aggiorna_specifiche_lega_multilega(
     max_giocatori, min_portieri, budget_iniziale,
     incremento_minimo, soglia_budget, moltiplicatore,
     tipo_asta, fonte_listone, budget_illimitato=False,
-    fair_play_finanziario=False
+    fair_play_finanziario=False, tipo_incremento_asta="FISSO",
+    incrementi_scalari=None
 ):
     """Aggiorna atomicamente le specifiche base della lega amministrata."""
     league_id = int(league_id)
@@ -14624,6 +14749,9 @@ def aggiorna_specifiche_lega_multilega(
     fonte_listone = str(fonte_listone or "").strip() or "Fantacalcio.it"
     budget_illimitato = bool(budget_illimitato)
     fair_play_finanziario = bool(fair_play_finanziario)
+    tipo_incremento_asta, incremento_minimo, incrementi_scalari = _normalizza_incrementi_scalari_v187(
+        tipo_incremento_asta, incremento_minimo, incrementi_scalari
+    )
 
     if not nome:
         raise ValueError("Il nome della lega non può essere vuoto.")
@@ -14639,10 +14767,6 @@ def aggiorna_specifiche_lega_multilega(
         raise ValueError("I portieri minimi devono essere compresi tra 1 e 20 e non superare la rosa.")
     if (not budget_illimitato) and (budget_iniziale < 1 or budget_iniziale > 100000):
         raise ValueError("Il budget limitato deve essere compreso tra 1 e 100000.")
-    if not any(abs(float(incremento_minimo) - x) < 1e-9 for x in INCREMENTI_ASTA_AMMESSI_V186):
-        raise ValueError(
-            "Incremento minimo asta non valido. Seleziona uno dei valori previsti."
-        )
     if not fair_play_finanziario:
         soglia_budget = float(budget_iniziale)
         moltiplicatore = 1
@@ -14726,14 +14850,17 @@ def aggiorna_specifiche_lega_multilega(
                        WHERE id=?""", (nome, stagione, modalita, league_id))
         cur.execute("""UPDATE league_rules SET
                        partecipanti=?, max_giocatori=?, min_portieri=?,
-                       budget_iniziale=?, incremento_minimo=?, soglia_budget=?,
+                       budget_iniziale=?, incremento_minimo=?, tipo_incremento_asta=?, incrementi_scalari_json=?, soglia_budget=?,
                        moltiplicatore_oltre_soglia=?, tipo_asta=?, fonte_listone=?,
                        budget_illimitato=?, fair_play_finanziario=?,
                        updated_at=CURRENT_TIMESTAMP
                        WHERE league_id=?""",
                     (partecipanti, max_giocatori, min_portieri, budget_iniziale,
-                     incremento_minimo, soglia_budget, moltiplicatore, tipo_asta,
-                     fonte_listone, league_id))
+                     incremento_minimo, tipo_incremento_asta,
+                     json.dumps(incrementi_scalari, ensure_ascii=False),
+                     soglia_budget, moltiplicatore, tipo_asta,
+                     fonte_listone, 1 if budget_illimitato else 0,
+                     1 if fair_play_finanziario else 0, league_id))
 
         dettagli = {
             "prima": list(prima),
@@ -14741,7 +14868,10 @@ def aggiorna_specifiche_lega_multilega(
                 "nome": nome, "stagione": stagione, "modalita": modalita,
                 "partecipanti": partecipanti, "max_giocatori": max_giocatori,
                 "min_portieri": min_portieri, "budget_iniziale": budget_iniziale,
-                "incremento_minimo": incremento_minimo, "soglia_budget": soglia_budget,
+                "incremento_minimo": incremento_minimo,
+                "tipo_incremento_asta": tipo_incremento_asta,
+                "incrementi_scalari": incrementi_scalari,
+                "soglia_budget": soglia_budget,
                 "moltiplicatore": moltiplicatore, "tipo_asta": tipo_asta,
                 "fonte_listone": fonte_listone,
                 "budget_illimitato": budget_illimitato,
@@ -15620,12 +15750,8 @@ def render_admin_multilega():
                         step=1.0
                     )
 
-                incremento_minimo = st.selectbox(
-                    "Incremento minimo asta",
-                    INCREMENTI_ASTA_AMMESSI_V186,
-                    index=INCREMENTI_ASTA_AMMESSI_V186.index(1.0),
-                    format_func=lambda x: f"{x:.2f}",
-                    key="ml186_incremento_admin_nuova"
+                tipo_incremento_asta, incremento_minimo, incrementi_scalari = _render_incremento_asta_v187(
+                    "ml187_admin_nuova", "FISSO", 1.0, []
                 )
 
             with c3:
@@ -15719,7 +15845,9 @@ def render_admin_multilega():
                                 tipo_asta,
                                 fonte_listone,
                                 budget_illimitato,
-                                fair_play_finanziario
+                                fair_play_finanziario,
+                                tipo_incremento_asta,
+                                incrementi_scalari
                             )
                         )
 
@@ -15908,12 +16036,15 @@ def render_admin_multilega():
                                     step=1.0,
                                     key=f"ml185_budget_val_{_lid}"
                                 )
-                            e_incremento = st.selectbox(
-                                "Incremento minimo asta",
-                                INCREMENTI_ASTA_AMMESSI_V186,
-                                index=_indice_incremento_asta_v186(lega["incremento_minimo"]),
-                                format_func=lambda x: f"{x:.2f}",
-                                key=f"ml186_incremento_{_lid}"
+                            try:
+                                _e_fasce_inc = json.loads(lega.get("incrementi_scalari_json") or "[]")
+                            except Exception:
+                                _e_fasce_inc = []
+                            e_tipo_incremento, e_incremento, e_incrementi_scalari = _render_incremento_asta_v187(
+                                f"ml187_inc_{_lid}",
+                                lega.get("tipo_incremento_asta") or "FISSO",
+                                lega["incremento_minimo"],
+                                _e_fasce_inc
                             )
                         with ec3:
                             e_fpf = st.toggle(
@@ -15953,7 +16084,8 @@ def render_admin_multilega():
                             aggiorna_specifiche_lega_multilega(
                                 _lid, e_nome, e_stagione, e_modalita, e_partecipanti,
                                 e_max, e_portieri, e_budget, e_incremento, e_soglia,
-                                e_mult, e_tipo, e_fonte, e_budget_illimitato, e_fpf
+                                e_mult, e_tipo, e_fonte, e_budget_illimitato, e_fpf,
+                                e_tipo_incremento, e_incrementi_scalari
                             )
                             # V168 - se è la lega attualmente selezionata, aggiorna subito
                             # anche l'identità conservata nella sessione corrente.
@@ -28798,12 +28930,16 @@ def calcola_vincoli_offerta_team_multilega(
         cur.execute("""
             SELECT
                 COALESCE(incremento_minimo,1),
+                COALESCE(tipo_incremento_asta,'FISSO'),
+                COALESCE(incrementi_scalari_json,'[]'),
                 COALESCE(max_giocatori,30),
                 COALESCE(min_portieri,0),
                 COALESCE(budget_iniziale,500),
                 COALESCE(soglia_budget,budget_iniziale,500),
                 COALESCE(moltiplicatore_oltre_soglia,1),
-                COALESCE(tipo_asta,'CHIAMATA')
+                COALESCE(tipo_asta,'CHIAMATA'),
+                COALESCE(budget_illimitato,0),
+                COALESCE(fair_play_finanziario,0)
             FROM league_rules
             WHERE league_id=?
             LIMIT 1
@@ -28812,15 +28948,20 @@ def calcola_vincoli_offerta_team_multilega(
         if not rr:
             raise ValueError("Regolamento della lega non trovato.")
 
-        incremento = max(0.01, float(rr[0] or 1))
-        max_giocatori = int(rr[1] or 30)
-        min_portieri = int(rr[2] or 0)
-        budget_default = float(rr[3] or 500)
-        soglia = float(rr[4] or budget_default)
-        moltiplicatore = max(1.0, float(rr[5] or 1))
-        tipo_asta = str(rr[6] or "").strip().upper()
-        budget_illimitato = bool(int(rr[7] or 0))
-        fair_play_finanziario = bool(int(rr[8] or 0))
+        incremento_base = max(0.01, float(rr[0] or 1))
+        tipo_incremento_asta = str(rr[1] or "FISSO").upper()
+        incrementi_scalari_json = str(rr[2] or "[]")
+        incremento = _incremento_corrente_v187(
+            best_before, incremento_base, tipo_incremento_asta, incrementi_scalari_json
+        )
+        max_giocatori = int(rr[3] or 30)
+        min_portieri = int(rr[4] or 0)
+        budget_default = float(rr[5] or 500)
+        soglia = float(rr[6] or budget_default)
+        moltiplicatore = max(1.0, float(rr[7] or 1))
+        tipo_asta = str(rr[8] or "").strip().upper()
+        budget_illimitato = bool(int(rr[9] or 0))
+        fair_play_finanziario = bool(int(rr[10] or 0))
 
         if tipo_asta == "DRAFT":
             raise ValueError("La modalità Draft non prevede offerte.")
@@ -29051,6 +29192,8 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
                 l.current_team_id,
                 COALESCE(l.version,0),
                 COALESCE(r.incremento_minimo,1),
+                COALESCE(r.tipo_incremento_asta,'FISSO'),
+                COALESCE(r.incrementi_scalari_json,'[]'),
                 s.current_lot_id
             FROM auction_lots l
             JOIN auction_sessions s
@@ -29065,14 +29208,16 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
         if (
             not r
             or str(r[0] or "").upper() != "OPEN"
-            or r[5] is None
-            or int(r[5]) != lot_id
+            or r[7] is None
+            or int(r[7]) != lot_id
         ):
             raise ValueError("Il lotto non è più aperto.")
 
         current_bid = float(r[1]) if r[1] is not None else 0.0
         version = int(r[3] or 0)
-        incremento = max(0.01, float(r[4] or 1))
+        incremento = _incremento_corrente_v187(
+            current_bid, float(r[4] or 1), r[5], r[6]
+        )
         minimo = 1.0 if current_bid <= 0 else round(current_bid + incremento, 2)
 
         if amount + 1e-9 < minimo:
@@ -32160,6 +32305,8 @@ def snapshot_lotto_live_v132(league_id, team_id=None):
                 tbid.amount,
 
                 COALESCE(lr.incremento_minimo,1),
+                COALESCE(lr.tipo_incremento_asta,'FISSO'),
+                COALESCE(lr.incrementi_scalari_json,'[]'),
                 COALESCE(lr.max_giocatori,30),
                 COALESCE(lr.min_portieri,0),
                 COALESCE(lr.budget_iniziale,500),
@@ -32249,18 +32396,20 @@ def snapshot_lotto_live_v132(league_id, team_id=None):
         }
 
         if team_row is not None:
-            incremento = max(0.01, float(team_row[16] or 1))
-            max_giocatori = int(team_row[17] or 30)
-            min_portieri = int(team_row[18] or 0)
-            budget_default = float(team_row[19] or 500)
-            soglia = float(team_row[20] or budget_default)
-            moltiplicatore = max(1.0, float(team_row[21] or 1))
-            budget_illimitato = bool(int(team_row[22] or 0))
-            fair_play_finanziario = bool(int(team_row[23] or 0))
-            budget = float(team_row[24] or budget_default)
-            valore = float(team_row[25] or 0)
-            numero_rosa = int(team_row[26] or 0)
-            portieri = int(team_row[27] or 0)
+            incremento = _incremento_corrente_v187(
+                out["current_bid"], float(team_row[16] or 1), team_row[17], team_row[18]
+            )
+            max_giocatori = int(team_row[19] or 30)
+            min_portieri = int(team_row[20] or 0)
+            budget_default = float(team_row[21] or 500)
+            soglia = float(team_row[22] or budget_default)
+            moltiplicatore = max(1.0, float(team_row[23] or 1))
+            budget_illimitato = bool(int(team_row[24] or 0))
+            fair_play_finanziario = bool(int(team_row[25] or 0))
+            budget = float(team_row[26] or budget_default)
+            valore = float(team_row[27] or 0)
+            numero_rosa = int(team_row[28] or 0)
+            portieri = int(team_row[29] or 0)
 
             minimo = (
                 1.0
@@ -34446,6 +34595,8 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
                 COALESCE(t.nome,''),
                 COALESCE(tb.budget_impostato,lr.budget_iniziale,500),
                 COALESCE(lr.incremento_minimo,1),
+                COALESCE(lr.tipo_incremento_asta,'FISSO'),
+                COALESCE(lr.incrementi_scalari_json,'[]'),
                 COALESCE(lr.max_giocatori,30),
                 COALESCE(lr.min_portieri,0),
                 COALESCE(lr.soglia_budget,lr.budget_iniziale,500),
@@ -34523,14 +34674,16 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
         bid_deadline_ts = float(r[14]) if r[14] is not None else None
 
         budget = float(r[16] or 0)
-        incremento = max(0.01, float(r[17] or 1))
-        max_giocatori = int(r[18] or 30)
-        min_portieri = int(r[19] or 0)
-        soglia = float(r[20] or budget)
-        moltiplicatore = max(1.0, float(r[21] or 1))
-        tipo_asta = str(r[22] or "CHIAMATA").strip().upper()
-        budget_illimitato = bool(int(r[23] or 0))
-        fair_play_finanziario = bool(int(r[24] or 0))
+        incremento = _incremento_corrente_v187(
+            current_bid, float(r[17] or 1), r[18], r[19]
+        )
+        max_giocatori = int(r[20] or 30)
+        min_portieri = int(r[21] or 0)
+        soglia = float(r[22] or budget)
+        moltiplicatore = max(1.0, float(r[23] or 1))
+        tipo_asta = str(r[24] or "CHIAMATA").strip().upper()
+        budget_illimitato = bool(int(r[25] or 0))
+        fair_play_finanziario = bool(int(r[26] or 0))
 
         aliases = {
             "A CHIAMATA":"CHIAMATA",
@@ -34538,9 +34691,9 @@ def snapshot_bidding_asta_team_v126(league_id, team_id):
         }
         tipo_asta = aliases.get(tipo_asta, tipo_asta)
 
-        numero_rosa = int(r[25] or 0)
-        valore_acquisti = float(r[26] or 0)
-        portieri_attuali = int(r[27] or 0)
+        numero_rosa = int(r[27] or 0)
+        valore_acquisti = float(r[28] or 0)
+        portieri_attuali = int(r[29] or 0)
 
         giocatore_portiere = (
             ruolo_classico == "P"
