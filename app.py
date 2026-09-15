@@ -33601,6 +33601,243 @@ def giocatore_precedente_skippato_v189(league_id, tipo_asta):
         _portal_close(conn)
 
 
+
+def _snapshot_navigazione_da_conn_v197(cur, league_id, tipo_asta, skipped, random_queue):
+    """Build the RANDOM/ALFABETICO idle snapshot using the already-open connection."""
+    league_id = int(league_id)
+    tipo_asta = str(tipo_asta or "").strip().upper()
+
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM league_players
+        WHERE league_id=? AND stato='DISPONIBILE'
+    """, (league_id,))
+    disponibili_count = int((cur.fetchone() or (0,))[0] or 0)
+
+    out = {
+        "tipo_asta": tipo_asta,
+        "disponibili_count": disponibili_count,
+        "turno": None,
+        "pending": None,
+        "prossimo": None,
+        "precedente": None,
+    }
+    if disponibili_count <= 0:
+        return out
+
+    # ultimo skip ancora attivo: una query minimale, stessa connessione
+    cur.execute("""
+        SELECT cp.player_id,COALESCE(g.nome,'')
+        FROM auction_called_players cp
+        JOIN league_players lp
+          ON lp.league_id=cp.league_id
+         AND lp.player_id=cp.player_id
+         AND lp.stato='DISPONIBILE'
+        LEFT JOIN league_player_catalog g
+          ON g.league_id=cp.league_id AND g.player_id=cp.player_id
+        WHERE cp.league_id=?
+          AND cp.active=1
+          AND UPPER(COALESCE(cp.fonte,''))='SKIPPED'
+        ORDER BY cp.called_at DESC,cp.id DESC
+        LIMIT 1
+    """, (league_id,))
+    pr = cur.fetchone()
+    if pr:
+        out["precedente"] = {"player_id": int(pr[0]), "nome": str(pr[1] or "")}
+
+    if tipo_asta == "ALFABETICO":
+        # Fetch only until the first non-skipped available player.
+        cur.execute("""
+            SELECT g.player_id,COALESCE(g.nome,''),COALESCE(g.squadra,''),
+                   COALESCE(g.ruolo_mantra,''),COALESCE(g.fvm_mantra,g.fvm,0)
+            FROM league_players lp
+            JOIN league_player_catalog g
+              ON g.league_id=lp.league_id AND g.player_id=lp.player_id
+            WHERE lp.league_id=? AND lp.stato='DISPONIBILE'
+            ORDER BY g.nome COLLATE NOCASE,g.player_id
+        """, (league_id,))
+        for row in (cur.fetchall() or []):
+            pid=int(row[0])
+            if pid in skipped:
+                continue
+            out["prossimo"]={
+                "player_id":pid,"nome":str(row[1] or ""),"squadra":str(row[2] or ""),
+                "ruolo_mantra":str(row[3] or ""),"fvm":float(row[4] or 0),
+            }
+            break
+        return out
+
+    if tipo_asta == "RANDOM":
+        cur.execute("""
+            SELECT player_id
+            FROM league_players
+            WHERE league_id=? AND stato='DISPONIBILE'
+        """, (league_id,))
+        available={int(r[0]) for r in (cur.fetchall() or [])}
+        selected=next(
+            (pid for pid in random_queue if pid in available and pid not in skipped),
+            None
+        )
+        if selected is None:
+            candidates=[pid for pid in available if pid not in skipped]
+            if candidates:
+                import random
+                random.shuffle(candidates)
+                random_queue[:] = candidates
+                selected=candidates[0]
+                cur.execute("""
+                    UPDATE auction_mode_state
+                    SET random_queue_json=?,random_index=0,updated_at=CURRENT_TIMESTAMP
+                    WHERE league_id=?
+                """,(json.dumps(random_queue),league_id))
+        if selected is not None:
+            cur.execute("""
+                SELECT player_id,COALESCE(nome,''),COALESCE(squadra,''),
+                       COALESCE(ruolo_mantra,''),COALESCE(fvm_mantra,fvm,0)
+                FROM league_player_catalog
+                WHERE league_id=? AND player_id=?
+                LIMIT 1
+            """,(league_id,int(selected)))
+            row=cur.fetchone()
+            if row:
+                out["prossimo"]={
+                    "player_id":int(row[0]),"nome":str(row[1] or ""),
+                    "squadra":str(row[2] or ""),"ruolo_mantra":str(row[3] or ""),
+                    "fvm":float(row[4] or 0),
+                }
+    return out
+
+
+def naviga_giocatore_fast_v197(league_id, tipo_asta, direzione, player_id=None, nome=""):
+    """
+    NEXT/PREV in una sola transazione/connessione.
+    Prepara anche lo snapshot successivo: il rerender non deve interrogare il DB.
+    """
+    league_id=int(league_id)
+    tipo_asta=str(tipo_asta or "").strip().upper()
+    direzione=str(direzione or "").strip().upper()
+    if tipo_asta not in ("RANDOM","ALFABETICO"):
+        raise ValueError("Navigazione rapida disponibile solo per RANDOM/ALFABETICO.")
+
+    conn=_portal_raw_connection()
+    cur=conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COALESCE(skipped_players_json,'[]'),
+                   COALESCE(random_queue_json,'[]')
+            FROM auction_mode_state
+            WHERE league_id=?
+            LIMIT 1
+        """,(league_id,))
+        state=cur.fetchone() or ('[]','[]')
+        try:
+            skipped={int(x) for x in json.loads(state[0] or '[]')}
+        except Exception:
+            skipped=set()
+        try:
+            random_queue=[int(x) for x in json.loads(state[1] or '[]')]
+        except Exception:
+            random_queue=[]
+
+        user_id=int(st.session_state.get("auth_user_id") or 0)
+
+        if direzione=="NEXT":
+            if player_id is None:
+                raise ValueError("Giocatore corrente non valido.")
+            player_id=int(player_id)
+
+            # One authoritative UPSERT. A pure skip always clears stale lot_id.
+            cur.execute("""
+                INSERT INTO auction_called_players(
+                    league_id,player_id,fonte,lot_id,called_by_user_id,
+                    called_at,updated_at,active
+                )
+                VALUES (?,?,'SKIPPED',NULL,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,1)
+                ON CONFLICT(league_id,player_id)
+                DO UPDATE SET fonte='SKIPPED',lot_id=NULL,active=1,
+                              called_by_user_id=excluded.called_by_user_id,
+                              called_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+            """,(league_id,player_id,user_id))
+            skipped.add(player_id)
+
+        elif direzione=="PREV":
+            # The active SKIPPED row is the stack top.
+            cur.execute("""
+                SELECT cp.player_id,COALESCE(g.nome,'')
+                FROM auction_called_players cp
+                JOIN league_players lp
+                  ON lp.league_id=cp.league_id AND lp.player_id=cp.player_id
+                 AND lp.stato='DISPONIBILE'
+                LEFT JOIN league_player_catalog g
+                  ON g.league_id=cp.league_id AND g.player_id=cp.player_id
+                WHERE cp.league_id=? AND cp.active=1
+                  AND UPPER(COALESCE(cp.fonte,''))='SKIPPED'
+                ORDER BY cp.called_at DESC,cp.id DESC
+                LIMIT 1
+            """,(league_id,))
+            row=cur.fetchone()
+            if not row:
+                raise ValueError("Non ci sono giocatori skippati richiamabili.")
+            player_id=int(row[0])
+            nome=str(row[1] or "")
+            skipped.discard(player_id)
+            cur.execute("""
+                UPDATE auction_called_players
+                SET active=0,updated_at=CURRENT_TIMESTAMP
+                WHERE league_id=? AND player_id=?
+                  AND UPPER(COALESCE(fonte,''))='SKIPPED'
+            """,(league_id,player_id))
+            if tipo_asta=="RANDOM":
+                random_queue=[x for x in random_queue if int(x)!=player_id]
+                random_queue.insert(0,player_id)
+        else:
+            raise ValueError("Direzione navigazione non valida.")
+
+        cur.execute("""
+            UPDATE auction_mode_state
+            SET skipped_players_json=?,random_queue_json=?,updated_at=CURRENT_TIMESTAMP
+            WHERE league_id=?
+        """,(json.dumps(sorted(skipped)),json.dumps(random_queue),league_id))
+
+        # Build the NEXT visible state before committing, using the SAME connection.
+        snap=_snapshot_navigazione_da_conn_v197(
+            cur,league_id,tipo_asta,skipped,random_queue
+        )
+        conn.commit()
+
+        # One-shot snapshot: fragment rerender will make ZERO DB reads.
+        st.session_state[f"_v197_nav_snapshot_{league_id}"]=snap
+        st.session_state[f"_v197_skip_live_{league_id}"]=True
+        invalida_cache_navigazione_asta_v196(league_id)
+        st.session_state.pop("auctioneer_error",None)
+        return {"player_id":player_id,"nome":nome,"snapshot":snap}
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _portal_close(conn)
+
+
+def callback_nav_next_v197(league_id, player_id, tipo_asta, nome):
+    try:
+        naviga_giocatore_fast_v197(
+            league_id,tipo_asta,"NEXT",player_id=player_id,nome=nome
+        )
+    except Exception as errore:
+        st.session_state["auctioneer_error"]=str(errore)
+
+
+def callback_nav_prev_v197(league_id, tipo_asta):
+    try:
+        naviga_giocatore_fast_v197(league_id,tipo_asta,"PREV")
+    except Exception as errore:
+        st.session_state["auctioneer_error"]=str(errore)
+
+
 def callback_giocatore_precedente_v189(league_id, tipo_asta):
     try:
         r = giocatore_precedente_skippato_v189(league_id, tipo_asta)
@@ -34378,11 +34615,19 @@ def render_banditore_asta():
         help="Rilegge immediatamente lo stato corrente dell'asta."
     )
 
-    try:
-        live = snapshot_banditore_live_v133(league_id)
-    except Exception as errore:
-        st.error("Impossibile leggere il lotto corrente: " + str(errore))
-        return
+    _nav_snap_key=f"_v197_nav_snapshot_{league_id}"
+    _skip_live_key=f"_v197_skip_live_{league_id}"
+    _nav_snapshot=st.session_state.pop(_nav_snap_key,None)
+    _skip_live_once=bool(st.session_state.pop(_skip_live_key,False))
+
+    if _skip_live_once:
+        live=None
+    else:
+        try:
+            live = snapshot_banditore_live_v133(league_id)
+        except Exception as errore:
+            st.error("Impossibile leggere il lotto corrente: " + str(errore))
+            return
 
     if live is not None:
         render_card_giocatore_live_v140(live)
@@ -34420,12 +34665,16 @@ def render_banditore_asta():
 
         return
 
-    # Nessun lotto attivo: carica solo ciò che serve al prossimo.
-    try:
-        snap = snapshot_banditore_idle_v156(league_id)
-    except Exception as errore:
-        st.error("Impossibile preparare il prossimo lotto: " + str(errore))
-        return
+    # Nessun lotto attivo. Dopo NEXT/PREV lo snapshot è già pronto:
+    # nessuna seconda connessione DB nel rerender.
+    if _nav_snapshot is not None:
+        snap=_nav_snapshot
+    else:
+        try:
+            snap = snapshot_banditore_idle_v156(league_id)
+        except Exception as errore:
+            st.error("Impossibile preparare il prossimo lotto: " + str(errore))
+            return
 
     tipo_asta = snap["tipo_asta"]
     turno = snap["turno"]
@@ -34491,34 +34740,81 @@ def render_banditore_asta():
                 unsafe_allow_html=True,
             )
 
-        # Riga secondaria: soltanto navigazione precedente / prossimo.
-        # V195 - stessa identica struttura nativa Streamlit per entrambi i pulsanti.
-        # Le icone sono glifi speculari con le stesse metriche tipografiche.
-        _prev_col, _next_col = st.columns(2)
+        # V197 - PRECEDENTE e PROSSIMO: geometria e tipografia IDENTICHE.
+        # Le icone non sono glifi Unicode: sono triangoli CSS speculari 10x10px,
+        # quindi hanno matematicamente la stessa dimensione.
+        st.markdown("""
+        <style>
+        .st-key-v197_nav_prev button,
+        .st-key-v197_nav_next button {
+            width:100% !important;
+            height:46px !important;
+            min-height:46px !important;
+            max-height:46px !important;
+            padding:0 14px !important;
+            font-size:12px !important;
+            font-weight:400 !important;
+            line-height:1 !important;
+            border-radius:8px !important;
+        }
+        .st-key-v197_nav_prev button p,
+        .st-key-v197_nav_next button p {
+            margin:0 !important;
+            padding:0 !important;
+            font-size:12px !important;
+            font-weight:400 !important;
+            line-height:1 !important;
+            display:inline-flex !important;
+            align-items:center !important;
+            justify-content:center !important;
+            gap:5px !important;
+        }
+        .st-key-v197_nav_prev button p::before,
+        .st-key-v197_nav_next button p::before {
+            content:"" !important;
+            display:inline-block !important;
+            width:0 !important;
+            height:0 !important;
+            flex:0 0 auto !important;
+        }
+        .st-key-v197_nav_prev button p::before {
+            border-top:5px solid transparent !important;
+            border-bottom:5px solid transparent !important;
+            border-right:10px solid currentColor !important;
+        }
+        .st-key-v197_nav_next button p::before {
+            border-top:5px solid transparent !important;
+            border-bottom:5px solid transparent !important;
+            border-left:10px solid currentColor !important;
+        }
+        </style>
+        """,unsafe_allow_html=True)
+
+        _prev_col, _next_col = st.columns(2,gap="small")
 
         with _prev_col:
-            _precedente = snap.get("precedente")
+            _precedente=snap.get("precedente")
             st.button(
-                "◀ GIOCATORE PRECEDENTE",
+                "GIOCATORE PRECEDENTE",
                 use_container_width=True,
                 disabled=_precedente is None,
-                key="v196_nav_prev",
+                key="v197_nav_prev",
                 help=(
                     f'Ripristina {_precedente["nome"]}, ultimo giocatore skippato.'
                     if _precedente else
                     "Nessun giocatore skippato richiamabile."
                 ),
-                on_click=callback_giocatore_precedente_v189,
-                args=(league_id, tipo_asta)
+                on_click=callback_nav_prev_v197,
+                args=(league_id,tipo_asta)
             )
 
         with _next_col:
             st.button(
-                "▶ PROSSIMO GIOCATORE",
+                "PROSSIMO GIOCATORE",
                 use_container_width=True,
-                key="v196_nav_next",
-                on_click=callback_prossimo_giocatore_v135,
-                args=(league_id, g["player_id"], tipo_asta, g["nome"], None)
+                key="v197_nav_next",
+                on_click=callback_nav_next_v197,
+                args=(league_id,g["player_id"],tipo_asta,g["nome"])
             )
 
         render_ricerca_giocatore_banditore_v169(league_id)
