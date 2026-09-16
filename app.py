@@ -36239,51 +36239,56 @@ def render_bidding_inline_asta_v126():
         .v212-title {font-size:27px;font-weight:800;line-height:1.05;color:#0f172a;}
         .v212-sub {font-size:13px;color:#64748b;margin-top:5px;}
 
-        /* V220 - OFFERTA PERSONALIZZATA: unico CSS, senza height/zoom/JS.
-           Usiamo padding verticale intrinseco sul controllo BaseWeb: il browser
-           deve quindi aumentare fisicamente il box, invece di ignorare una height. */
+        /* V221 - OFFERTA PERSONALIZZATA.
+           Strategia diversa: il padding viene applicato DIRETTAMENTE all'input
+           e ai pulsanti +/- (non al wrapper BaseWeb). Con box-sizing:content-box
+           il browser deve sommare il padding all'altezza intrinseca del controllo. */
         .st-key-v212_custom [data-testid="stWidgetLabel"] p {
             font-size:13px !important;
             font-weight:650 !important;
         }
 
         .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] {
-            min-height:0 !important;
             height:auto !important;
+            min-height:0 !important;
             max-height:none !important;
-            padding-top:38px !important;
-            padding-bottom:38px !important;
-            box-sizing:content-box !important;
+            padding:0 !important;
+            overflow:visible !important;
+            align-items:stretch !important;
             border:1px solid #dce3ec !important;
             border-radius:10px !important;
             background:#f4f7fb !important;
-            overflow:visible !important;
-            align-items:stretch !important;
         }
 
-        .st-key-v212_custom [data-testid="stNumberInput"] input {
-            height:auto !important;
+        .st-key-v212_custom [data-testid="stNumberInput"] input,
+        .st-key-v212_custom [data-testid="stNumberInput"] input[type="number"] {
+            height:40px !important;
             min-height:40px !important;
             max-height:none !important;
-            padding-top:0 !important;
-            padding-bottom:0 !important;
+            padding-top:48px !important;
+            padding-bottom:48px !important;
+            padding-left:12px !important;
+            padding-right:12px !important;
+            box-sizing:content-box !important;
             font-size:34px !important;
             line-height:40px !important;
             font-weight:800 !important;
             text-align:center !important;
             color:#0f172a !important;
             background:#fff !important;
-            box-sizing:border-box !important;
         }
 
         .st-key-v212_custom [data-testid="stNumberInput"] button {
-            height:auto !important;
+            height:40px !important;
             min-height:40px !important;
             max-height:none !important;
+            padding-top:48px !important;
+            padding-bottom:48px !important;
+            padding-left:18px !important;
+            padding-right:18px !important;
+            box-sizing:content-box !important;
             align-self:stretch !important;
-            padding:0 18px !important;
             background:#f4f7fb !important;
-            box-sizing:border-box !important;
         }
 
         .st-key-v212_custom [data-testid="stNumberInput"] button svg {
@@ -36359,7 +36364,7 @@ def render_bidding_inline_asta_v126():
                     )
                     # V217: applicazione DOM post-render. Inline style !important
                     # prevale sulle regole generate dinamicamente da Streamlit/BaseWeb.
-                    # V220: dimensionamento affidato al padding intrinseco del controllo BaseWeb.
+                    # V221: padding intrinseco applicato direttamente a input e pulsanti +/-.
 
             with _min_col:
                 with st.container(key="v212_min"):
