@@ -34371,7 +34371,7 @@ def render_ultime_offerte_proiezione_v165(live):
         squadra = html.escape(str(bid.get("Squadra") or "—"))
         offerta = float(bid.get("Offerta") or 0)
         # V260: la prima riga è l'offerta corrente/migliore e viene evidenziata nettamente.
-        _leader_class = ' class="fe-current-leader"' if _idx_bid == 0 else ""
+        _leader_class = ' class="fe-current-leader"' if _idx_bid == 0 else ' class="fe-previous-bid"'
         rows.append(
             f'<tr{_leader_class}><td>{squadra}</td><td class="fe-bid-amount">{offerta:g}</td><td>{html.escape(ora)}</td></tr>'
         )
@@ -34393,6 +34393,14 @@ def render_ultime_offerte_proiezione_v165(live):
         }
         .fe-proj-bids tbody tr.fe-current-leader td:last-child {
             border-right:2px solid #16a34a !important;
+        }
+        /* V262 - offerte n. 2 e 3 volutamente meno prominenti. */
+        .fe-proj-bids tbody tr.fe-previous-bid td {
+            font-size:0.78em !important;
+            font-weight:600 !important;
+        }
+        .fe-proj-bids tbody tr.fe-previous-bid .fe-bid-amount {
+            font-size:0.82em !important;
         }
         </style>
         <div class="fe-proj-bids-title">ULTIME OFFERTE</div>
