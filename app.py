@@ -34372,11 +34372,12 @@ def render_ultime_offerte_proiezione_v165(live):
         offerta = float(bid.get("Offerta") or 0)
         # V260: la prima riga è l'offerta corrente/migliore e viene evidenziata nettamente.
         _leader_class = ' class="fe-current-leader"' if _idx_bid == 0 else ' class="fe-previous-bid"'
+        _tipo_offerta = "MIGLIOR OFFERTA" if _idx_bid == 0 else "-"
         rows.append(
-            f'<tr{_leader_class}><td>{squadra}</td><td class="fe-bid-amount">{offerta:g}</td><td>{html.escape(ora)}</td></tr>'
+            f'<tr{_leader_class}><td class="fe-bid-status">{_tipo_offerta}</td><td>{squadra}</td><td class="fe-bid-amount">{offerta:g}</td><td>{html.escape(ora)}</td></tr>'
         )
     if not rows:
-        rows.append('<tr><td colspan="3" class="fe-no-bids">In attesa della prima offerta</td></tr>')
+        rows.append('<tr><td colspan="4" class="fe-no-bids">In attesa della prima offerta</td></tr>')
 
     st.markdown(
         """
@@ -34402,10 +34403,17 @@ def render_ultime_offerte_proiezione_v165(live):
         .fe-proj-bids tbody tr.fe-previous-bid .fe-bid-amount {
             font-size:0.92em !important;
         }
+        .fe-proj-bids .fe-bid-status {
+            white-space:nowrap !important;
+            font-weight:800 !important;
+        }
+        .fe-proj-bids tbody tr.fe-current-leader .fe-bid-status {
+            font-weight:950 !important;
+        }
         </style>
         <div class="fe-proj-bids-title">ULTIME OFFERTE</div>
         <table class="fe-proj-bids">
-          <thead><tr><th>NOME SQUADRA</th><th>OFFERTA</th><th>ORARIO OFFERTA</th></tr></thead>
+          <thead><tr><th>STATO</th><th>NOME SQUADRA</th><th>OFFERTA</th><th>ORARIO OFFERTA</th></tr></thead>
           <tbody>""" + "".join(rows) + """</tbody>
         </table>
         """,
