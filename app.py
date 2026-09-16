@@ -36239,131 +36239,56 @@ def render_bidding_inline_asta_v126():
         .v212-title {font-size:27px;font-weight:800;line-height:1.05;color:#0f172a;}
         .v212-sub {font-size:13px;color:#64748b;margin-top:5px;}
 
+        /* V220 - OFFERTA PERSONALIZZATA: unico CSS, senza height/zoom/JS.
+           Usiamo padding verticale intrinseco sul controllo BaseWeb: il browser
+           deve quindi aumentare fisicamente il box, invece di ignorare una height. */
         .st-key-v212_custom [data-testid="stWidgetLabel"] p {
-            font-size:13px !important;font-weight:650 !important;
+            font-size:13px !important;
+            font-weight:650 !important;
         }
 
-        /* V214: dimensione VISIVA REALE del NumberInput.
-           Non ci affidiamo soltanto a data-baseweb: forziamo anche
-           stNumberInput, il wrapper verticale e i controlli stepper. */
-        .st-key-v212_custom [data-testid="stNumberInput"] {
-            width:100% !important;
-        }
-        .st-key-v212_custom [data-testid="stNumberInput"] > div:last-child,
-        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"],
-        .st-key-v212_custom [data-testid="stNumberInput"] div[role="group"] {
-            height:144px !important;
-            min-height:144px !important;
-            max-height:144px !important;
-            box-sizing:border-box !important;
-            border-radius:10px !important;
-        }
         .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] {
+            min-height:0 !important;
+            height:auto !important;
+            max-height:none !important;
+            padding-top:38px !important;
+            padding-bottom:38px !important;
+            box-sizing:content-box !important;
             border:1px solid #dce3ec !important;
+            border-radius:10px !important;
             background:#f4f7fb !important;
-            overflow:hidden !important;
-        }
-
-        .st-key-v212_custom [data-testid="stNumberInput"] input,
-        .st-key-v212_custom input[type="number"] {
-            height:140px !important;
-            min-height:140px !important;
-            max-height:140px !important;
-            line-height:140px !important;
-            box-sizing:border-box !important;
-            padding-top:0 !important;
-            padding-bottom:0 !important;
-            font-size:60px !important;
-            font-weight:800 !important;
-            text-align:center !important;
-            background:#fff !important;
-            color:#0f172a !important;
-        }
-
-        .st-key-v212_custom [data-testid="stNumberInput"] button,
-        .st-key-v212_custom [data-testid="stNumberInputStepDown"],
-        .st-key-v212_custom [data-testid="stNumberInputStepUp"] {
-            width:70px !important;
-            height:140px !important;
-            min-height:140px !important;
-            max-height:140px !important;
-            box-sizing:border-box !important;
-            padding:0 !important;
-            background:#f4f7fb !important;
-            display:flex !important;
-            align-items:center !important;
-            justify-content:center !important;
-        }
-        .st-key-v212_custom [data-testid="stNumberInput"] button svg,
-        .st-key-v212_custom [data-testid="stNumberInputStepDown"] svg,
-        .st-key-v212_custom [data-testid="stNumberInputStepUp"] svg {
-            width:28px !important;
-            height:28px !important;
-        }
-
-        /* V215 - forza l'altezza del CONTROLLO VISIBILE BaseWeb.
-           V214 aumentava correttamente il layout, ma non il box dipinto a video. */
-        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"],
-        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] > div,
-        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] > div > div {
-            height:176px !important;
-            min-height:176px !important;
-            max-height:176px !important;
+            overflow:visible !important;
             align-items:stretch !important;
-            box-sizing:border-box !important;
-        }
-
-        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] {
-            height:180px !important;
-            min-height:180px !important;
-            max-height:180px !important;
-            display:flex !important;
-            align-items:center !important;
         }
 
         .st-key-v212_custom [data-testid="stNumberInput"] input {
-            height:176px !important;
-            min-height:176px !important;
-            max-height:176px !important;
-            line-height:normal !important;
-            align-self:center !important;
-            font-size:42px !important;
+            height:auto !important;
+            min-height:40px !important;
+            max-height:none !important;
+            padding-top:0 !important;
+            padding-bottom:0 !important;
+            font-size:34px !important;
+            line-height:40px !important;
             font-weight:800 !important;
             text-align:center !important;
+            color:#0f172a !important;
+            background:#fff !important;
+            box-sizing:border-box !important;
         }
 
         .st-key-v212_custom [data-testid="stNumberInput"] button {
-            height:176px !important;
-            min-height:176px !important;
-            max-height:176px !important;
-            align-self:center !important;
+            height:auto !important;
+            min-height:40px !important;
+            max-height:none !important;
+            align-self:stretch !important;
+            padding:0 18px !important;
+            background:#f4f7fb !important;
+            box-sizing:border-box !important;
         }
 
-
-        /* V219 - BYPASS CON CSS ZOOM.
-           Streamlit mantiene il NumberInput nativo a ~40px.
-           Lo ingrandiamo 3.5x come elemento renderizzato; la larghezza viene
-           compensata a 28.5714% così la larghezza VISIVA resta quella della colonna. */
-        .st-key-v212_custom {
-            min-height:150px !important;
-            overflow:visible !important;
-        }
-        .st-key-v212_custom [data-testid="stNumberInput"] {
-            width:28.5714% !important;
-            zoom:3.5 !important;
-            overflow:visible !important;
-        }
-        .st-key-v212_custom [data-testid="stNumberInput"] [data-testid="stWidgetLabel"] {
-            zoom:0.285714 !important;
-            width:350% !important;
-        }
-        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] {
-            width:100% !important;
-        }
-        .st-key-v212_custom [data-testid="stNumberInput"] input {
-            font-size:12px !important;
-            font-weight:800 !important;
-            text-align:center !important;
+        .st-key-v212_custom [data-testid="stNumberInput"] button svg {
+            width:22px !important;
+            height:22px !important;
         }
 
         .st-key-v212_min button,.st-key-v212_p5 button,.st-key-v212_p10 button {
@@ -36434,8 +36359,7 @@ def render_bidding_inline_asta_v126():
                     )
                     # V217: applicazione DOM post-render. Inline style !important
                     # prevale sulle regole generate dinamicamente da Streamlit/BaseWeb.
-                    # V218: niente JS/iframe; il ridimensionamento è ottenuto
-                    # direttamente dal CSS con scaleY sul controllo BaseWeb visibile.
+                    # V220: dimensionamento affidato al padding intrinseco del controllo BaseWeb.
 
             with _min_col:
                 with st.container(key="v212_min"):
