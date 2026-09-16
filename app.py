@@ -34754,7 +34754,53 @@ def render_ricerca_giocatore_banditore_v169(league_id):
         help="Apre immediatamente il lotto sul giocatore selezionato."
     )
 
+
 @st.fragment(run_every="1s")
+def render_banditore_lotto_live_v244(league_id, lot_id):
+    """
+    V244 - refresh automatico isolato SOLO per il lotto già aperto.
+    Non riesegue Gestione Asta, navbar, menu, navigazione giocatori o schema.
+    """
+    league_id=int(league_id)
+    lot_id=int(lot_id)
+
+    try:
+        live=snapshot_banditore_live_v133(league_id)
+    except Exception as errore:
+        st.error("Impossibile aggiornare le offerte: "+str(errore))
+        return
+
+    if live is None or int(live.get("lot_id") or 0)!=lot_id:
+        # Il lotto è stato chiuso/cambiato: il Banditore può riallineare
+        # la console con il normale rerun generato dall'azione di chiusura.
+        return
+
+    render_ultime_offerte_proiezione_v165(live)
+
+    if live["stato"]=="OPEN":
+        if live["current_bid"] is None:
+            st.button(
+                "⏹ CHIUDI LOTTO SENZA ASSEGNAZIONE",
+                use_container_width=True,
+                key=f"v244_close_empty_{lot_id}",
+                on_click=callback_chiudi_vuoto_v133,
+                args=(league_id,lot_id,live["player_id"],live["nome"])
+            )
+        else:
+            st.button(
+                "✅ CONFERMA AGGIUDICAZIONE E CHIUDI LOTTO",
+                type="primary",
+                use_container_width=True,
+                key=f"v244_close_assign_{lot_id}",
+                on_click=callback_chiudi_assegna_v133,
+                args=(league_id,lot_id,live["nome"])
+            )
+    else:
+        st.warning("Chiusura del lotto in corso.")
+
+
+
+@st.fragment
 def render_banditore_asta():
     if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
         st.error("Accedi con il livello BANDITORE per usare Gestione Asta.")
@@ -34807,39 +34853,9 @@ def render_banditore_asta():
             return
 
     if live is not None:
+        # V244 - la struttura di Gestione Asta NON viene più ripetuta ogni secondo.
         render_card_giocatore_live_v140(live)
-        render_ultime_offerte_proiezione_v165(live)
-
-        if live["stato"] == "OPEN":
-            if live["current_bid"] is None:
-                st.button(
-                    "⏹ CHIUDI LOTTO SENZA ASSEGNAZIONE",
-                    use_container_width=True,
-                    key=f"v133_close_empty_{live['lot_id']}",
-                    on_click=callback_chiudi_vuoto_v133,
-                    args=(
-                        league_id,
-                        live["lot_id"],
-                        live["player_id"],
-                        live["nome"]
-                    )
-                )
-            else:
-                st.button(
-                    "✅ CONFERMA AGGIUDICAZIONE E CHIUDI LOTTO",
-                    type="primary",
-                    use_container_width=True,
-                    key=f"v133_close_assign_{live['lot_id']}",
-                    on_click=callback_chiudi_assegna_v133,
-                    args=(
-                        league_id,
-                        live["lot_id"],
-                        live["nome"]
-                    )
-                )
-        else:
-            st.warning("Chiusura del lotto in corso.")
-
+        render_banditore_lotto_live_v244(league_id, live["lot_id"])
         return
 
     # Nessun lotto attivo. Dopo NEXT/PREV lo snapshot è già pronto:
