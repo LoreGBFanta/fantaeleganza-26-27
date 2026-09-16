@@ -36169,8 +36169,9 @@ def render_card_giocatore_squadra_v171(live):
 
 
 def callback_seleziona_importo_offerta_v209(custom_key, valore):
-    """V241 - selezione importo minimale: una sola scrittura locale."""
+    """V238 - selezione locale: solo session_state, zero DB e zero I/O."""
     st.session_state[str(custom_key)] = f"{float(valore):g}"
+    st.session_state["_bid_pick_ts_v238"] = time.perf_counter()
 
 
 def callback_varia_offerta_personalizzata_v222(custom_key, delta, minimo, massimo):
@@ -36275,12 +36276,12 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
     )
 
 
-@st.fragment(run_every="2s")
+@st.fragment
 def render_bidding_inline_asta_v126():
     """
-    V241 - ASTA SQUADRA live con refresh automatico locale ogni 2 secondi.
-    Nessun watcher esterno e nessun rerun globale aggiunto: il fragment
-    rilegge lo stato DB e riapre la maschera quando la squadra viene superata.
+    V242 - ASTA SQUADRA interattiva SENZA polling nel fragment dei pulsanti.
+    È intenzionale: run_every sullo stesso fragment può interrompere i callback
+    OFFERTA MINIMA/+5/+10/INVIA. La snapshot DB viene riletta a ogni interazione.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
