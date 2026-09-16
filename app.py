@@ -29169,6 +29169,150 @@ def calcola_vincoli_offerta_team_multilega(
             _portal_close(conn)
 
 
+
+def calcola_vincoli_offerta_team_multilega_v239_fast(
+    league_id, lot_id, team_id, user_id, _conn
+):
+    """V239 - validazione BID in un'unica lettura DB autorevole."""
+    import math
+    league_id, lot_id, team_id, user_id = map(
+        int, (league_id, lot_id, team_id, user_id)
+    )
+    cur = _conn.cursor()
+    cur.execute("""
+        SELECT
+            EXISTS(
+                SELECT 1 FROM league_members m
+                WHERE m.league_id=? AND m.user_id=? AND m.team_id=?
+                  AND m.is_active=1 AND m.is_team_member=1
+            ),
+            s.current_lot_id,
+            l.stato,l.player_id,l.current_bid,l.current_team_id,COALESCE(l.version,0),
+            lp.stato,
+            COALESCE(c.ruolo_classico,''),COALESCE(c.ruolo_mantra,''),
+            COALESCE(r.incremento_minimo,1),
+            COALESCE(r.tipo_incremento_asta,'FISSO'),
+            COALESCE(r.incrementi_scalari_json,'[]'),
+            COALESCE(r.max_giocatori,30),COALESCE(r.min_portieri,0),
+            COALESCE(r.budget_iniziale,500),
+            COALESCE(r.soglia_budget,r.budget_iniziale,500),
+            COALESCE(r.moltiplicatore_oltre_soglia,1),
+            COALESCE(r.tipo_asta,'CHIAMATA'),
+            COALESCE(r.budget_illimitato,0),
+            COALESCE(r.fair_play_finanziario,0),
+            COALESCE(tb.budget_impostato,r.budget_iniziale,500),
+            (SELECT COUNT(*) FROM league_players x
+             WHERE x.league_id=? AND x.stato='ASSEGNATO'
+               AND x.assigned_team_id=?),
+            (SELECT COALESCE(SUM(COALESCE(x.prezzo_assegnazione,0)),0)
+             FROM league_players x
+             WHERE x.league_id=? AND x.stato='ASSEGNATO'
+               AND x.assigned_team_id=?),
+            (SELECT COUNT(*)
+             FROM league_players x
+             LEFT JOIN league_player_catalog xc
+               ON xc.league_id=x.league_id AND xc.player_id=x.player_id
+             WHERE x.league_id=? AND x.stato='ASSEGNATO'
+               AND x.assigned_team_id=?
+               AND (
+                    UPPER(COALESCE(xc.ruolo_classico,''))='P'
+                    OR UPPER(COALESCE(xc.ruolo_mantra,'')) IN ('P','POR')
+               ))
+        FROM auction_sessions s
+        JOIN auction_lots l
+          ON l.league_id=s.league_id AND l.id=s.current_lot_id
+        JOIN league_players lp
+          ON lp.league_id=l.league_id AND lp.player_id=l.player_id
+        LEFT JOIN league_player_catalog c
+          ON c.league_id=l.league_id AND c.player_id=l.player_id
+        JOIN league_rules r ON r.league_id=l.league_id
+        LEFT JOIN team_budgets tb
+          ON tb.league_id=l.league_id AND tb.team_id=?
+        WHERE s.league_id=? AND l.id=?
+        LIMIT 1
+    """, (
+        league_id,user_id,team_id,
+        league_id,team_id,
+        league_id,team_id,
+        league_id,team_id,
+        team_id,league_id,lot_id
+    ))
+    row=cur.fetchone()
+    if not row:
+        raise ValueError("Il lotto non è più aperto.")
+    if not int(row[0] or 0):
+        raise PermissionError("L'utente non è autorizzato a offrire per questa squadra.")
+    if row[1] is None or int(row[1]) != lot_id or str(row[2] or "").upper()!="OPEN":
+        raise ValueError("Il lotto non è più aperto.")
+    if str(row[7] or "").upper()!="DISPONIBILE":
+        raise ValueError("Il giocatore non è più disponibile.")
+
+    player_id=int(row[3]); best_before=float(row[4] or 0)
+    best_team_id=int(row[5]) if row[5] is not None else None
+    version=int(row[6] or 0)
+    ruolo_classico=str(row[8] or "").strip().upper()
+    ruolo_mantra=str(row[9] or "").strip().upper()
+    giocatore_portiere=ruolo_classico=="P" or ruolo_mantra in ("P","POR")
+    incremento_base=max(.01,float(row[10] or 1))
+    tipo_incremento=str(row[11] or "FISSO").upper()
+    incrementi_json=str(row[12] or "[]")
+    incremento=_incremento_corrente_v187(
+        best_before,incremento_base,tipo_incremento,incrementi_json
+    )
+    max_giocatori=int(row[13] or 30); min_portieri=int(row[14] or 0)
+    budget_default=float(row[15] or 500); soglia=float(row[16] or budget_default)
+    moltiplicatore=max(1.0,float(row[17] or 1))
+    if str(row[18] or "").strip().upper()=="DRAFT":
+        raise ValueError("La modalità Draft non prevede offerte.")
+    budget_illimitato=bool(int(row[19] or 0))
+    fair_play_finanziario=bool(int(row[20] or 0))
+    budget=float(row[21] if row[21] is not None else budget_default)
+    numero_rosa=int(row[22] or 0); valore_acquisti=float(row[23] or 0)
+    portieri_attuali=int(row[24] or 0)
+    minimo=1.0 if best_before<=0 else round(best_before+incremento,2)
+
+    if numero_rosa>=max_giocatori:
+        return {"can_bid":False,"motivo":"La rosa è già completa.",
+                "player_id":player_id,"minimo":minimo,"massimo":0.0,
+                "best_before":best_before,"best_team_id":best_team_id,
+                "version":version,"riserva_minima":0.0,
+                "portieri_attuali":portieri_attuali,"min_portieri":min_portieri}
+
+    slot_residui=max(0,max_giocatori-(numero_rosa+1))
+    portieri_dopo=portieri_attuali+(1 if giocatore_portiere else 0)
+    portieri_mancanti_dopo=max(0,min_portieri-portieri_dopo)
+    riserva_minima=float(slot_residui)
+    plafond=_plafond_nominale_fpf_v182(
+        budget,soglia,moltiplicatore,fair_play_finanziario,budget_illimitato
+    )
+    massimo=float(max(0,math.floor(plafond-valore_acquisti-riserva_minima+1e-9)))
+    can_bid=True; motivo=""
+    if best_team_id==team_id:
+        can_bid=False; motivo="Sei già il miglior offerente."
+    elif slot_residui<portieri_mancanti_dopo:
+        can_bid=False
+        motivo=f"Questa offerta renderebbe impossibile raggiungere il numero minimo di portieri ({min_portieri})."
+    elif massimo+1e-9<minimo:
+        can_bid=False
+        motivo=f"Non hai margine sufficiente per l'offerta minima di {minimo:g} crediti."
+
+    return {
+        "can_bid":can_bid,"motivo":motivo,"player_id":player_id,
+        "incremento":incremento,"best_before":best_before,
+        "best_team_id":best_team_id,"version":version,
+        "minimo":minimo,"massimo":massimo,"budget":budget,
+        "numero_rosa":numero_rosa,"slot_residui":slot_residui,
+        "riserva_minima":riserva_minima,"valore_acquisti":valore_acquisti,
+        "soglia":soglia,"moltiplicatore":moltiplicatore,
+        "budget_illimitato":budget_illimitato,
+        "fair_play_finanziario":fair_play_finanziario,
+        "min_portieri":min_portieri,"portieri_attuali":portieri_attuali,
+        "portieri_dopo":portieri_dopo,
+        "portieri_mancanti_dopo":portieri_mancanti_dopo,
+        "giocatore_portiere":giocatore_portiere,
+    }
+
+
 def verifica_offerta_team_multilega(
     league_id,
     lot_id,
@@ -29253,51 +29397,30 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
     cur = conn.cursor()
 
     try:
-        info = verifica_offerta_team_multilega(
-            league_id, lot_id, team_id, amount, user_id, _conn=conn
+        # V239 - una sola lettura DB per TUTTI i vincoli del bid.
+        # La versione letta viene poi protetta dal CAS atomico sottostante.
+        info = calcola_vincoli_offerta_team_multilega_v239_fast(
+            league_id, lot_id, team_id, user_id, conn
         )
+        if not info.get("can_bid", False):
+            raise ValueError(info.get("motivo") or "Non puoi effettuare questa offerta.")
+        if amount + 1e-9 < float(info["minimo"]):
+            raise ValueError(f"Offerta troppo bassa. Offerta minima: {float(info['minimo']):g} crediti.")
+        if amount > float(info["massimo"]) + 1e-9:
+            raise ValueError(f"Offerta troppo alta. Offerta massima: {float(info['massimo']):g} crediti.")
 
-        # Snapshot autorevole immediatamente prima della scrittura.
-        cur.execute("""
-            SELECT
-                l.stato,
-                l.current_bid,
-                l.current_team_id,
-                COALESCE(l.version,0),
-                COALESCE(r.incremento_minimo,1),
-                COALESCE(r.tipo_incremento_asta,'FISSO'),
-                COALESCE(r.incrementi_scalari_json,'[]'),
-                s.current_lot_id
-            FROM auction_lots l
-            JOIN auction_sessions s
-              ON s.league_id=l.league_id
-            LEFT JOIN league_rules r
-              ON r.league_id=l.league_id
-            WHERE l.league_id=? AND l.id=?
-            LIMIT 1
-        """, (league_id, lot_id))
-        r = cur.fetchone()
-
-        if (
-            not r
-            or str(r[0] or "").upper() != "OPEN"
-            or r[7] is None
-            or int(r[7]) != lot_id
-        ):
-            raise ValueError("Il lotto non è più aperto.")
-
-        current_bid = float(r[1]) if r[1] is not None else 0.0
-        version = int(r[3] or 0)
-        incremento = _incremento_corrente_v187(
-            current_bid, float(r[4] or 1), r[5], r[6]
+        valore_con_offerta=round(float(info["valore_acquisti"])+amount,2)
+        valore_con_riserva=round(valore_con_offerta+float(info["riserva_minima"]),2)
+        spesa_con_riserva=(
+            _spesa_effettiva_regole(
+                valore_con_riserva,info["soglia"],info["moltiplicatore"]
+            ) if info.get("fair_play_finanziario") else valore_con_riserva
         )
-        minimo = 1.0 if current_bid <= 0 else round(current_bid + incremento, 2)
+        if (not info.get("budget_illimitato")) and spesa_con_riserva > float(info["budget"])+1e-9:
+            raise ValueError("Budget insufficiente considerando la riserva minima e le regole del Fair Play Finanziario.")
 
-        if amount + 1e-9 < minimo:
-            raise ValueError(
-                f"Nel frattempo è arrivata un'altra offerta. "
-                f"Nuova offerta minima: {minimo:g} crediti."
-            )
+        current_bid=float(info["best_before"] or 0)
+        version=int(info["version"])
 
         # CAS: aggiorna solo se la versione letta è ancora quella corrente.
         cur.execute("""
@@ -29310,6 +29433,10 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
               AND league_id=?
               AND stato='OPEN'
               AND COALESCE(version,0)=?
+              AND EXISTS (
+                    SELECT 1 FROM auction_sessions s
+                    WHERE s.league_id=? AND s.current_lot_id=?
+                  )
               AND (
                     current_bid IS NULL
                     OR current_bid<=?
@@ -29321,6 +29448,8 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             lot_id,
             league_id,
             version,
+            league_id,
+            lot_id,
             current_bid
         ))
         check = cur.fetchone()
