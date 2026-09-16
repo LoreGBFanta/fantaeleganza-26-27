@@ -36460,7 +36460,7 @@ def render_bidding_inline_asta_v126():
             width:calc(100% - 24px);
             margin-left:12px;
             margin-right:12px;
-            margin-bottom:2px;
+            margin-bottom:16px;
             box-sizing:border-box;
         }
         .v212-fin {display:flex;align-items:center;justify-content:center;gap:15px;padding:8px 18px;}
