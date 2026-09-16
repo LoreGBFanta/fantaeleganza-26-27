@@ -36339,6 +36339,52 @@ def render_bidding_inline_asta_v126():
             align-self:center !important;
         }
 
+
+        /* V218 - BYPASS GRAFICO STREAMLIT/BASEWEB.
+           Il widget nativo resta 40px nel DOM, ma viene renderizzato a 140px reali
+           tramite scaleY(3.5). In questo modo le regole interne di altezza di
+           Streamlit non possono riportarlo visivamente a 40px. */
+        .st-key-v212_custom {
+            min-height:178px !important;
+            overflow:visible !important;
+        }
+        .st-key-v212_custom [data-testid="stNumberInput"] {
+            overflow:visible !important;
+        }
+        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] {
+            height:40px !important;
+            min-height:40px !important;
+            max-height:40px !important;
+            transform:scaleY(3.5) !important;
+            transform-origin:top left !important;
+            overflow:hidden !important;
+            will-change:transform !important;
+        }
+        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] input,
+        .st-key-v212_custom [data-testid="stNumberInput"] input[type="number"] {
+            height:40px !important;
+            min-height:40px !important;
+            max-height:40px !important;
+            line-height:40px !important;
+            font-size:12px !important;
+            font-weight:800 !important;
+            text-align:center !important;
+            padding-top:0 !important;
+            padding-bottom:0 !important;
+        }
+        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] button,
+        .st-key-v212_custom [data-testid="stNumberInputStepDown"],
+        .st-key-v212_custom [data-testid="stNumberInputStepUp"] {
+            height:40px !important;
+            min-height:40px !important;
+            max-height:40px !important;
+            padding:0 !important;
+        }
+        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] button svg {
+            width:8px !important;
+            height:8px !important;
+        }
+
         .st-key-v212_min button,.st-key-v212_p5 button,.st-key-v212_p10 button {
             width:100% !important;height:72px !important;min-height:72px !important;max-height:72px !important;
             padding:0 10px !important;border-radius:10px !important;
@@ -36407,9 +36453,8 @@ def render_bidding_inline_asta_v126():
                     )
                     # V217: applicazione DOM post-render. Inline style !important
                     # prevale sulle regole generate dinamicamente da Streamlit/BaseWeb.
-                    forza_dimensione_number_input_dom_v217(
-                        "st-key-v212_custom", outer_px=180, inner_px=176, font_px=42
-                    )
+                    # V218: niente JS/iframe; il ridimensionamento è ottenuto
+                    # direttamente dal CSS con scaleY sul controllo BaseWeb visibile.
 
             with _min_col:
                 with st.container(key="v212_min"):
