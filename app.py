@@ -36330,7 +36330,7 @@ def snapshot_leader_asta_squadra_v255(league_id, lot_id):
 @st.fragment(run_every=0.5)
 def watcher_leader_asta_squadra_v255(league_id, lot_id, team_id):
     """
-    V255 - watcher indipendente dai widget di offerta.
+    V256 - watcher indipendente dai widget di offerta; eseguito a fine render.
     Non contiene pulsanti/input. Se cambia il token live forza UN SOLO full rerun,
     poi il nuovo token viene memorizzato dal render principale.
     """
@@ -36422,18 +36422,18 @@ def render_bidding_inline_asta_v126():
     # Banditore, più compatto, con le informazioni tecniche storiche.
     render_card_giocatore_squadra_v171(stato)
 
-    # V255 - inizializza il token dal medesimo snapshot usato dai controlli.
+    # V256 - riserviamo qui la posizione del banner live, ma il watcher
+    # viene ESEGUITO soltanto a fine render, dopo CSS e maschera offerte.
+    # In questo modo un eventuale st.rerun() non può interrompere il rendering
+    # prima dell'applicazione dello stile grafico.
+    _v256_status_slot = st.container()
+
     _v255_token_key = f"_v255_live_token_{league_id}_{int(stato['lot_id'])}"
     st.session_state[_v255_token_key] = (
         int(stato.get("version") or 0),
         stato.get("current_team_id"),
         stato.get("current_bid"),
         str(stato.get("stato") or ""),
-    )
-
-    # Fragment live separato: non possiede né ridisegna alcun widget d'offerta.
-    watcher_leader_asta_squadra_v255(
-        league_id, int(stato["lot_id"]), team_id
     )
 
     team = stato.get("team")
@@ -36830,6 +36830,13 @@ def render_bidding_inline_asta_v126():
                 </div>
             </div>
             """,unsafe_allow_html=True
+        )
+
+    # V256 - il watcher live parte solo DOPO che l'intera interfaccia,
+    # compreso il CSS V212/V223/V232/V235, è stata renderizzata.
+    with _v256_status_slot:
+        watcher_leader_asta_squadra_v255(
+            league_id, int(stato["lot_id"]), team_id
         )
 
     elapsed = time.perf_counter() - t0
