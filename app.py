@@ -36293,6 +36293,47 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
 
 
 @st.fragment
+def stato_miglior_offerta_squadra_v253(league_id, lot_id):
+    """Una sola SELECT per leggere offerta e leader correnti."""
+    conn = _portal_raw_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT l.current_bid, l.current_team_id, COALESCE(t.nome, '')
+            FROM auction_lots l
+            LEFT JOIN teams t ON t.id=l.current_team_id AND t.league_id=l.league_id
+            WHERE l.league_id=? AND l.id=?
+            LIMIT 1
+            """,
+            (int(league_id), int(lot_id)),
+        ).fetchone()
+        if row is None:
+            return None
+        return {"current_bid":row[0], "current_team_id":row[1], "current_team":row[2] or ""}
+    finally:
+        _portal_close(conn)
+
+
+@st.fragment(run_every="1s")
+def render_stato_miglior_offerta_squadra_v253(league_id, lot_id, team_id):
+    """Polling confinato al solo banner: non ridisegna la maschera offerte."""
+    try:
+        live=stato_miglior_offerta_squadra_v253(league_id, lot_id)
+    except Exception:
+        live=None
+    if live is None:
+        return
+    if live["current_bid"] is None:
+        st.info("Nessuna offerta registrata.")
+    elif live["current_team_id"] is not None and int(live["current_team_id"])==int(team_id):
+        st.success(f'🏆 Sei il miglior offerente · **{float(live["current_bid"]):g} crediti**')
+    else:
+        st.warning(
+            f'🏆 Migliore offerta: **{float(live["current_bid"]):g}** crediti · '
+            f'**{live["current_team"]}**'
+        )
+
+
 def render_bidding_inline_asta_v126():
     """
     V250 - ASTA SQUADRA: maschera sempre visibile durante il lotto OPEN.
@@ -36344,18 +36385,8 @@ def render_bidding_inline_asta_v126():
     # Banditore, più compatto, con le informazioni tecniche storiche.
     render_card_giocatore_squadra_v171(stato)
 
-    if stato["current_bid"] is None:
-        st.info("Nessuna offerta registrata.")
-    elif stato["current_team_id"] == team_id:
-        st.success(
-            f'🏆 Sei il miglior offerente · '
-            f'**{stato["current_bid"]:g} crediti**'
-        )
-    else:
-        st.warning(
-            f'🏆 Migliore offerta: **{stato["current_bid"]:g}** crediti · '
-            f'**{stato["current_team"]}**'
-        )
+    # V253: si aggiorna automaticamente SOLO il banner del leader.
+    render_stato_miglior_offerta_squadra_v253(league_id, stato["lot_id"], team_id)
 
     team = stato.get("team")
     if team is None:
