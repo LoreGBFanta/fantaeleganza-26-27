@@ -34356,7 +34356,7 @@ def render_card_giocatore_live_v140(live):
 def render_ultime_offerte_proiezione_v165(live):
     """Ultime 3 offerte in formato grande, senza dataframe/toolbar Streamlit."""
     rows = []
-    for _idx_bid, bid in enumerate((live.get("offerte") or [])[:3]):
+    for _idx_bid, bid in enumerate((live.get("offerte") or [])[:2]):
         raw_time = str(bid.get("Orario") or "")
         # V261 - SQLite/Turso CURRENT_TIMESTAMP è UTC.
         # Conversione esplicita in Europe/Rome, con ora solare/legale automatica.
