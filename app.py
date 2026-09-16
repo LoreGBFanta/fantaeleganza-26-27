@@ -36149,19 +36149,63 @@ def render_bidding_inline_asta_v126():
         .st-key-v212_custom [data-testid="stWidgetLabel"] p {
             font-size:13px !important;font-weight:650 !important;
         }
-        .st-key-v212_custom div[data-baseweb="input"] {
-            height:144px !important;min-height:144px !important;max-height:144px !important;
-            border:1px solid #dce3ec !important;border-radius:10px !important;
-            background:#f4f7fb !important;overflow:hidden !important;
+
+        /* V214: dimensione VISIVA REALE del NumberInput.
+           Non ci affidiamo soltanto a data-baseweb: forziamo anche
+           stNumberInput, il wrapper verticale e i controlli stepper. */
+        .st-key-v212_custom [data-testid="stNumberInput"] {
+            width:100% !important;
         }
-        .st-key-v212_custom div[data-baseweb="input"] input {
-            height:140px !important;min-height:140px !important;max-height:140px !important;
-            font-size:60px !important;font-weight:800 !important;text-align:center !important;
-            background:#fff !important;color:#0f172a !important;
+        .st-key-v212_custom [data-testid="stNumberInput"] > div:last-child,
+        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"],
+        .st-key-v212_custom [data-testid="stNumberInput"] div[role="group"] {
+            height:144px !important;
+            min-height:144px !important;
+            max-height:144px !important;
+            box-sizing:border-box !important;
+            border-radius:10px !important;
         }
-        .st-key-v212_custom div[data-baseweb="input"] button {
-            width:56px !important;height:140px !important;min-height:140px !important;
-            padding:0 !important;background:#f4f7fb !important;
+        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] {
+            border:1px solid #dce3ec !important;
+            background:#f4f7fb !important;
+            overflow:hidden !important;
+        }
+
+        .st-key-v212_custom [data-testid="stNumberInput"] input,
+        .st-key-v212_custom input[type="number"] {
+            height:140px !important;
+            min-height:140px !important;
+            max-height:140px !important;
+            line-height:140px !important;
+            box-sizing:border-box !important;
+            padding-top:0 !important;
+            padding-bottom:0 !important;
+            font-size:60px !important;
+            font-weight:800 !important;
+            text-align:center !important;
+            background:#fff !important;
+            color:#0f172a !important;
+        }
+
+        .st-key-v212_custom [data-testid="stNumberInput"] button,
+        .st-key-v212_custom [data-testid="stNumberInputStepDown"],
+        .st-key-v212_custom [data-testid="stNumberInputStepUp"] {
+            width:70px !important;
+            height:140px !important;
+            min-height:140px !important;
+            max-height:140px !important;
+            box-sizing:border-box !important;
+            padding:0 !important;
+            background:#f4f7fb !important;
+            display:flex !important;
+            align-items:center !important;
+            justify-content:center !important;
+        }
+        .st-key-v212_custom [data-testid="stNumberInput"] button svg,
+        .st-key-v212_custom [data-testid="stNumberInputStepDown"] svg,
+        .st-key-v212_custom [data-testid="stNumberInputStepUp"] svg {
+            width:28px !important;
+            height:28px !important;
         }
 
         .st-key-v212_min button,.st-key-v212_p5 button,.st-key-v212_p10 button {
