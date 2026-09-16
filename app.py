@@ -36298,10 +36298,30 @@ def render_bidding_inline_asta_v126():
             line-height:1 !important;
         }
 
+        /* V225 - OFFERTA MINIMA: il button Streamlit ignora height.
+           Dimensioniamo il contenitore stButton e facciamo occupare al pulsante
+           l'intera area tramite posizionamento assoluto. */
+        .st-key-v212_min [data-testid="stButton"] {
+            position:relative !important;
+            width:100% !important;
+            height:80px !important;
+            min-height:80px !important;
+            max-height:80px !important;
+        }
+        .st-key-v212_min [data-testid="stButton"] > button,
         .st-key-v212_min button {
-            width:100% !important;height:80px !important;min-height:80px !important;max-height:80px !important;
-            padding:0 10px !important;border-radius:10px !important;
-            display:flex !important;align-items:center !important;justify-content:center !important;
+            position:absolute !important;
+            inset:0 !important;
+            width:100% !important;
+            height:100% !important;
+            min-height:100% !important;
+            max-height:100% !important;
+            padding:0 10px !important;
+            border-radius:10px !important;
+            display:flex !important;
+            align-items:center !important;
+            justify-content:center !important;
+            box-sizing:border-box !important;
             box-shadow:none !important;
         }
         .st-key-v212_p5 button,.st-key-v212_p10 button {
