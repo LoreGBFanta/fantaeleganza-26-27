@@ -1458,6 +1458,14 @@ INCREMENTI_ASTA_AMMESSI_V186 = [
     200.00, 500.00, 1000.00, 2000.00, 5000.00
 ]
 
+# V204 - bootstrap helper: deve esistere PRIMA del rendering iniziale del portale.
+def _indice_incremento_asta_v186(valore):
+    valore = float(valore or 1.0)
+    return min(
+        range(len(INCREMENTI_ASTA_AMMESSI_V186)),
+        key=lambda i: abs(INCREMENTI_ASTA_AMMESSI_V186[i] - valore)
+    )
+
 def _normalizza_incrementi_scalari_v187(tipo, incremento_base, fasce):
     tipo = str(tipo or "FISSO").strip().upper()
     if tipo not in ("FISSO", "SCALARE"):
@@ -15680,14 +15688,6 @@ def render_admin_export_rose_lega():
         ):
             st.session_state.pop(_export_key, None)
             st.rerun()
-
-def _indice_incremento_asta_v186(valore):
-    valore = float(valore or 1.0)
-    return min(
-        range(len(INCREMENTI_ASTA_AMMESSI_V186)),
-        key=lambda i: abs(INCREMENTI_ASTA_AMMESSI_V186[i] - valore)
-    )
-
 
 def render_admin_multilega():
     if st.session_state.get("ml_modalita_accesso") != "ADMIN":
