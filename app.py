@@ -36121,7 +36121,6 @@ def render_bidding_inline_asta_v126():
         minimo = float(team["offerta_minima"])
         massimo = float(team["offerta_massima"])
 
-        st.markdown("#### 💰 Fai la tua offerta")
 
         custom_key = f"v209_custom_{stato['lot_id']}_{team_id}"
         current = st.session_state.get(custom_key, minimo)
@@ -36132,237 +36131,161 @@ def render_bidding_inline_asta_v126():
         if current < minimo or current > max(minimo,massimo):
             st.session_state[custom_key] = minimo
 
-        # V211 - affinamento pixel-oriented della sola maschera offerte.
-        # Obiettivo: proporzioni, allineamenti e gerarchia del mockup approvato.
+        # V212 - maschera offerte affinata sui 6 punti richiesti.
+        _wallet_icon_v212="data:image/png;base64,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"
+        _max_icon_v212="data:image/png;base64,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"
+
         st.markdown("""
         <style>
-        /* CARD */
-        .st-key-v211_offer_card {
-            border:1px solid #e2e8f0;
-            border-radius:14px;
-            background:#fff;
-            padding:16px 18px 16px 18px;
-            box-shadow:0 2px 9px rgba(15,23,42,.055);
-            margin-top:4px;
+        .st-key-v212_offer_card {
+            border:1px solid #e2e8f0;border-radius:14px;background:#fff;
+            padding:16px 18px;box-shadow:0 2px 9px rgba(15,23,42,.055);
         }
+        .v212-head {display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;}
+        .v212-money {font-size:32px;line-height:34px;}
+        .v212-title {font-size:27px;font-weight:800;line-height:1.05;color:#0f172a;}
+        .v212-sub {font-size:13px;color:#64748b;margin-top:5px;}
 
-        /* HEADER: niente vuoti eccessivi, box minimo compatto a destra */
-        .v211-head {
-            display:grid;
-            grid-template-columns:minmax(0,1fr) 220px;
-            align-items:start;
-            gap:18px;
-            margin-bottom:15px;
+        .st-key-v212_custom [data-testid="stWidgetLabel"] p {
+            font-size:13px !important;font-weight:650 !important;
         }
-        .v211-head-left {display:flex;align-items:flex-start;gap:12px;}
-        .v211-money {font-size:32px;line-height:34px;width:34px;flex:0 0 34px;}
-        .v211-title {font-size:27px;font-weight:800;line-height:1.05;color:#0f172a;}
-        .v211-sub {font-size:13px;color:#64748b;margin-top:5px;line-height:1.2;}
-        .v211-minbox {
-            height:70px;box-sizing:border-box;
-            background:#eaf3ff;border:1px solid #d5e6fb;border-radius:10px;
-            display:flex;align-items:center;justify-content:center;gap:12px;
-            padding:8px 14px;color:#123b78;
-        }
-        .v211-hammer {font-size:27px;line-height:1;}
-        .v211-minlabel {font-size:11px;font-weight:700;line-height:1.1;}
-        .v211-minvalue {font-size:24px;font-weight:850;line-height:1;margin-top:4px;}
-
-        /* LABEL sopra il selettore */
-        .st-key-v211_custom [data-testid="stWidgetLabel"] p {
-            font-size:13px !important;font-weight:650 !important;color:#334155 !important;
-        }
-
-        /* INPUT: forza davvero 64px sul widget con key propria */
-        .st-key-v211_custom [data-testid="stNumberInput"] > div {
-            min-height:64px !important;
-        }
-        .st-key-v211_custom div[data-baseweb="input"] {
-            height:64px !important;min-height:64px !important;max-height:64px !important;
-            border:1px solid #dce3ec !important;border-radius:9px !important;
+        .st-key-v212_custom div[data-baseweb="input"] {
+            height:72px !important;min-height:72px !important;max-height:72px !important;
+            border:1px solid #dce3ec !important;border-radius:10px !important;
             background:#f4f7fb !important;overflow:hidden !important;
         }
-        .st-key-v211_custom div[data-baseweb="input"] input {
-            height:62px !important;min-height:62px !important;max-height:62px !important;
-            padding:0 8px !important;
-            font-size:28px !important;font-weight:800 !important;text-align:center !important;
-            color:#0f172a !important;background:#fff !important;
-            border-left:1px solid #e2e8f0 !important;border-right:1px solid #e2e8f0 !important;
+        .st-key-v212_custom div[data-baseweb="input"] input {
+            height:70px !important;min-height:70px !important;max-height:70px !important;
+            font-size:31px !important;font-weight:800 !important;text-align:center !important;
+            background:#fff !important;color:#0f172a !important;
         }
-        .st-key-v211_custom div[data-baseweb="input"] button {
-            width:54px !important;height:62px !important;min-height:62px !important;
-            padding:0 !important;color:#0f172a !important;background:#f4f7fb !important;
-        }
-        .st-key-v211_custom div[data-baseweb="input"] button svg {
-            width:18px !important;height:18px !important;
+        .st-key-v212_custom div[data-baseweb="input"] button {
+            width:56px !important;height:70px !important;min-height:70px !important;
+            padding:0 !important;background:#f4f7fb !important;
         }
 
-        /* TRE CARD RAPIDE: stessa altezza, testo su due righe perfettamente centrato */
-        .st-key-v211_min button,
-        .st-key-v211_p5 button,
-        .st-key-v211_p10 button {
-            width:100% !important;height:64px !important;min-height:64px !important;max-height:64px !important;
-            padding:0 8px !important;border-radius:9px !important;
+        .st-key-v212_min button,.st-key-v212_p5 button,.st-key-v212_p10 button {
+            width:100% !important;height:72px !important;min-height:72px !important;max-height:72px !important;
+            padding:0 10px !important;border-radius:10px !important;
             display:flex !important;align-items:center !important;justify-content:center !important;
             box-shadow:none !important;
         }
-        .st-key-v211_min button {
-            background:#fff0f0 !important;border:1px solid #ffd0d0 !important;color:#ff343b !important;
+        .st-key-v212_min button {
+            background:#fff0f0 !important;border:1px solid #ffd0d0 !important;
         }
-        .st-key-v211_p5 button,
-        .st-key-v211_p10 button {
-            background:#f2f5f9 !important;border:1px solid #dce3ec !important;color:#0f172a !important;
+        .st-key-v212_p5 button,.st-key-v212_p10 button {
+            background:#f2f5f9 !important;border:1px solid #dce3ec !important;
         }
-        .st-key-v211_min button p,
-        .st-key-v211_p5 button p,
-        .st-key-v211_p10 button p {
-            margin:0 !important;padding:0 !important;
-            white-space:pre-line !important;text-align:center !important;
-            font-size:17px !important;font-weight:800 !important;line-height:1.12 !important;
+        .st-key-v212_min button p,.st-key-v212_p5 button p,.st-key-v212_p10 button p {
+            margin:0 !important;padding:0 !important;white-space:nowrap !important;
+            text-align:center !important;font-size:18px !important;font-weight:800 !important;line-height:1 !important;
         }
-        .st-key-v211_min button p {color:#ff343b !important;}
+        .st-key-v212_min button p {color:#ff343b !important;}
 
-        /* CTA: subito sotto, alta come mockup */
-        .st-key-v211_send {margin-top:7px;margin-bottom:12px;}
-        .st-key-v211_send button {
-            width:100% !important;height:56px !important;min-height:56px !important;max-height:56px !important;
-            padding:0 18px !important;border-radius:9px !important;
-            background:#ff343b !important;border:1px solid #ff343b !important;color:#fff !important;
-            box-shadow:none !important;
+        .st-key-v212_send {margin-top:8px;margin-bottom:12px;}
+        .st-key-v212_send button {
+            width:100% !important;height:58px !important;min-height:58px !important;max-height:58px !important;
+            border-radius:9px !important;background:#ff343b !important;border-color:#ff343b !important;
         }
-        .st-key-v211_send button p {
-            width:100% !important;margin:0 !important;
-            font-size:22px !important;font-weight:850 !important;line-height:1 !important;color:#fff !important;
-            text-align:center !important;
+        .st-key-v212_send button p {
+            width:100% !important;margin:0 !important;font-size:22px !important;
+            font-weight:850 !important;color:#fff !important;text-align:center !important;
         }
 
-        /* FASCIA FINANZIARIA: due metà coordinate e testi ben impaginati */
-        .v211-finance {
-            display:grid;grid-template-columns:1fr 1fr;
-            height:72px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;
+        .v212-finance {
+            display:grid;grid-template-columns:1fr 1fr;height:76px;
+            border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;
         }
-        .v211-fin {
-            display:flex;align-items:center;justify-content:center;gap:15px;padding:8px 18px;
-        }
-        .v211-budget {background:linear-gradient(90deg,#eefbf3,#f7fcf9);color:#087a39;}
-        .v211-max {background:linear-gradient(90deg,#f3f8ff,#eaf4ff);color:#123f80;border-left:1px solid #d8e3ef;}
-        .v211-fin-icon {font-size:27px;line-height:1;width:32px;text-align:center;}
-        .v211-fin-copy {width:145px;}
-        .v211-fin-label {font-size:12px;font-weight:700;line-height:1.05;}
-        .v211-fin-value {font-size:27px;font-weight:850;line-height:1;margin-top:5px;}
-
-        @media(max-width:900px){
-            .v211-head{grid-template-columns:1fr 190px;}
-            .v211-title{font-size:23px;}
-            .v211-fin-copy{width:auto;}
-        }
+        .v212-fin {display:flex;align-items:center;justify-content:center;gap:15px;padding:8px 18px;}
+        .v212-budget {background:linear-gradient(90deg,#eefbf3,#f7fcf9);color:#087a39;}
+        .v212-max {background:linear-gradient(90deg,#f3f8ff,#eaf4ff);color:#123f80;border-left:1px solid #d8e3ef;}
+        .v212-fin-icon {width:40px;height:40px;object-fit:contain;display:block;flex:0 0 40px;}
+        .v212-fin-copy {width:145px;}
+        .v212-fin-label {font-size:12px;font-weight:700;line-height:1.05;}
+        .v212-fin-value {font-size:27px;font-weight:850;line-height:1;margin-top:5px;}
         </style>
-        """, unsafe_allow_html=True)
+        """,unsafe_allow_html=True)
 
-        with st.container(key="v211_offer_card"):
+        with st.container(key="v212_offer_card"):
             st.markdown(
-                f"""
-                <div class="v211-head">
-                    <div class="v211-head-left">
-                        <div class="v211-money">💰</div>
-                        <div>
-                            <div class="v211-title">Fai la tua offerta</div>
-                            <div class="v211-sub">Imposta l'importo e conferma la tua offerta</div>
-                        </div>
-                    </div>
-                    <div class="v211-minbox">
-                        <div class="v211-hammer">🔨</div>
-                        <div>
-                            <div class="v211-minlabel">Offerta minima per rilanciare</div>
-                            <div class="v211-minvalue">{minimo:g}</div>
-                        </div>
+                """
+                <div class="v212-head">
+                    <div class="v212-money">💰</div>
+                    <div>
+                        <div class="v212-title">Fai la tua offerta</div>
+                        <div class="v212-sub">Imposta l'importo e conferma la tua offerta</div>
                     </div>
                 </div>
-                """, unsafe_allow_html=True
+                """,unsafe_allow_html=True
             )
 
-            # Proporzioni del mockup: input ~48%, minima ~20%, +5/+10 ~16% ciascuno.
-            _custom_col,_min_col,_p5_col,_p10_col = st.columns(
-                [3.35,1.45,1.0,1.0], gap="small", vertical_alignment="bottom"
+            _custom_col,_min_col,_p5_col,_p10_col=st.columns(
+                [2.25,2.05,1.35,1.35],gap="small",vertical_alignment="bottom"
             )
 
             with _custom_col:
-                with st.container(key="v211_custom"):
+                with st.container(key="v212_custom"):
                     st.number_input(
-                        "Offerta personalizzata",
-                        min_value=minimo,
-                        max_value=max(minimo,massimo),
+                        "Offerta personalizzata",min_value=minimo,max_value=max(minimo,massimo),
                         value=float(st.session_state.get(custom_key,minimo)),
-                        step=float(team["incremento"]),
-                        key=custom_key
+                        step=float(team["incremento"]),key=custom_key
                     )
 
             with _min_col:
-                with st.container(key="v211_min"):
+                with st.container(key="v212_min"):
                     st.button(
-                        f"OFFERTA MINIMA\n{minimo:g}",
-                        use_container_width=True,
-                        type="secondary",
-                        key=f"v211_pick_{stato['lot_id']}_{team_id}_MIN",
-                        on_click=callback_seleziona_importo_offerta_v209,
-                        args=(custom_key,float(minimo))
+                        f"OFFERTA MINIMA  •  {minimo:g}",use_container_width=True,type="secondary",
+                        key=f"v212_pick_{stato['lot_id']}_{team_id}_MIN",
+                        on_click=callback_seleziona_importo_offerta_v209,args=(custom_key,float(minimo))
                     )
 
             _v5=float(min(massimo,minimo+5))
             with _p5_col:
-                with st.container(key="v211_p5"):
+                with st.container(key="v212_p5"):
                     st.button(
-                        f"+5\n{_v5:g}",
-                        use_container_width=True,
-                        type="secondary",
+                        f"+5  •  {_v5:g}",use_container_width=True,type="secondary",
                         disabled=_v5 < minimo or _v5 > massimo,
-                        key=f"v211_pick_{stato['lot_id']}_{team_id}_P5",
-                        on_click=callback_seleziona_importo_offerta_v209,
-                        args=(custom_key,_v5)
+                        key=f"v212_pick_{stato['lot_id']}_{team_id}_P5",
+                        on_click=callback_seleziona_importo_offerta_v209,args=(custom_key,_v5)
                     )
 
             _v10=float(min(massimo,minimo+10))
             with _p10_col:
-                with st.container(key="v211_p10"):
+                with st.container(key="v212_p10"):
                     st.button(
-                        f"+10\n{_v10:g}",
-                        use_container_width=True,
-                        type="secondary",
+                        f"+10  •  {_v10:g}",use_container_width=True,type="secondary",
                         disabled=_v10 < minimo or _v10 > massimo,
-                        key=f"v211_pick_{stato['lot_id']}_{team_id}_P10",
-                        on_click=callback_seleziona_importo_offerta_v209,
-                        args=(custom_key,_v10)
+                        key=f"v212_pick_{stato['lot_id']}_{team_id}_P10",
+                        on_click=callback_seleziona_importo_offerta_v209,args=(custom_key,_v10)
                     )
 
-            with st.container(key="v211_send"):
+            with st.container(key="v212_send"):
                 st.button(
-                    "💰   INVIA OFFERTA   →",
-                    use_container_width=True,
-                    type="primary",
-                    key=f"v211_send_{stato['lot_id']}_{team_id}",
+                    "💰   INVIA OFFERTA   →",use_container_width=True,type="primary",
+                    key=f"v212_send_{stato['lot_id']}_{team_id}",
                     on_click=callback_bid_personalizzato_v130,
                     args=(league_id,stato["lot_id"],team_id,custom_key)
                 )
 
             st.markdown(
                 f"""
-                <div class="v211-finance">
-                    <div class="v211-fin v211-budget">
-                        <div class="v211-fin-icon">💳</div>
-                        <div class="v211-fin-copy">
-                            <div class="v211-fin-label">Budget residuo</div>
-                            <div class="v211-fin-value">{team["residuo"]:g}</div>
+                <div class="v212-finance">
+                    <div class="v212-fin v212-budget">
+                        <img class="v212-fin-icon" src="{_wallet_icon_v212}" alt="">
+                        <div class="v212-fin-copy">
+                            <div class="v212-fin-label">Budget residuo</div>
+                            <div class="v212-fin-value">{team["residuo"]:g}</div>
                         </div>
                     </div>
-                    <div class="v211-fin v211-max">
-                        <div class="v211-fin-icon">📈</div>
-                        <div class="v211-fin-copy">
-                            <div class="v211-fin-label">Offerta massima</div>
-                            <div class="v211-fin-value">{massimo:g}</div>
+                    <div class="v212-fin v212-max">
+                        <img class="v212-fin-icon" src="{_max_icon_v212}" alt="">
+                        <div class="v212-fin-copy">
+                            <div class="v212-fin-label">Offerta massima</div>
+                            <div class="v212-fin-value">{massimo:g}</div>
                         </div>
                     </div>
                 </div>
-                """, unsafe_allow_html=True
+                """,unsafe_allow_html=True
             )
 
     # V172 - la tabella offerte resta sempre l'ultimo blocco operativo
