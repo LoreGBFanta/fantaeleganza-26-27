@@ -36044,6 +36044,16 @@ def callback_seleziona_importo_offerta_v209(custom_key, valore):
     st.session_state[str(custom_key)] = float(valore)
 
 
+def callback_varia_offerta_personalizzata_v222(custom_key, delta, minimo, massimo):
+    """V222 - varia il valore del controllo composito senza usare st.number_input."""
+    try:
+        valore = float(str(st.session_state.get(str(custom_key), minimo)).replace(",", "."))
+    except Exception:
+        valore = float(minimo)
+    valore = max(float(minimo), min(float(massimo), valore + float(delta)))
+    st.session_state[str(custom_key)] = f"{valore:g}"
+
+
 def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom", outer_px=180, inner_px=176, font_px=42):
     """V217 - forza la dimensione visiva del NumberInput direttamente nel DOM Streamlit."""
     components.html(
@@ -36239,61 +36249,53 @@ def render_bidding_inline_asta_v126():
         .v212-title {font-size:27px;font-weight:800;line-height:1.05;color:#0f172a;}
         .v212-sub {font-size:13px;color:#64748b;margin-top:5px;}
 
-        /* V221 - OFFERTA PERSONALIZZATA.
-           Strategia diversa: il padding viene applicato DIRETTAMENTE all'input
-           e ai pulsanti +/- (non al wrapper BaseWeb). Con box-sizing:content-box
-           il browser deve sommare il padding all'altezza intrinseca del controllo. */
-        .st-key-v212_custom [data-testid="stWidgetLabel"] p {
-            font-size:13px !important;
-            font-weight:650 !important;
+        /* V222 - CONTROLLO COMPOSITO.
+           Non usiamo più st.number_input: Streamlit ne blocca l'altezza interna.
+           st.text_area possiede invece un parametro height nativo e affidabile. */
+        .st-key-v222_custom_label {
+            font-size:13px;
+            font-weight:650;
+            color:#0f172a;
+            margin:0 0 6px 0;
         }
-
-        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] {
-            height:auto !important;
-            min-height:0 !important;
-            max-height:none !important;
-            padding:0 !important;
-            overflow:visible !important;
-            align-items:stretch !important;
-            border:1px solid #dce3ec !important;
-            border-radius:10px !important;
-            background:#f4f7fb !important;
-        }
-
-        .st-key-v212_custom [data-testid="stNumberInput"] input,
-        .st-key-v212_custom [data-testid="stNumberInput"] input[type="number"] {
-            height:40px !important;
-            min-height:40px !important;
-            max-height:none !important;
-            padding-top:48px !important;
-            padding-bottom:48px !important;
-            padding-left:12px !important;
-            padding-right:12px !important;
-            box-sizing:content-box !important;
+        .st-key-v222_custom_text textarea {
+            height:136px !important;
+            min-height:136px !important;
+            max-height:136px !important;
+            resize:none !important;
+            overflow:hidden !important;
+            padding:42px 8px !important;
+            box-sizing:border-box !important;
             font-size:34px !important;
-            line-height:40px !important;
+            line-height:42px !important;
             font-weight:800 !important;
             text-align:center !important;
             color:#0f172a !important;
             background:#fff !important;
+            border-radius:8px !important;
         }
-
-        .st-key-v212_custom [data-testid="stNumberInput"] button {
-            height:40px !important;
-            min-height:40px !important;
-            max-height:none !important;
-            padding-top:48px !important;
-            padding-bottom:48px !important;
-            padding-left:18px !important;
-            padding-right:18px !important;
-            box-sizing:content-box !important;
-            align-self:stretch !important;
-            background:#f4f7fb !important;
+        .st-key-v222_custom_text [data-testid="stWidgetLabel"] {
+            display:none !important;
         }
-
-        .st-key-v212_custom [data-testid="stNumberInput"] button svg {
-            width:22px !important;
-            height:22px !important;
+        .st-key-v222_minus button,
+        .st-key-v222_plus button {
+            width:100% !important;
+            height:136px !important;
+            min-height:136px !important;
+            max-height:136px !important;
+            padding:0 !important;
+            border-radius:8px !important;
+            background:#f2f5f9 !important;
+            border:1px solid #dce3ec !important;
+            color:#0f172a !important;
+            box-shadow:none !important;
+        }
+        .st-key-v222_minus button p,
+        .st-key-v222_plus button p {
+            margin:0 !important;
+            font-size:36px !important;
+            font-weight:700 !important;
+            line-height:1 !important;
         }
 
         .st-key-v212_min button,.st-key-v212_p5 button,.st-key-v212_p10 button {
@@ -36356,15 +36358,50 @@ def render_bidding_inline_asta_v126():
             )
 
             with _custom_col:
-                with st.container(key="v212_custom"):
-                    st.number_input(
-                        "Offerta personalizzata",min_value=minimo,max_value=max(minimo,massimo),
-                        value=float(st.session_state.get(custom_key,minimo)),
-                        step=float(team["incremento"]),key=custom_key
-                    )
-                    # V217: applicazione DOM post-render. Inline style !important
-                    # prevale sulle regole generate dinamicamente da Streamlit/BaseWeb.
-                    # V221: padding intrinseco applicato direttamente a input e pulsanti +/-.
+                # V222: controllo composito ad altezza nativa 136px.
+                # Converte sempre lo stato in stringa perché st.text_area lavora su testo;
+                # callback_bid_personalizzato_v130 continua a validarlo con float().
+                try:
+                    _custom_val_v222 = float(str(st.session_state.get(custom_key, minimo)).replace(",", "."))
+                except Exception:
+                    _custom_val_v222 = float(minimo)
+                _custom_val_v222 = max(float(minimo), min(float(massimo), _custom_val_v222))
+                st.session_state[custom_key] = f"{_custom_val_v222:g}"
+
+                st.markdown(
+                    '<div class="st-key-v222_custom_label">Offerta personalizzata</div>',
+                    unsafe_allow_html=True
+                )
+                _minus_col, _value_col, _plus_col = st.columns([1.0, 4.8, 1.0], gap="small")
+
+                with _minus_col:
+                    with st.container(key="v222_minus"):
+                        st.button(
+                            "−",
+                            use_container_width=True,
+                            key=f"v222_minus_{stato['lot_id']}_{team_id}",
+                            on_click=callback_varia_offerta_personalizzata_v222,
+                            args=(custom_key, -float(team["incremento"]), minimo, massimo),
+                        )
+
+                with _value_col:
+                    with st.container(key="v222_custom_text"):
+                        st.text_area(
+                            "Offerta personalizzata",
+                            key=custom_key,
+                            height=136,
+                            label_visibility="collapsed",
+                        )
+
+                with _plus_col:
+                    with st.container(key="v222_plus"):
+                        st.button(
+                            "+",
+                            use_container_width=True,
+                            key=f"v222_plus_{stato['lot_id']}_{team_id}",
+                            on_click=callback_varia_offerta_personalizzata_v222,
+                            args=(custom_key, float(team["incremento"]), minimo, massimo),
+                        )
 
             with _min_col:
                 with st.container(key="v212_min"):
