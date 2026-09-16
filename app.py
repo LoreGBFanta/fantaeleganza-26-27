@@ -36040,8 +36040,9 @@ def render_card_giocatore_squadra_v171(live):
 
 
 def callback_seleziona_importo_offerta_v209(custom_key, valore):
-    """V237 - selezione locale ultraleggera: nessun accesso DB."""
+    """V238 - selezione locale: solo session_state, zero DB e zero I/O."""
     st.session_state[str(custom_key)] = f"{float(valore):g}"
+    st.session_state["_bid_pick_ts_v238"] = time.perf_counter()
 
 
 def callback_varia_offerta_personalizzata_v222(custom_key, delta, minimo, massimo):
@@ -36146,12 +36147,13 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
     )
 
 
-@st.fragment(run_every="1s")
+@st.fragment
 def render_bidding_inline_asta_v126():
     """
-    V237 - ASTA SQUADRA isolata in un vero st.fragment.
-    I click della maschera offerte rieseguono solo questo blocco e non tutta
-    l'applicazione. Polling live 1s e una sola snapshot DB per refresh.
+    V238 - ASTA SQUADRA isolata in un fragment interattivo SENZA polling interno.
+    Ogni click riesegue soltanto questa sezione. Evitiamo la concorrenza tra
+    run_every e callback dei pulsanti, che nella V237 poteva rendere i click
+    inaffidabili. La snapshot DB viene riletta a ogni interazione.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
