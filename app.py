@@ -36419,25 +36419,26 @@ def _connessione_watcher_asta_v278():
     return sqlite3.connect(DB_PATH)
 
 
-def token_lotto_squadra_v278(league_id):
+def token_lotto_squadra_v279(league_id):
     """Token minimale OPEN/IDLE: una sola SELECT, nessun dato pesante."""
     conn = _connessione_watcher_asta_v278()
     cur = conn.cursor()
     try:
         cur.execute(
             """
-            SELECT l.id, COALESCE(l.version,0)
+            SELECT s.current_lot_id
             FROM auction_sessions s
             JOIN auction_lots l
               ON l.id=s.current_lot_id
              AND l.league_id=s.league_id
-            WHERE s.league_id=? AND l.stato='OPEN'
+             AND l.stato='OPEN'
+            WHERE s.league_id=?
             LIMIT 1
             """,
             (int(league_id),)
         )
         row = cur.fetchone()
-        return (int(row[0]), int(row[1] or 0)) if row else (0, 0)
+        return int(row[0]) if row and row[0] is not None else 0
     finally:
         # Cloud: connessione watcher riusata per tutta la sessione.
         # Locale: sqlite può essere chiusa normalmente.
@@ -36449,12 +36450,12 @@ def token_lotto_squadra_v278(league_id):
 
 
 @st.fragment(run_every="0.5s")
-def watcher_stato_lotto_squadra_v278(league_id, expected_lot_id):
+def watcher_stato_lotto_squadra_v279(league_id, expected_lot_id):
     """
-    V278 - sincronizzazione bidirezionale su connessione watcher dedicata e persistente.
+    V279 - sincronizzazione bidirezionale sul solo lot_id autorevole, con connessione watcher persistente.
     Rerun solo se cambia il lotto corrente; le offerte non lo provocano.
     """
-    live_lot_id, _live_version = token_lotto_squadra_v278(league_id)
+    live_lot_id = token_lotto_squadra_v279(league_id)
     if int(live_lot_id) != int(expected_lot_id or 0):
         st.rerun(scope="app")
 
@@ -36619,7 +36620,7 @@ def render_bidding_inline_asta_v126():
     """
     V250 - ASTA SQUADRA: maschera sempre visibile durante il lotto OPEN.
     Se la squadra è leader viene disabilitato esclusivamente INVIA OFFERTA.
-    V278 - sync apertura/chiusura con connessione watcher dedicata persistente.
+    V279 - sync automatica IDLE/OPEN sul lot_id centrale; bid path separato.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
@@ -36660,8 +36661,8 @@ def render_bidding_inline_asta_v126():
             "⏳ Nessun giocatore è attualmente all'asta. "
             "Attendi l'apertura del lotto da parte del Banditore."
         )
-        # V278 - IDLE -> OPEN: il nuovo lotto compare automaticamente.
-        watcher_stato_lotto_squadra_v278(league_id, 0)
+        # V279 - IDLE -> OPEN: il nuovo lotto compare automaticamente.
+        watcher_stato_lotto_squadra_v279(league_id, 0)
         return
 
     # V171 - card specifica per la SQUADRA: stesso linguaggio grafico del
@@ -36672,9 +36673,9 @@ def render_bidding_inline_asta_v126():
     render_stile_maschera_offerta_v266()
     render_maschera_offerta_squadra_v259(league_id,team_id,stato)
 
-    # V278 - OPEN -> IDLE: quando il Banditore assegna/chiude il lotto,
+    # V279 - OPEN -> IDLE: quando il Banditore assegna/chiude il lotto,
     # il vecchio giocatore scompare automaticamente. Connessione separata dai bid.
-    watcher_stato_lotto_squadra_v278(league_id, int(stato["lot_id"]))
+    watcher_stato_lotto_squadra_v279(league_id, int(stato["lot_id"]))
 
     elapsed = time.perf_counter() - t0
     if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
