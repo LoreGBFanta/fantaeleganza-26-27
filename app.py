@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 # ============================================================
@@ -36043,6 +36044,98 @@ def callback_seleziona_importo_offerta_v209(custom_key, valore):
     st.session_state[str(custom_key)] = float(valore)
 
 
+def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom", outer_px=180, inner_px=176, font_px=42):
+    """V217 - forza la dimensione visiva del NumberInput direttamente nel DOM Streamlit."""
+    components.html(
+        f"""
+        <script>
+        (() => {{
+          const CLS = {container_class!r};
+          const OUTER = {int(outer_px)};
+          const INNER = {int(inner_px)};
+          const FONT = {int(font_px)};
+
+          function imp(el, prop, value) {{
+            if (el) el.style.setProperty(prop, value, 'important');
+          }}
+
+          function apply() {{
+            let doc;
+            try {{ doc = window.parent.document; }} catch (e) {{ return; }}
+            const root = doc.querySelector('.' + CLS);
+            if (!root) return;
+
+            const widget = root.querySelector('[data-testid="stNumberInput"]');
+            if (!widget) return;
+
+            /* Non allarghiamo il widget: modifichiamo solo la sua altezza reale. */
+            const base = widget.querySelector('[data-baseweb="input"]');
+            if (base) {{
+              imp(base, 'height', OUTER + 'px');
+              imp(base, 'min-height', OUTER + 'px');
+              imp(base, 'max-height', OUTER + 'px');
+              imp(base, 'box-sizing', 'border-box');
+              imp(base, 'display', 'flex');
+              imp(base, 'align-items', 'stretch');
+              imp(base, 'overflow', 'hidden');
+            }}
+
+            const input = widget.querySelector('input');
+            if (input) {{
+              imp(input, 'height', INNER + 'px');
+              imp(input, 'min-height', INNER + 'px');
+              imp(input, 'max-height', INNER + 'px');
+              imp(input, 'font-size', FONT + 'px');
+              imp(input, 'font-weight', '800');
+              imp(input, 'text-align', 'center');
+              imp(input, 'line-height', 'normal');
+              imp(input, 'padding-top', '0');
+              imp(input, 'padding-bottom', '0');
+              imp(input, 'box-sizing', 'border-box');
+            }}
+
+            const buttons = widget.querySelectorAll('button');
+            buttons.forEach((b) => {{
+              imp(b, 'height', INNER + 'px');
+              imp(b, 'min-height', INNER + 'px');
+              imp(b, 'max-height', INNER + 'px');
+              imp(b, 'align-self', 'stretch');
+              imp(b, 'box-sizing', 'border-box');
+            }});
+
+            /* BaseWeb inserisce wrapper intermedi con altezza propria:
+               li forziamo solo dentro questo NumberInput. */
+            if (base) {{
+              Array.from(base.children).forEach((child) => {{
+                imp(child, 'height', INNER + 'px');
+                imp(child, 'min-height', INNER + 'px');
+                imp(child, 'max-height', INNER + 'px');
+                imp(child, 'align-self', 'stretch');
+              }});
+            }}
+          }}
+
+          apply();
+          setTimeout(apply, 0);
+          setTimeout(apply, 50);
+          setTimeout(apply, 150);
+          setTimeout(apply, 400);
+
+          try {{
+            const obs = new MutationObserver(apply);
+            obs.observe(window.parent.document.body, {{
+              childList: true, subtree: true, attributes: true
+            }});
+            setTimeout(() => obs.disconnect(), 2500);
+          }} catch (e) {{}}
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def render_bidding_inline_asta_v126():
     """
     V132 - ASTA squadra: un solo fragment live, una sola query per refresh.
@@ -36311,6 +36404,11 @@ def render_bidding_inline_asta_v126():
                         "Offerta personalizzata",min_value=minimo,max_value=max(minimo,massimo),
                         value=float(st.session_state.get(custom_key,minimo)),
                         step=float(team["incremento"]),key=custom_key
+                    )
+                    # V217: applicazione DOM post-render. Inline style !important
+                    # prevale sulle regole generate dinamicamente da Streamlit/BaseWeb.
+                    forza_dimensione_number_input_dom_v217(
+                        "st-key-v212_custom", outer_px=180, inner_px=176, font_px=42
                     )
 
             with _min_col:
