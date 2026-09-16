@@ -33142,12 +33142,20 @@ def chiudi_lotto_vuoto_v133(league_id, lot_id, player_id):
         _portal_close(conn)
 
 
-def callback_apri_lotto_v133(league_id, player_id, nome):
+def callback_apri_lotto_v133(league_id, player_id, nome, squadra_reale='', ruolo_mantra=''):
     try:
-        apri_lotto_banditore(
+        _v276_lot_id = apri_lotto_banditore(
             int(league_id),
             int(player_id)
         )
+        # V276 - hint locale per la transizione immediata del Banditore.
+        st.session_state[f"_v276_open_hint_{int(league_id)}"] = {
+            "lot_id": int(_v276_lot_id),
+            "player_id": int(player_id),
+            "nome": str(nome),
+            "squadra": str(squadra_reale or ""),
+            "ruolo_mantra": str(ruolo_mantra or ""),
+        }
         invalida_cache_banditore_v156(league_id)
         st.session_state["auctioneer_msg"] = (
             f"Asta aperta su {nome}."
@@ -34918,8 +34926,26 @@ def render_banditore_asta():
     _nav_snapshot=st.session_state.pop(_nav_snap_key,None)
     _skip_live_once=bool(st.session_state.pop(_skip_live_key,False))
 
+    _v276_hint = st.session_state.pop(f"_v276_open_hint_{league_id}", None)
     if _skip_live_once:
         live=None
+    elif _v276_hint is not None:
+        # V276 - il commit del lotto è già concluso: mostra subito il giocatore
+        # senza attendere le due SELECT dello snapshot live sul DB remoto.
+        live = {
+            "lot_id": int(_v276_hint["lot_id"]),
+            "player_id": int(_v276_hint["player_id"]),
+            "stato": "OPEN",
+            "current_bid": None,
+            "current_team_id": None,
+            "current_team": "",
+            "bid_count": 0,
+            "version": 0,
+            "nome": str(_v276_hint.get("nome") or ""),
+            "squadra": str(_v276_hint.get("squadra") or ""),
+            "ruolo_mantra": str(_v276_hint.get("ruolo_mantra") or ""),
+            "offerte": [],
+        }
     else:
         try:
             live = snapshot_banditore_live_v133(league_id)
@@ -35096,7 +35122,7 @@ def render_banditore_asta():
                 use_container_width=True,
                 key="v202_open",
                 on_click=callback_apri_lotto_v133,
-                args=(league_id,g["player_id"],g["nome"])
+                args=(league_id,g["player_id"],g["nome"],g.get("squadra",""),_ruolo_visualizzato)
             )
 
         # V202 - pulsanti NATIVI Streamlit: niente HTML/JS intermedio.
@@ -36380,10 +36406,12 @@ def token_lotto_squadra_v274(league_id):
     try:
         cur.execute(
             """
-            SELECT id, COALESCE(version,0)
-            FROM auction_lots
-            WHERE league_id=? AND stato='OPEN'
-            ORDER BY id DESC
+            SELECT l.id, COALESCE(l.version,0)
+            FROM auction_sessions s
+            JOIN auction_lots l
+              ON l.id=s.current_lot_id
+             AND l.league_id=s.league_id
+            WHERE s.league_id=? AND l.stato='OPEN'
             LIMIT 1
             """,
             (int(league_id),)
