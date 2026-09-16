@@ -36872,10 +36872,9 @@ def stile_tooltip_hover_banditore_v168():
 
 
 def render_navigazione_e_pagina():
-    # V166 - ADMIN mantiene i controlli generali in alto.
-    # Nel BANDITORE, destinato alla proiezione, CAMBIA LIVELLO e MENU
-    # vengono invece renderizzati in fondo alla pagina.
-    if MODALITA_ACCESSO_ATTIVA == "ADMIN":
+    # V268 - ADMIN e BANDITORE: CAMBIA LIVELLO ACCESSO + MENU
+    # vengono renderizzati entrambi in alto, prima della navbar.
+    if MODALITA_ACCESSO_ATTIVA in ("ADMIN", "BANDITORE"):
         render_controlli_top_admin_banditore_v154()
 
     # V168 - intestazione pubblica Banditore sempre letta dal DB.
@@ -38445,16 +38444,6 @@ def render_navigazione_e_pagina():
                 unsafe_allow_html=True
             )
 
-
-    # ============================================================
-    # V166 - CONTROLLI BANDITORE IN FONDO
-    # ============================================================
-    if MODALITA_ACCESSO_ATTIVA == "BANDITORE":
-        st.markdown(
-            '<div style="height:18px"></div>',
-            unsafe_allow_html=True,
-        )
-        render_controlli_top_admin_banditore_v154()
 
     # ============================================================
     # FOOTER
