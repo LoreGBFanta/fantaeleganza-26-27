@@ -34352,8 +34352,22 @@ def render_ultime_offerte_proiezione_v165(live):
     rows = []
     for _idx_bid, bid in enumerate((live.get("offerte") or [])[:3]):
         raw_time = str(bid.get("Orario") or "")
-        # SQLite CURRENT_TIMESTAMP -> YYYY-MM-DD HH:MM:SS: sul proiettore basta HH:MM:SS.
-        ora = raw_time.split(" ")[-1][:8] if raw_time else "—"
+        # V261 - SQLite/Turso CURRENT_TIMESTAMP è UTC.
+        # Conversione esplicita in Europe/Rome, con ora solare/legale automatica.
+        ora = "—"
+        if raw_time:
+            try:
+                from datetime import datetime, timezone
+                from zoneinfo import ZoneInfo
+                _dt_utc = datetime.strptime(
+                    raw_time[:19], "%Y-%m-%d %H:%M:%S"
+                ).replace(tzinfo=timezone.utc)
+                ora = _dt_utc.astimezone(
+                    ZoneInfo("Europe/Rome")
+                ).strftime("%H:%M:%S")
+            except Exception:
+                # Fallback solo visuale se il timestamp avesse un formato inatteso.
+                ora = raw_time.split(" ")[-1][:8]
         squadra = html.escape(str(bid.get("Squadra") or "—"))
         offerta = float(bid.get("Offerta") or 0)
         # V260: la prima riga è l'offerta corrente/migliore e viene evidenziata nettamente.
