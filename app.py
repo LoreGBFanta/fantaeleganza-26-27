@@ -36354,18 +36354,64 @@ def render_bidding_inline_asta_v126():
             border-color:#ffbcbc !important;
         }
 
-        .st-key-v212_p5 button,.st-key-v212_p10 button {
-            width:100% !important;height:72px !important;min-height:72px !important;max-height:72px !important;
-            padding:0 10px !important;border-radius:10px !important;
-            display:flex !important;align-items:center !important;justify-content:center !important;
+        /* V229 - +5 e +10: stessa geometria visiva di OFFERTA MINIMA V228.
+           Come per OFFERTA MINIMA, lasciamo il button nativo funzionale e
+           disegniamo la superficie da 80px sul <p> interno. */
+        .st-key-v212_p5,
+        .st-key-v212_p10 {
+            min-height:80px !important;
+            height:80px !important;
+            overflow:visible !important;
+        }
+        .st-key-v212_p5 [data-testid="stButton"],
+        .st-key-v212_p10 [data-testid="stButton"] {
+            width:100% !important;
+            height:80px !important;
+            min-height:80px !important;
+            overflow:visible !important;
+        }
+        .st-key-v212_p5 button,
+        .st-key-v212_p10 button {
+            width:100% !important;
+            height:34px !important;
+            min-height:34px !important;
+            max-height:34px !important;
+            padding:0 !important;
+            margin:0 !important;
+            border:0 !important;
+            background:transparent !important;
             box-shadow:none !important;
+            overflow:visible !important;
         }
-        .st-key-v212_p5 button,.st-key-v212_p10 button {
-            background:#f2f5f9 !important;border:1px solid #dce3ec !important;
+        .st-key-v212_p5 button p,
+        .st-key-v212_p10 button p {
+            width:125% !important;
+            height:80px !important;
+            min-height:80px !important;
+            max-height:80px !important;
+            margin:0 !important;
+            margin-left:-12.5% !important;
+            padding:0 10px !important;
+            box-sizing:border-box !important;
+            display:flex !important;
+            align-items:center !important;
+            justify-content:center !important;
+            white-space:nowrap !important;
+            text-align:center !important;
+            font-size:18px !important;
+            font-weight:800 !important;
+            line-height:1 !important;
+            color:#0f172a !important;
+            background:#f2f5f9 !important;
+            border:1px solid #dce3ec !important;
+            border-radius:10px !important;
+            pointer-events:auto !important;
+            transform:translateY(21px) !important;
         }
-        .st-key-v212_p5 button p,.st-key-v212_p10 button p {
-            margin:0 !important;padding:0 !important;white-space:nowrap !important;
-            text-align:center !important;font-size:18px !important;font-weight:800 !important;line-height:1 !important;
+        .st-key-v212_p5 button:hover p,
+        .st-key-v212_p10 button:hover p {
+            background:#eaf0f7 !important;
+            border-color:#cbd5e1 !important;
         }
 
         .st-key-v212_send {margin-top:8px;margin-bottom:12px;}
