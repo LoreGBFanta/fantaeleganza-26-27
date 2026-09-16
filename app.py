@@ -36295,9 +36295,9 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
 @st.fragment
 def render_bidding_inline_asta_v126():
     """
-    V246 - ASTA SQUADRA FAST: nessun polling e nessun fragment concorrente.
-    OFFERTA MINIMA/+5/+10/INVIA hanno priorità assoluta; la snapshot DB viene
-    riletta soltanto a seguito di un'interazione esplicita della squadra.
+    V247 - ASTA SQUADRA FAST: nessun run_every e nessun fragment concorrente.
+    Quando la squadra è migliore viene programmato un singolo refresh browser-side;
+    quando può rilanciare non esiste alcun refresh automatico concorrente.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
@@ -36365,6 +36365,38 @@ def render_bidding_inline_asta_v126():
     if stato["current_team_id"] == team_id:
         st.caption(
             "Le offerte si aggiornano automaticamente."
+        )
+
+        # V247 - AUTO REFRESH SEQUENZIALE SOLO DEL VECCHIO MIGLIOR OFFERENTE.
+        #
+        # Niente run_every e niente watcher server-side concorrente:
+        # il browser programma UN SOLO click sul normale pulsante AGGIORNA OFFERTE.
+        # Il click riesegue il fragment ASTA; il nuovo render ricrea questo timer
+        # soltanto se siamo ANCORA migliori. Se siamo stati superati, la maschera
+        # FAI LA TUA OFFERTA ricompare e questo timer non viene più creato.
+        #
+        # In questo modo non esiste polling mentre l'utente deve cliccare
+        # OFFERTA MINIMA / +5 / +10 / INVIA OFFERTA.
+        components.html(
+            """
+            <script>
+            (() => {
+                const delay = 1200;
+                window.setTimeout(() => {
+                    try {
+                        const doc = window.parent.document;
+                        const root = doc.querySelector('.st-key-v134_refresh_team_asta');
+                        const btn = root ? root.querySelector('button') : null;
+                        if (btn && !btn.disabled) {
+                            btn.click();
+                        }
+                    } catch (e) {}
+                }, delay);
+            })();
+            </script>
+            """,
+            height=0,
+            width=0,
         )
     elif not team["can_bid"]:
         st.info("ℹ️ " + str(team["motivo"]))
