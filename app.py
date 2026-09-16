@@ -34382,6 +34382,11 @@ def render_ultime_offerte_proiezione_v165(live):
     st.markdown(
         """
         <style>
+        .fe-proj-bids th,
+        .fe-proj-bids td {
+            text-align:center !important;
+            vertical-align:middle !important;
+        }
         .fe-proj-bids tbody tr.fe-current-leader td {
             background:#c9f7d5 !important;
             color:#073b1d !important;
