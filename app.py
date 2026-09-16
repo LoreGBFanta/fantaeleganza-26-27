@@ -36208,6 +36208,44 @@ def render_bidding_inline_asta_v126():
             height:28px !important;
         }
 
+        /* V215 - forza l'altezza del CONTROLLO VISIBILE BaseWeb.
+           V214 aumentava correttamente il layout, ma non il box dipinto a video. */
+        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"],
+        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] > div,
+        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] > div > div {
+            height:140px !important;
+            min-height:140px !important;
+            max-height:140px !important;
+            align-items:stretch !important;
+            box-sizing:border-box !important;
+        }
+
+        .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] {
+            height:144px !important;
+            min-height:144px !important;
+            max-height:144px !important;
+            display:flex !important;
+            align-items:center !important;
+        }
+
+        .st-key-v212_custom [data-testid="stNumberInput"] input {
+            height:140px !important;
+            min-height:140px !important;
+            max-height:140px !important;
+            line-height:normal !important;
+            align-self:center !important;
+            font-size:42px !important;
+            font-weight:800 !important;
+            text-align:center !important;
+        }
+
+        .st-key-v212_custom [data-testid="stNumberInput"] button {
+            height:140px !important;
+            min-height:140px !important;
+            max-height:140px !important;
+            align-self:center !important;
+        }
+
         .st-key-v212_min button,.st-key-v212_p5 button,.st-key-v212_p10 button {
             width:100% !important;height:72px !important;min-height:72px !important;max-height:72px !important;
             padding:0 10px !important;border-radius:10px !important;
