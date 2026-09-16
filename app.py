@@ -36429,6 +36429,17 @@ def render_bidding_inline_asta_v126():
             background:#addfbd !important;
             border-color:#70bb89 !important;
         }
+        /* V234 - +10: verde leggermente più scuro del +5 */
+        .st-key-v212_p10 button p {
+            color:#0b4629 !important;
+            background:#9fd7b1 !important;
+            border-color:#67b480 !important;
+        }
+        .st-key-v212_p10 button:hover p {
+            background:#8dcc9f !important;
+            border-color:#56a970 !important;
+        }
+
 
 
         .st-key-v212_send {margin-top:8px;margin-bottom:12px;}
@@ -36468,8 +36479,9 @@ def render_bidding_inline_asta_v126():
                 """,unsafe_allow_html=True
             )
 
+            # V234: quattro blocchi equidistanti e con la stessa area di colonna.
             _custom_col,_min_col,_p5_col,_p10_col=st.columns(
-                [2.25,2.05,1.35,1.35],gap="small",vertical_alignment="bottom"
+                [1,1,1,1],gap="medium",vertical_alignment="bottom"
             )
 
             with _custom_col:
