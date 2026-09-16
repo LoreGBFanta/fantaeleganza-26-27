@@ -36213,25 +36213,25 @@ def render_bidding_inline_asta_v126():
         .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"],
         .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] > div,
         .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] > div > div {
-            height:140px !important;
-            min-height:140px !important;
-            max-height:140px !important;
+            height:176px !important;
+            min-height:176px !important;
+            max-height:176px !important;
             align-items:stretch !important;
             box-sizing:border-box !important;
         }
 
         .st-key-v212_custom [data-testid="stNumberInput"] div[data-baseweb="input"] {
-            height:144px !important;
-            min-height:144px !important;
-            max-height:144px !important;
+            height:180px !important;
+            min-height:180px !important;
+            max-height:180px !important;
             display:flex !important;
             align-items:center !important;
         }
 
         .st-key-v212_custom [data-testid="stNumberInput"] input {
-            height:140px !important;
-            min-height:140px !important;
-            max-height:140px !important;
+            height:176px !important;
+            min-height:176px !important;
+            max-height:176px !important;
             line-height:normal !important;
             align-self:center !important;
             font-size:42px !important;
@@ -36240,9 +36240,9 @@ def render_bidding_inline_asta_v126():
         }
 
         .st-key-v212_custom [data-testid="stNumberInput"] button {
-            height:140px !important;
-            min-height:140px !important;
-            max-height:140px !important;
+            height:176px !important;
+            min-height:176px !important;
+            max-height:176px !important;
             align-self:center !important;
         }
 
