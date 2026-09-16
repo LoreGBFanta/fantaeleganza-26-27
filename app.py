@@ -18,6 +18,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
+BUILD_FANTAELEGANZA = "V252-SQUADRA-NO-TABELLA-NO-AUTOREFRESH"
+
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -36325,7 +36327,6 @@ def render_bidding_inline_asta_v126():
         st.error(st.session_state.pop("team_bid_error"))
 
     st.markdown("### 📡 ASTA LIVE")
-    st.caption("Build ASTA SQUADRA V251")
 
     st.button(
         "🔄 AGGIORNA OFFERTE",
