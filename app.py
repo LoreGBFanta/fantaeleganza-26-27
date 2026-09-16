@@ -36318,11 +36318,20 @@ def render_bidding_inline_asta_v126():
     )
 
     if stato is None:
+        st.session_state["_v243_i_am_best"] = False
         st.info(
             "⏳ Nessun giocatore è attualmente all'asta. "
             "Attendi l'apertura del lotto da parte del Banditore."
         )
         return
+
+    # V243 - abilita il watcher SOLO se questa squadra è il miglior offerente.
+    st.session_state["_v243_i_am_best"] = (
+        stato.get("current_team_id") is not None
+        and int(stato.get("current_team_id")) == int(team_id)
+    )
+    st.session_state["_v243_best_lot_id"] = int(stato.get("lot_id") or 0)
+    st.session_state["_v243_best_version"] = int(stato.get("version") or 0)
 
     # V171 - card specifica per la SQUADRA: stesso linguaggio grafico del
     # Banditore, più compatto, con le informazioni tecniche storiche.
@@ -37042,6 +37051,67 @@ def stile_tooltip_hover_banditore_v168():
         """,
         unsafe_allow_html=True,
     )
+
+
+@st.fragment(run_every="1s")
+def watcher_superamento_miglior_offerente_v243(league_id, team_id, lot_id, known_version):
+    """
+    V243 - watcher condizionale SOLO per la squadra attualmente migliore.
+    Non viene mai eseguito mentre la maschera FAI LA TUA OFFERTA è attiva.
+    Se un'altra squadra supera l'offerta, forza un solo rerun completo e poi
+    sparisce, lasciando di nuovo i pulsanti senza polling.
+    """
+    if league_id is None or team_id is None or lot_id is None:
+        return
+
+    league_id = int(league_id)
+    team_id = int(team_id)
+    lot_id = int(lot_id)
+    known_version = int(known_version or 0)
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                l.stato,
+                COALESCE(l.version,0),
+                l.current_team_id,
+                l.current_bid,
+                s.current_lot_id
+            FROM auction_lots l
+            JOIN auction_sessions s
+              ON s.league_id=l.league_id
+            WHERE l.league_id=? AND l.id=?
+            LIMIT 1
+        """, (league_id, lot_id))
+        r = cur.fetchone()
+    finally:
+        _portal_close(conn)
+
+    if not r:
+        st.rerun(scope="app")
+        return
+
+    stato = str(r[0] or "").upper()
+    version = int(r[1] or 0)
+    current_team_id = int(r[2]) if r[2] is not None else None
+    current_lot_id = int(r[4]) if r[4] is not None else None
+
+    # Finché siamo ancora i migliori non tocca assolutamente la pagina.
+    if (
+        stato == "OPEN"
+        and current_lot_id == lot_id
+        and current_team_id == team_id
+        and version >= known_version
+    ):
+        return
+
+    # Siamo stati superati, oppure il lotto è cambiato/chiuso:
+    # un unico refresh dell'app riallinea la console SQUADRA.
+    st.rerun(scope="app")
+
+
 
 def render_navigazione_e_pagina():
     # V166 - ADMIN mantiene i controlli generali in alto.
@@ -37774,9 +37844,19 @@ def render_navigazione_e_pagina():
 
     elif sezione == "ASTA":
 
-        # V132: la sezione ASTA è esclusivamente la console live della squadra.
-        # Ricerca/listone restano nella sezione LISTONE.
+        # V243 - la console con i pulsanti resta SENZA polling.
         render_bidding_inline_asta_v126()
+
+        # Solo la squadra attualmente migliore attiva un watcher separato.
+        # Appena viene superata, il watcher provoca un solo riallineamento:
+        # al nuovo render ricompare FAI LA TUA OFFERTA e il watcher sparisce.
+        if st.session_state.get("_v243_i_am_best"):
+            watcher_superamento_miglior_offerente_v243(
+                st.session_state.get("ml_league_id"),
+                st.session_state.get("ml_team_id"),
+                st.session_state.get("_v243_best_lot_id"),
+                st.session_state.get("_v243_best_version"),
+            )
 
 
     elif sezione == "VENDUTI AD AVVERSARI":
