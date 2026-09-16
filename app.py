@@ -36235,7 +36235,7 @@ def render_bidding_inline_asta_v126():
                     use_container_width=True,
                     type="primary",
                     key=f"v207_send_{stato['lot_id']}_{team_id}",
-                    on_click=callback_bid_custom_v130,
+                    on_click=callback_bid_personalizzato_v130,
                     args=(league_id,stato["lot_id"],team_id,custom_key)
                 )
 
