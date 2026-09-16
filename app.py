@@ -29439,7 +29439,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
                   )
               AND (
                     current_bid IS NULL
-                    OR current_bid<=?
+                    OR ? > current_bid
                   )
             RETURNING current_bid,current_team_id,COALESCE(version,0),stato
         """, (
@@ -29450,7 +29450,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             version,
             league_id,
             lot_id,
-            current_bid
+            amount
         ))
         check = cur.fetchone()
 
@@ -29463,8 +29463,8 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             or int(check[2] or 0) != version + 1
         ):
             raise ValueError(
-                "Offerta superata da un'altra offerta concorrente. "
-                "Premi AGGIORNA ORA e riprova."
+                "Offerta non accettata: nel frattempo è stata registrata "
+                "un'offerta uguale o superiore. Inserisci un importo più alto e riprova."
             )
 
         # Solo dopo aver vinto il CAS viene registrato lo storico del bid.
@@ -34764,7 +34764,7 @@ def render_ricerca_giocatore_banditore_v169(league_id):
     )
 
 
-@st.fragment(run_every="2s")
+@st.fragment(run_every="1s")
 def render_banditore_lotto_live_v244(league_id, lot_id):
     """
     V282 - refresh automatico isolato SOLO per il lotto già aperto, alleggerito.
@@ -36052,7 +36052,9 @@ def callback_bid_personalizzato_v130(
     widget_key
 ):
     try:
-        amount = float(st.session_state.get(widget_key))
+        amount = float(
+            str(st.session_state.get(widget_key, "")).strip().replace(",", ".")
+        )
     except Exception:
         _salva_esito_bid_v130(
             False,
@@ -36348,152 +36350,66 @@ def render_stile_maschera_offerta_v266():
 
 
 
-def render_maschera_offerta_squadra_v259(league_id,team_id,stato):
-    """V265 - controlli locali minimali: nessun polling/query DB sui click di incremento."""
+def render_maschera_offerta_squadra_v283(league_id,team_id,stato):
+    """
+    V283 - FAST BID UI: un solo campo importo + INVIA OFFERTA.
+    Nessun MIN/+5/+10, nessun +/- e nessun callback locale accessorio.
+    Il server resta l'unica autorità sull'offerta minima corrente.
+    """
     team = stato.get("team")
     if team is None:
         return
 
-    # V250 - la maschera di offerta NON dipende più dal fatto che la squadra
-    # sia o meno il miglior offerente. Durante OPEN viene sempre mostrata.
     if str(stato.get("stato") or "").upper() != "OPEN":
         st.info("ℹ️ Il lotto non è aperto alle offerte.")
         return
 
-    # V251 - nessun return basato su can_bid prima della maschera.
-    # Durante OPEN la maschera è SEMPRE visibile.
-    # Gli eventuali vincoli restano comunque verificati server-side al click.
     minimo = float(team["offerta_minima"])
     massimo = float(team["offerta_massima"])
+    custom_key = f"v283_custom_{stato['lot_id']}_{team_id}"
 
-    # V282 - dopo un'offerta riuscita aggiorna subito i target locali senza
-    # attendere un nuovo snapshot remoto.
-    _last_bid_v282 = st.session_state.get(
+    _last = st.session_state.get(
         f"_v130_last_bid_{int(league_id)}_{int(team_id)}"
     )
     if (
-        isinstance(_last_bid_v282, dict)
-        and int(_last_bid_v282.get("lot_id") or 0) == int(stato["lot_id"])
-        and float(_last_bid_v282.get("next_minimo") or 0) > minimo
+        isinstance(_last, dict)
+        and int(_last.get("lot_id") or 0) == int(stato["lot_id"])
+        and float(_last.get("next_minimo") or 0) > minimo
     ):
-        minimo = min(
-            massimo,
-            float(_last_bid_v282["next_minimo"])
-        )
+        minimo = min(massimo, float(_last["next_minimo"]))
 
-    custom_key = f"v209_custom_{stato['lot_id']}_{team_id}"
-    current = st.session_state.get(custom_key, minimo)
-    try:
-        current = float(current)
-    except Exception:
-        current = minimo
-    if current < minimo or current > max(minimo,massimo):
-        st.session_state[custom_key] = minimo
+    if custom_key not in st.session_state:
+        st.session_state[custom_key] = ""
 
-    # V212 - maschera offerte affinata sui 6 punti richiesti.
-
-    with st.container(key="v212_offer_card"):
+    with st.container(key="v283_offer_card"):
         st.markdown(
             """
             <div class="v212-head">
                 <div class="v212-money">💰</div>
                 <div>
                     <div class="v212-title">Fai la tua offerta</div>
-                    <div class="v212-sub">Imposta l'importo e conferma la tua offerta</div>
+                    <div class="v212-sub">Inserisci l'importo e conferma</div>
                 </div>
             </div>
-            """,unsafe_allow_html=True
+            """,
+            unsafe_allow_html=True
         )
 
-        # V234: quattro blocchi equidistanti e con la stessa area di colonna.
-        _custom_col,_min_col,_p5_col,_p10_col=st.columns(
-            [1,1,1,1],gap="medium",vertical_alignment="bottom"
+        st.text_input(
+            "IMPORTO OFFERTA",
+            key=custom_key,
+            placeholder=f"Minimo attuale: {minimo:g}",
         )
 
-        with _custom_col:
-            # V222: controllo composito ad altezza nativa 136px.
-            # Converte sempre lo stato in stringa perché st.text_area lavora su testo;
-            # callback_bid_personalizzato_v130 continua a validarlo con float().
-            try:
-                _custom_val_v222 = float(str(st.session_state.get(custom_key, minimo)).replace(",", "."))
-            except Exception:
-                _custom_val_v222 = float(minimo)
-            _custom_val_v222 = max(float(minimo), min(float(massimo), _custom_val_v222))
-            _custom_norm_v265 = f"{_custom_val_v222:g}"
-            if str(st.session_state.get(custom_key, "")) != _custom_norm_v265:
-                st.session_state[custom_key] = _custom_norm_v265
-
-            st.markdown(
-                '<div class="st-key-v222_custom_label">Offerta personalizzata</div>',
-                unsafe_allow_html=True
-            )
-            _minus_col, _value_col, _plus_col = st.columns([1.0, 4.8, 1.0], gap="small")
-
-            with _minus_col:
-                with st.container(key="v222_minus"):
-                    st.button(
-                        "−",
-                        use_container_width=True,
-                        key=f"v222_minus_{stato['lot_id']}_{team_id}",
-                        on_click=callback_varia_offerta_personalizzata_v222,
-                        args=(custom_key, -float(team["incremento"]), minimo, massimo),
-                    )
-
-            with _value_col:
-                with st.container(key="v222_custom_text"):
-                    st.text_area(
-                        "Offerta personalizzata",
-                        key=custom_key,
-                        height=80,
-                        label_visibility="collapsed",
-                    )
-
-            with _plus_col:
-                with st.container(key="v222_plus"):
-                    st.button(
-                        "+",
-                        use_container_width=True,
-                        key=f"v222_plus_{stato['lot_id']}_{team_id}",
-                        on_click=callback_varia_offerta_personalizzata_v222,
-                        args=(custom_key, float(team["incremento"]), minimo, massimo),
-                    )
-
-        with _min_col:
-            with st.container(key="v212_min"):
-                st.button(
-                    f"OFFERTA MINIMA  •  {minimo:g}",use_container_width=True,type="secondary",
-                    key=f"v212_pick_{stato['lot_id']}_{team_id}_MIN",
-                    on_click=callback_seleziona_importo_offerta_v209,args=(custom_key,float(minimo))
-                )
-
-        _v5=float(min(massimo,minimo+5))
-        with _p5_col:
-            with st.container(key="v212_p5"):
-                st.button(
-                    f"+5  •  {_v5:g}",use_container_width=True,type="secondary",
-                    disabled=_v5 < minimo or _v5 > massimo,
-                    key=f"v212_pick_{stato['lot_id']}_{team_id}_P5",
-                    on_click=callback_seleziona_importo_offerta_v209,args=(custom_key,_v5)
-                )
-
-        _v10=float(min(massimo,minimo+10))
-        with _p10_col:
-            with st.container(key="v212_p10"):
-                st.button(
-                    f"+10  •  {_v10:g}",use_container_width=True,type="secondary",
-                    disabled=_v10 < minimo or _v10 > massimo,
-                    key=f"v212_pick_{stato['lot_id']}_{team_id}_P10",
-                    on_click=callback_seleziona_importo_offerta_v209,args=(custom_key,_v10)
-                )
-
-        with st.container(key="v212_send"):
-            st.button(
-                "💰   INVIA OFFERTA   →",use_container_width=True,type="primary",
-                key=f"v212_send_{stato['lot_id']}_{team_id}",
-                on_click=callback_bid_personalizzato_v130,
-                args=(league_id,stato["lot_id"],team_id,custom_key),
-                help="Invia l'offerta selezionata."
-            )
+        st.button(
+            "💰   INVIA OFFERTA   →",
+            use_container_width=True,
+            type="primary",
+            key=f"v283_send_{stato['lot_id']}_{team_id}",
+            on_click=callback_bid_personalizzato_v130,
+            args=(league_id,stato["lot_id"],team_id,custom_key),
+            help="Invia l'importo inserito. Il server verifica il minimo reale al momento del click."
+        )
 
         st.markdown(
             f"""
@@ -36513,10 +36429,9 @@ def render_maschera_offerta_squadra_v259(league_id,team_id,stato):
                     </div>
                 </div>
             </div>
-            """,unsafe_allow_html=True
+            """,
+            unsafe_allow_html=True
         )
-
-
 
 def render_bidding_inline_asta_v126():
     """
@@ -36573,7 +36488,7 @@ def render_bidding_inline_asta_v126():
 
     # V266: asset/CSS statici fuori dal fragment; i click ritrasmettono solo i controlli.
     render_stile_maschera_offerta_v266()
-    render_maschera_offerta_squadra_v259(league_id,team_id,stato)
+    render_maschera_offerta_squadra_v283(league_id,team_id,stato)
 
     # V280 - durante OPEN nessun watcher server-side concorrente:
     # preserva il fast path V266 dei pulsanti e di INVIA OFFERTA.
