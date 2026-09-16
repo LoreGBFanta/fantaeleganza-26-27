@@ -36132,249 +36132,162 @@ def render_bidding_inline_asta_v126():
         if current < minimo or current > max(minimo,massimo):
             st.session_state[custom_key] = minimo
 
-        # V210 - replica più fedele della maschera grafica approvata.
-        # Struttura: header + box minimo / selettore importo + 3 rapidi /
-        # CTA a tutta larghezza / fascia finanziaria verde-azzurra.
+        # V211 - affinamento pixel-oriented della sola maschera offerte.
+        # Obiettivo: proporzioni, allineamenti e gerarchia del mockup approvato.
         st.markdown("""
         <style>
-        .st-key-v210_offer_card {
-            border:1px solid #e3e8ef;
+        /* CARD */
+        .st-key-v211_offer_card {
+            border:1px solid #e2e8f0;
             border-radius:14px;
-            background:#ffffff;
+            background:#fff;
             padding:16px 18px 16px 18px;
-            box-shadow:0 2px 10px rgba(15,23,42,.06);
+            box-shadow:0 2px 9px rgba(15,23,42,.055);
             margin-top:4px;
         }
 
-        /* HEADER */
-        .v210-head {
-            display:flex;
-            align-items:flex-start;
-            justify-content:space-between;
-            gap:18px;
-            margin-bottom:18px;
-        }
-        .v210-head-left {
-            display:flex;
-            align-items:flex-start;
-            gap:12px;
-        }
-        .v210-money-icon {
-            font-size:34px;
-            line-height:38px;
-        }
-        .v210-title {
-            font-size:28px;
-            font-weight:800;
-            line-height:1.05;
-            color:#0f172a;
-            margin:0;
-        }
-        .v210-sub {
-            font-size:13px;
-            color:#64748b;
-            margin-top:5px;
-        }
-        .v210-minbox {
-            width:214px;
-            box-sizing:border-box;
-            background:#eaf3ff;
-            border:1px solid #d7e7fb;
-            border-radius:10px;
-            padding:8px 14px;
-            display:flex;
-            align-items:center;
-            gap:12px;
-            color:#123b78;
-        }
-        .v210-hammer {
-            font-size:27px;
-            line-height:1;
-        }
-        .v210-minlabel {
-            font-size:11px;
-            font-weight:650;
-            line-height:1.15;
-        }
-        .v210-minvalue {
-            font-size:25px;
-            font-weight:800;
-            line-height:1;
-            margin-top:3px;
-        }
-
-        /* SELETTORE + RAPIDI */
-        .st-key-v210_select_row [data-testid="stNumberInput"] label p {
-            font-size:13px !important;
-            font-weight:650 !important;
-            color:#334155 !important;
-        }
-        .st-key-v210_select_row div[data-baseweb="input"] {
-            height:64px !important;
-            min-height:64px !important;
-            max-height:64px !important;
-            border:1px solid #dce3ec !important;
-            border-radius:9px !important;
-            background:#f7f9fc !important;
-        }
-        .st-key-v210_select_row div[data-baseweb="input"] input {
-            height:62px !important;
-            min-height:62px !important;
-            max-height:62px !important;
-            font-size:27px !important;
-            font-weight:800 !important;
-            text-align:center !important;
-            color:#0f172a !important;
-            background:#ffffff !important;
-            border-left:1px solid #e2e8f0 !important;
-            border-right:1px solid #e2e8f0 !important;
-        }
-        .st-key-v210_select_row div[data-baseweb="input"] button {
-            height:62px !important;
-            min-height:62px !important;
-            width:54px !important;
-            color:#0f172a !important;
-        }
-
-        .st-key-v210_select_row .stButton button {
-            height:64px !important;
-            min-height:64px !important;
-            max-height:64px !important;
-            border-radius:9px !important;
-            background:#f2f5f9 !important;
-            border:1px solid #dce3ec !important;
-            color:#0f172a !important;
-            box-shadow:none !important;
-        }
-        .st-key-v210_select_row .stButton button p {
-            white-space:pre-line !important;
-            text-align:center !important;
-            font-size:17px !important;
-            font-weight:800 !important;
-            line-height:1.15 !important;
-            color:#0f172a !important;
-        }
-
-        /* Offerta minima: unica card rapida rossa chiara */
-        .st-key-v210_min_pick button {
-            background:#fff0f0 !important;
-            border-color:#ffd1d1 !important;
-        }
-        .st-key-v210_min_pick button p {
-            color:#ff3434 !important;
-        }
-
-        /* CTA */
-        .st-key-v210_send {
-            margin-top:7px;
-            margin-bottom:12px;
-        }
-        .st-key-v210_send button {
-            width:100% !important;
-            height:56px !important;
-            min-height:56px !important;
-            max-height:56px !important;
-            border-radius:9px !important;
-            background:#ff343b !important;
-            border-color:#ff343b !important;
-            color:#ffffff !important;
-            box-shadow:none !important;
-        }
-        .st-key-v210_send button:hover {
-            background:#ef2e35 !important;
-            border-color:#ef2e35 !important;
-            color:#ffffff !important;
-        }
-        .st-key-v210_send button p {
-            width:100% !important;
-            font-size:22px !important;
-            font-weight:800 !important;
-            color:#ffffff !important;
-        }
-
-        /* FASCIA FINANZIARIA: due metà come nel mockup */
-        .v210-finance {
+        /* HEADER: niente vuoti eccessivi, box minimo compatto a destra */
+        .v211-head {
             display:grid;
-            grid-template-columns:1fr 1fr;
-            min-height:72px;
-            border-radius:10px;
-            overflow:hidden;
-            border:1px solid #e3e8ef;
+            grid-template-columns:minmax(0,1fr) 220px;
+            align-items:start;
+            gap:18px;
+            margin-bottom:15px;
         }
-        .v210-fin {
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            gap:16px;
-            padding:9px 18px;
+        .v211-head-left {display:flex;align-items:flex-start;gap:12px;}
+        .v211-money {font-size:32px;line-height:34px;width:34px;flex:0 0 34px;}
+        .v211-title {font-size:27px;font-weight:800;line-height:1.05;color:#0f172a;}
+        .v211-sub {font-size:13px;color:#64748b;margin-top:5px;line-height:1.2;}
+        .v211-minbox {
+            height:70px;box-sizing:border-box;
+            background:#eaf3ff;border:1px solid #d5e6fb;border-radius:10px;
+            display:flex;align-items:center;justify-content:center;gap:12px;
+            padding:8px 14px;color:#123b78;
         }
-        .v210-fin-budget {
-            background:linear-gradient(90deg,#eefbf3 0%,#f6fcf8 100%);
-            color:#087a39;
-        }
-        .v210-fin-max {
-            background:linear-gradient(90deg,#f1f7ff 0%,#eaf4ff 100%);
-            color:#123f80;
-            border-left:1px solid #d8e3ef;
-        }
-        .v210-fin-icon {
-            font-size:28px;
-            line-height:1;
-        }
-        .v210-fin-copy {
-            min-width:125px;
-        }
-        .v210-fin-label {
-            font-size:12px;
-            font-weight:650;
-            line-height:1.1;
-        }
-        .v210-fin-value {
-            font-size:27px;
-            font-weight:850;
-            line-height:1.05;
-            margin-top:3px;
+        .v211-hammer {font-size:27px;line-height:1;}
+        .v211-minlabel {font-size:11px;font-weight:700;line-height:1.1;}
+        .v211-minvalue {font-size:24px;font-weight:850;line-height:1;margin-top:4px;}
+
+        /* LABEL sopra il selettore */
+        .st-key-v211_custom [data-testid="stWidgetLabel"] p {
+            font-size:13px !important;font-weight:650 !important;color:#334155 !important;
         }
 
-        @media(max-width:900px) {
-            .v210-title {font-size:24px;}
-            .v210-minbox {width:190px;}
-            .v210-fin {gap:10px;padding:8px 10px;}
+        /* INPUT: forza davvero 64px sul widget con key propria */
+        .st-key-v211_custom [data-testid="stNumberInput"] > div {
+            min-height:64px !important;
+        }
+        .st-key-v211_custom div[data-baseweb="input"] {
+            height:64px !important;min-height:64px !important;max-height:64px !important;
+            border:1px solid #dce3ec !important;border-radius:9px !important;
+            background:#f4f7fb !important;overflow:hidden !important;
+        }
+        .st-key-v211_custom div[data-baseweb="input"] input {
+            height:62px !important;min-height:62px !important;max-height:62px !important;
+            padding:0 8px !important;
+            font-size:28px !important;font-weight:800 !important;text-align:center !important;
+            color:#0f172a !important;background:#fff !important;
+            border-left:1px solid #e2e8f0 !important;border-right:1px solid #e2e8f0 !important;
+        }
+        .st-key-v211_custom div[data-baseweb="input"] button {
+            width:54px !important;height:62px !important;min-height:62px !important;
+            padding:0 !important;color:#0f172a !important;background:#f4f7fb !important;
+        }
+        .st-key-v211_custom div[data-baseweb="input"] button svg {
+            width:18px !important;height:18px !important;
+        }
+
+        /* TRE CARD RAPIDE: stessa altezza, testo su due righe perfettamente centrato */
+        .st-key-v211_min button,
+        .st-key-v211_p5 button,
+        .st-key-v211_p10 button {
+            width:100% !important;height:64px !important;min-height:64px !important;max-height:64px !important;
+            padding:0 8px !important;border-radius:9px !important;
+            display:flex !important;align-items:center !important;justify-content:center !important;
+            box-shadow:none !important;
+        }
+        .st-key-v211_min button {
+            background:#fff0f0 !important;border:1px solid #ffd0d0 !important;color:#ff343b !important;
+        }
+        .st-key-v211_p5 button,
+        .st-key-v211_p10 button {
+            background:#f2f5f9 !important;border:1px solid #dce3ec !important;color:#0f172a !important;
+        }
+        .st-key-v211_min button p,
+        .st-key-v211_p5 button p,
+        .st-key-v211_p10 button p {
+            margin:0 !important;padding:0 !important;
+            white-space:pre-line !important;text-align:center !important;
+            font-size:17px !important;font-weight:800 !important;line-height:1.12 !important;
+        }
+        .st-key-v211_min button p {color:#ff343b !important;}
+
+        /* CTA: subito sotto, alta come mockup */
+        .st-key-v211_send {margin-top:7px;margin-bottom:12px;}
+        .st-key-v211_send button {
+            width:100% !important;height:56px !important;min-height:56px !important;max-height:56px !important;
+            padding:0 18px !important;border-radius:9px !important;
+            background:#ff343b !important;border:1px solid #ff343b !important;color:#fff !important;
+            box-shadow:none !important;
+        }
+        .st-key-v211_send button p {
+            width:100% !important;margin:0 !important;
+            font-size:22px !important;font-weight:850 !important;line-height:1 !important;color:#fff !important;
+            text-align:center !important;
+        }
+
+        /* FASCIA FINANZIARIA: due metà coordinate e testi ben impaginati */
+        .v211-finance {
+            display:grid;grid-template-columns:1fr 1fr;
+            height:72px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;
+        }
+        .v211-fin {
+            display:flex;align-items:center;justify-content:center;gap:15px;padding:8px 18px;
+        }
+        .v211-budget {background:linear-gradient(90deg,#eefbf3,#f7fcf9);color:#087a39;}
+        .v211-max {background:linear-gradient(90deg,#f3f8ff,#eaf4ff);color:#123f80;border-left:1px solid #d8e3ef;}
+        .v211-fin-icon {font-size:27px;line-height:1;width:32px;text-align:center;}
+        .v211-fin-copy {width:145px;}
+        .v211-fin-label {font-size:12px;font-weight:700;line-height:1.05;}
+        .v211-fin-value {font-size:27px;font-weight:850;line-height:1;margin-top:5px;}
+
+        @media(max-width:900px){
+            .v211-head{grid-template-columns:1fr 190px;}
+            .v211-title{font-size:23px;}
+            .v211-fin-copy{width:auto;}
         }
         </style>
         """, unsafe_allow_html=True)
 
-        with st.container(key="v210_offer_card"):
+        with st.container(key="v211_offer_card"):
             st.markdown(
                 f"""
-                <div class="v210-head">
-                    <div class="v210-head-left">
-                        <div class="v210-money-icon">💰</div>
+                <div class="v211-head">
+                    <div class="v211-head-left">
+                        <div class="v211-money">💰</div>
                         <div>
-                            <div class="v210-title">Fai la tua offerta</div>
-                            <div class="v210-sub">Imposta l'importo e conferma la tua offerta</div>
+                            <div class="v211-title">Fai la tua offerta</div>
+                            <div class="v211-sub">Imposta l'importo e conferma la tua offerta</div>
                         </div>
                     </div>
-                    <div class="v210-minbox">
-                        <div class="v210-hammer">🔨</div>
+                    <div class="v211-minbox">
+                        <div class="v211-hammer">🔨</div>
                         <div>
-                            <div class="v210-minlabel">Offerta minima per rilanciare</div>
-                            <div class="v210-minvalue">{minimo:g}</div>
+                            <div class="v211-minlabel">Offerta minima per rilanciare</div>
+                            <div class="v211-minvalue">{minimo:g}</div>
                         </div>
                     </div>
                 </div>
-                """,
-                unsafe_allow_html=True
+                """, unsafe_allow_html=True
             )
 
-            with st.container(key="v210_select_row"):
-                _custom_col, _min_col, _p5_col, _p10_col = st.columns(
-                    [3.35, 1.50, 1.05, 1.05],
-                    gap="small",
-                    vertical_alignment="bottom"
-                )
+            # Proporzioni del mockup: input ~48%, minima ~20%, +5/+10 ~16% ciascuno.
+            _custom_col,_min_col,_p5_col,_p10_col = st.columns(
+                [3.35,1.45,1.0,1.0], gap="small", vertical_alignment="bottom"
+            )
 
-                with _custom_col:
+            with _custom_col:
+                with st.container(key="v211_custom"):
                     st.number_input(
                         "Offerta personalizzata",
                         min_value=minimo,
@@ -36384,71 +36297,72 @@ def render_bidding_inline_asta_v126():
                         key=custom_key
                     )
 
-                with _min_col:
-                    with st.container(key="v210_min_pick"):
-                        st.button(
-                            f"OFFERTA MINIMA\n{minimo:g}",
-                            use_container_width=True,
-                            type="secondary",
-                            key=f"v210_pick_{stato['lot_id']}_{team_id}_MIN",
-                            on_click=callback_seleziona_importo_offerta_v209,
-                            args=(custom_key,float(minimo))
-                        )
+            with _min_col:
+                with st.container(key="v211_min"):
+                    st.button(
+                        f"OFFERTA MINIMA\n{minimo:g}",
+                        use_container_width=True,
+                        type="secondary",
+                        key=f"v211_pick_{stato['lot_id']}_{team_id}_MIN",
+                        on_click=callback_seleziona_importo_offerta_v209,
+                        args=(custom_key,float(minimo))
+                    )
 
-                with _p5_col:
-                    _v5 = float(min(massimo,minimo+5))
+            _v5=float(min(massimo,minimo+5))
+            with _p5_col:
+                with st.container(key="v211_p5"):
                     st.button(
                         f"+5\n{_v5:g}",
                         use_container_width=True,
                         type="secondary",
                         disabled=_v5 < minimo or _v5 > massimo,
-                        key=f"v210_pick_{stato['lot_id']}_{team_id}_P5",
+                        key=f"v211_pick_{stato['lot_id']}_{team_id}_P5",
                         on_click=callback_seleziona_importo_offerta_v209,
                         args=(custom_key,_v5)
                     )
 
-                with _p10_col:
-                    _v10 = float(min(massimo,minimo+10))
+            _v10=float(min(massimo,minimo+10))
+            with _p10_col:
+                with st.container(key="v211_p10"):
                     st.button(
                         f"+10\n{_v10:g}",
                         use_container_width=True,
                         type="secondary",
                         disabled=_v10 < minimo or _v10 > massimo,
-                        key=f"v210_pick_{stato['lot_id']}_{team_id}_P10",
+                        key=f"v211_pick_{stato['lot_id']}_{team_id}_P10",
                         on_click=callback_seleziona_importo_offerta_v209,
                         args=(custom_key,_v10)
                     )
 
-            with st.container(key="v210_send"):
+            with st.container(key="v211_send"):
                 st.button(
-                    "💰   INVIA OFFERTA                                      →",
+                    "💰   INVIA OFFERTA   →",
                     use_container_width=True,
                     type="primary",
-                    key=f"v210_send_{stato['lot_id']}_{team_id}",
+                    key=f"v211_send_{stato['lot_id']}_{team_id}",
                     on_click=callback_bid_personalizzato_v130,
                     args=(league_id,stato["lot_id"],team_id,custom_key)
                 )
 
             st.markdown(
                 f"""
-                <div class="v210-finance">
-                    <div class="v210-fin v210-fin-budget">
-                        <div class="v210-fin-icon">💳</div>
-                        <div class="v210-fin-copy">
-                            <div class="v210-fin-label">Budget residuo</div>
-                            <div class="v210-fin-value">{team["residuo"]:g}</div>
+                <div class="v211-finance">
+                    <div class="v211-fin v211-budget">
+                        <div class="v211-fin-icon">💳</div>
+                        <div class="v211-fin-copy">
+                            <div class="v211-fin-label">Budget residuo</div>
+                            <div class="v211-fin-value">{team["residuo"]:g}</div>
                         </div>
                     </div>
-                    <div class="v210-fin v210-fin-max">
-                        <div class="v210-fin-icon">📈</div>
-                        <div class="v210-fin-copy">
-                            <div class="v210-fin-label">Offerta massima</div>
-                            <div class="v210-fin-value">{massimo:g}</div>
+                    <div class="v211-fin v211-max">
+                        <div class="v211-fin-icon">📈</div>
+                        <div class="v211-fin-copy">
+                            <div class="v211-fin-label">Offerta massima</div>
+                            <div class="v211-fin-value">{massimo:g}</div>
                         </div>
                     </div>
                 </div>
-                """,
-                unsafe_allow_html=True
+                """, unsafe_allow_html=True
             )
 
     # V172 - la tabella offerte resta sempre l'ultimo blocco operativo
