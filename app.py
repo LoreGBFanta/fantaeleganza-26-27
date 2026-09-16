@@ -34396,11 +34396,11 @@ def render_ultime_offerte_proiezione_v165(live):
         }
         /* V262 - offerte n. 2 e 3 volutamente meno prominenti. */
         .fe-proj-bids tbody tr.fe-previous-bid td {
-            font-size:0.78em !important;
+            font-size:0.90em !important;
             font-weight:600 !important;
         }
         .fe-proj-bids tbody tr.fe-previous-bid .fe-bid-amount {
-            font-size:0.82em !important;
+            font-size:0.92em !important;
         }
         </style>
         <div class="fe-proj-bids-title">ULTIME OFFERTE</div>
