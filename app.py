@@ -36325,6 +36325,7 @@ def render_bidding_inline_asta_v126():
         st.error(st.session_state.pop("team_bid_error"))
 
     st.markdown("### 📡 ASTA LIVE")
+    st.caption("Build ASTA SQUADRA V251")
 
     st.button(
         "🔄 AGGIORNA OFFERTE",
@@ -36372,12 +36373,9 @@ def render_bidding_inline_asta_v126():
         and int(stato.get("current_team_id")) == int(team_id)
     )
 
-    # Restano validi gli altri blocchi reali (budget/rosa/vincoli).
-    # Essere già leader non nasconde più la maschera.
-    if not bool(team.get("can_bid", False)) and not is_best_offer_team:
-        st.info("ℹ️ " + str(team.get("motivo") or "Offerta non consentita."))
-        return
-
+    # V251 - nessun return basato su can_bid prima della maschera.
+    # Durante OPEN la maschera è SEMPRE visibile.
+    # Gli eventuali vincoli restano comunque verificati server-side al click.
     minimo = float(team["offerta_minima"])
     massimo = float(team["offerta_massima"])
 
