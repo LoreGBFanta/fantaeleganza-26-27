@@ -33174,6 +33174,9 @@ def callback_chiudi_vuoto_v133(
             f"Lotto di {nome} chiuso senza assegnazione."
         )
         st.session_state.pop("auctioneer_error", None)
+
+        # V270 - anche la chiusura senza assegnazione torna alla console IDLE.
+        st.rerun(scope="app")
     except Exception as errore:
         st.session_state["auctioneer_error"] = str(errore)
 
@@ -34315,6 +34318,9 @@ def callback_chiudi_assegna_v133(
             f'a {esito["prezzo"]:g} crediti.'
         )
         st.session_state.pop("auctioneer_error", None)
+
+        # V270 - transizione LIVE -> IDLE: ricostruisce Gestione Asta e i controlli di navigazione.
+        st.rerun(scope="app")
 
     except Exception as errore:
         st.session_state["auctioneer_error"] = str(errore)
