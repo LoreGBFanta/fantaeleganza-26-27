@@ -36040,8 +36040,8 @@ def render_card_giocatore_squadra_v171(live):
 
 
 def callback_seleziona_importo_offerta_v209(custom_key, valore):
-    """V209 - i pulsanti rapidi selezionano l'importo; non inviano l'offerta."""
-    st.session_state[str(custom_key)] = float(valore)
+    """V237 - selezione locale ultraleggera: nessun accesso DB."""
+    st.session_state[str(custom_key)] = f"{float(valore):g}"
 
 
 def callback_varia_offerta_personalizzata_v222(custom_key, delta, minimo, massimo):
@@ -36146,10 +36146,12 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
     )
 
 
+@st.fragment(run_every="1s")
 def render_bidding_inline_asta_v126():
     """
-    V132 - ASTA squadra: un solo fragment live, una sola query per refresh.
-    Nessun timer e nessuna ricerca giocatore durante il lotto.
+    V237 - ASTA SQUADRA isolata in un vero st.fragment.
+    I click della maschera offerte rieseguono solo questo blocco e non tutta
+    l'applicazione. Polling live 1s e una sola snapshot DB per refresh.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
