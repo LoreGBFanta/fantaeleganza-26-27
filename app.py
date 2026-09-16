@@ -36298,31 +36298,41 @@ def render_bidding_inline_asta_v126():
             line-height:1 !important;
         }
 
-        /* V225 - OFFERTA MINIMA: il button Streamlit ignora height.
-           Dimensioniamo il contenitore stButton e facciamo occupare al pulsante
-           l'intera area tramite posizionamento assoluto. */
+        /* V226 - OFFERTA MINIMA.
+           Niente position:absolute/height: Streamlit neutralizza l'altezza.
+           Aumentiamo invece la dimensione INTRINSECA del button con padding
+           verticale + box-sizing:content-box, come per un normale elemento HTML. */
         .st-key-v212_min [data-testid="stButton"] {
-            position:relative !important;
             width:100% !important;
-            height:80px !important;
-            min-height:80px !important;
-            max-height:80px !important;
+            height:auto !important;
+            min-height:0 !important;
+            max-height:none !important;
+            position:static !important;
         }
         .st-key-v212_min [data-testid="stButton"] > button,
         .st-key-v212_min button {
-            position:absolute !important;
-            inset:0 !important;
+            position:static !important;
+            inset:auto !important;
             width:100% !important;
-            height:100% !important;
-            min-height:100% !important;
-            max-height:100% !important;
-            padding:0 10px !important;
+            height:auto !important;
+            min-height:0 !important;
+            max-height:none !important;
+            padding-top:28px !important;
+            padding-bottom:28px !important;
+            padding-left:10px !important;
+            padding-right:10px !important;
             border-radius:10px !important;
             display:flex !important;
             align-items:center !important;
             justify-content:center !important;
-            box-sizing:border-box !important;
+            box-sizing:content-box !important;
+            line-height:22px !important;
             box-shadow:none !important;
+        }
+        .st-key-v212_min [data-testid="stButton"] > button p,
+        .st-key-v212_min button p {
+            margin:0 !important;
+            line-height:22px !important;
         }
         .st-key-v212_p5 button,.st-key-v212_p10 button {
             width:100% !important;height:72px !important;min-height:72px !important;max-height:72px !important;
