@@ -32317,65 +32317,66 @@ def snapshot_banditore_multilega(league_id):
 
 
 def snapshot_banditore_live_v133(league_id):
-    """V165 - snapshot proiezione Banditore: lotto + ultime 3 offerte reali."""
+    """V282 - snapshot Banditore in UNA sola query: lotto + ultime 2 offerte."""
     league_id = int(league_id)
     conn = _portal_raw_connection()
     cur = conn.cursor()
     try:
-        # Query minimale sul lotto corrente: nessun riepilogo per tutte le squadre.
         cur.execute("""
+            WITH current_lot AS (
+                SELECT
+                    l.id, l.player_id, l.stato, l.current_bid, l.current_team_id,
+                    COALESCE(l.bid_count,0) AS bid_count,
+                    COALESCE(l.version,0) AS version,
+                    COALESCE(pc.nome,'') AS nome,
+                    COALESCE(pc.squadra,'') AS squadra,
+                    COALESCE(pc.ruolo_mantra,'') AS ruolo_mantra,
+                    COALESCE(t.nome,'') AS current_team
+                FROM auction_sessions s
+                JOIN auction_lots l
+                  ON l.id=s.current_lot_id AND l.league_id=s.league_id
+                JOIN league_player_catalog pc
+                  ON pc.league_id=l.league_id AND pc.player_id=l.player_id
+                LEFT JOIN teams t
+                  ON t.id=l.current_team_id AND t.league_id=l.league_id
+                WHERE s.league_id=? AND l.stato IN ('OPEN','CLOSING')
+                LIMIT 1
+            ),
+            last_bids AS (
+                SELECT b.team_id,b.amount,b.created_at
+                FROM bids b
+                JOIN current_lot cl ON cl.id=b.lot_id
+                WHERE b.league_id=?
+                ORDER BY b.id DESC
+                LIMIT 2
+            )
             SELECT
-                l.id,
-                l.player_id,
-                l.stato,
-                l.current_bid,
-                l.current_team_id,
-                COALESCE(l.bid_count,0),
-                COALESCE(l.version,0),
-                COALESCE(pc.nome,''),
-                COALESCE(pc.squadra,''),
-                COALESCE(pc.ruolo_mantra,''),
-                COALESCE(t.nome,'')
-            FROM auction_sessions s
-            JOIN auction_lots l
-              ON l.id=s.current_lot_id
-             AND l.league_id=s.league_id
-            JOIN league_player_catalog pc
-              ON pc.league_id=l.league_id
-             AND pc.player_id=l.player_id
-            LEFT JOIN teams t
-              ON t.id=l.current_team_id
-             AND t.league_id=l.league_id
-            WHERE s.league_id=?
-              AND l.stato IN ('OPEN','CLOSING')
-            LIMIT 1
-        """, (league_id,))
-        r = cur.fetchone()
-        if not r:
+                cl.id,cl.player_id,cl.stato,cl.current_bid,cl.current_team_id,
+                cl.bid_count,cl.version,cl.nome,cl.squadra,cl.ruolo_mantra,
+                cl.current_team,
+                COALESCE(bt.nome,''),lb.amount,lb.created_at
+            FROM current_lot cl
+            LEFT JOIN last_bids lb ON 1=1
+            LEFT JOIN teams bt
+              ON bt.id=lb.team_id AND bt.league_id=?
+            ORDER BY lb.created_at DESC
+        """, (league_id, league_id, league_id))
+        rows = cur.fetchall() or []
+        if not rows:
             return None
 
-        lot_id = int(r[0])
-        # Le ultime tre offerte effettivamente inviate, dalla più recente.
-        cur.execute("""
-            SELECT COALESCE(t.nome,''), b.amount, b.created_at
-            FROM bids b
-            JOIN teams t
-              ON t.id=b.team_id
-             AND t.league_id=b.league_id
-            WHERE b.league_id=? AND b.lot_id=?
-            ORDER BY b.id DESC
-            LIMIT 3
-        """, (league_id, lot_id))
+        r = rows[0]
         offerte = []
-        for br in (cur.fetchall() or []):
-            offerte.append({
-                "Squadra": str(br[0] or ""),
-                "Offerta": float(br[1] or 0),
-                "Orario": str(br[2] or ""),
-            })
+        for br in rows:
+            if br[12] is not None:
+                offerte.append({
+                    "Squadra": str(br[11] or ""),
+                    "Offerta": float(br[12] or 0),
+                    "Orario": str(br[13] or ""),
+                })
 
         return {
-            "lot_id": lot_id,
+            "lot_id": int(r[0]),
             "player_id": int(r[1]),
             "stato": str(r[2] or "").upper(),
             "current_bid": float(r[3]) if r[3] is not None else None,
@@ -32386,11 +32387,10 @@ def snapshot_banditore_live_v133(league_id):
             "nome": str(r[7] or ""),
             "squadra": str(r[8] or ""),
             "ruolo_mantra": str(r[9] or ""),
-            "offerte": offerte,
+            "offerte": offerte[:2],
         }
     finally:
         _portal_close(conn)
-
 
 def snapshot_lotto_live_v132(league_id, team_id=None):
     """
@@ -34764,10 +34764,10 @@ def render_ricerca_giocatore_banditore_v169(league_id):
     )
 
 
-@st.fragment(run_every="1s")
+@st.fragment(run_every="2s")
 def render_banditore_lotto_live_v244(league_id, lot_id):
     """
-    V244 - refresh automatico isolato SOLO per il lotto già aperto.
+    V282 - refresh automatico isolato SOLO per il lotto già aperto, alleggerito.
     Non riesegue Gestione Asta, navbar, menu, navigazione giocatori o schema.
     """
     league_id=int(league_id)
@@ -36035,6 +36035,10 @@ def callback_bid_rapido_v130(league_id, lot_id, team_id, amount):
             "lot_id": int(lot_id),
             "amount": float(amount),
             "version": int(esito.get("version", 0)),
+            "incremento": float(esito.get("incremento", 1) or 1),
+            "next_minimo": round(
+                float(amount) + float(esito.get("incremento", 1) or 1), 2
+            ),
             "ts": time.time(),
         }
     except Exception as errore:
@@ -36361,6 +36365,21 @@ def render_maschera_offerta_squadra_v259(league_id,team_id,stato):
     # Gli eventuali vincoli restano comunque verificati server-side al click.
     minimo = float(team["offerta_minima"])
     massimo = float(team["offerta_massima"])
+
+    # V282 - dopo un'offerta riuscita aggiorna subito i target locali senza
+    # attendere un nuovo snapshot remoto.
+    _last_bid_v282 = st.session_state.get(
+        f"_v130_last_bid_{int(league_id)}_{int(team_id)}"
+    )
+    if (
+        isinstance(_last_bid_v282, dict)
+        and int(_last_bid_v282.get("lot_id") or 0) == int(stato["lot_id"])
+        and float(_last_bid_v282.get("next_minimo") or 0) > minimo
+    ):
+        minimo = min(
+            massimo,
+            float(_last_bid_v282["next_minimo"])
+        )
 
     custom_key = f"v209_custom_{stato['lot_id']}_{team_id}"
     current = st.session_state.get(custom_key, minimo)
