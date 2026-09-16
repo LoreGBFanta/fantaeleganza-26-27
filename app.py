@@ -36150,17 +36150,17 @@ def render_bidding_inline_asta_v126():
             font-size:13px !important;font-weight:650 !important;
         }
         .st-key-v212_custom div[data-baseweb="input"] {
-            height:72px !important;min-height:72px !important;max-height:72px !important;
+            height:144px !important;min-height:144px !important;max-height:144px !important;
             border:1px solid #dce3ec !important;border-radius:10px !important;
             background:#f4f7fb !important;overflow:hidden !important;
         }
         .st-key-v212_custom div[data-baseweb="input"] input {
-            height:70px !important;min-height:70px !important;max-height:70px !important;
-            font-size:31px !important;font-weight:800 !important;text-align:center !important;
+            height:140px !important;min-height:140px !important;max-height:140px !important;
+            font-size:60px !important;font-weight:800 !important;text-align:center !important;
             background:#fff !important;color:#0f172a !important;
         }
         .st-key-v212_custom div[data-baseweb="input"] button {
-            width:56px !important;height:70px !important;min-height:70px !important;
+            width:56px !important;height:140px !important;min-height:140px !important;
             padding:0 !important;background:#f4f7fb !important;
         }
 
