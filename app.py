@@ -36385,12 +36385,12 @@ def render_bidding_inline_asta_v126():
         }
         .st-key-v212_p5 button p,
         .st-key-v212_p10 button p {
-            width:125% !important;
+            width:220% !important;
             height:80px !important;
             min-height:80px !important;
             max-height:80px !important;
             margin:0 !important;
-            margin-left:-12.5% !important;
+            margin-left:-60% !important;
             padding:0 10px !important;
             box-sizing:border-box !important;
             display:flex !important;
