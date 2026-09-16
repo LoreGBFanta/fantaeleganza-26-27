@@ -36786,12 +36786,7 @@ def render_maschera_offerta_squadra_v257(league_id, team_id):
             """,unsafe_allow_html=True
         )
 
-    # V256 - il watcher live parte solo DOPO che l'intera interfaccia,
-    # compreso il CSS V212/V223/V232/V235, è stata renderizzata.
-    with _v256_status_slot:
-        watcher_leader_asta_squadra_v255(
-            league_id, int(stato["lot_id"]), team_id
-        )
+
 
 
 
@@ -36863,6 +36858,12 @@ def render_bidding_inline_asta_v126():
     # V257 - tutti i widget d'offerta vivono in un fragment interattivo
     # separato e SENZA polling. Il watcher live non li ridisegna ogni 0,5 s.
     render_maschera_offerta_squadra_v257(league_id, team_id)
+
+    # V258 - watcher banner isolato dai controlli; nessun full rerun.
+    with _v256_status_slot:
+        watcher_leader_asta_squadra_v255(
+            league_id, int(stato["lot_id"]), team_id
+        )
 
     elapsed = time.perf_counter() - t0
     if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
