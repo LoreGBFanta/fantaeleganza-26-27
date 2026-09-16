@@ -36351,11 +36351,10 @@ def watcher_leader_asta_squadra_v255(league_id, lot_id, team_id):
     key = f"_v255_live_token_{int(league_id)}_{int(lot_id)}"
     precedente = st.session_state.get(key)
 
-    if precedente is None:
+    if precedente is None or tuple(precedente) != tuple(token):
+        # V257: aggiorniamo solo il token del banner.
+        # NESSUN full-app rerun: così il polling non può interrompere i widget.
         st.session_state[key] = token
-    elif tuple(precedente) != tuple(token):
-        st.session_state[key] = token
-        st.rerun(scope="app")
 
     if live["current_bid"] is None:
         st.info("Nessuna offerta registrata.")
@@ -36371,70 +36370,25 @@ def watcher_leader_asta_squadra_v255(league_id, lot_id, team_id):
         )
 
 
-def render_bidding_inline_asta_v126():
+@st.fragment
+def render_maschera_offerta_squadra_v257(league_id, team_id):
     """
-    V250 - ASTA SQUADRA: maschera sempre visibile durante il lotto OPEN.
-    Se la squadra è leader viene disabilitato esclusivamente INVIA OFFERTA.
-    Nessun polling automatico nella pagina SQUADRA.
+    V257 - fragment interattivo indipendente dal watcher live.
+    Nessun run_every: i click su +/-/MIN/+5/+10/INVIA ridisegnano solo questa maschera.
     """
-    league_id = st.session_state.get("ml_league_id")
-    team_id = st.session_state.get("ml_team_id")
-
-    if league_id is None or team_id is None:
-        st.info("Seleziona una squadra della lega.")
+    try:
+        stato = snapshot_lotto_live_v132(int(league_id), int(team_id))
+    except Exception as errore:
+        st.warning("Impossibile aggiornare la maschera offerte: " + str(errore))
         return
 
-    league_id = int(league_id)
-    team_id = int(team_id)
-    t0 = time.perf_counter()
-
-    try:
-        stato = snapshot_lotto_live_v132(
-            league_id,
-            team_id
-        )
-    except Exception as errore:
-        st.warning("Impossibile leggere l'asta live: " + str(errore))
+    if stato is None:
         return
 
     if st.session_state.get("team_bid_msg"):
         st.success(st.session_state.pop("team_bid_msg"))
     if st.session_state.get("team_bid_error"):
         st.error(st.session_state.pop("team_bid_error"))
-
-    st.markdown("### 📡 ASTA LIVE")
-
-    st.button(
-        "🔄 AGGIORNA OFFERTE",
-        use_container_width=True,
-        key="v134_refresh_team_asta",
-        help="Rilegge immediatamente lo stato corrente dell'asta."
-    )
-
-    if stato is None:
-        st.info(
-            "⏳ Nessun giocatore è attualmente all'asta. "
-            "Attendi l'apertura del lotto da parte del Banditore."
-        )
-        return
-
-    # V171 - card specifica per la SQUADRA: stesso linguaggio grafico del
-    # Banditore, più compatto, con le informazioni tecniche storiche.
-    render_card_giocatore_squadra_v171(stato)
-
-    # V256 - riserviamo qui la posizione del banner live, ma il watcher
-    # viene ESEGUITO soltanto a fine render, dopo CSS e maschera offerte.
-    # In questo modo un eventuale st.rerun() non può interrompere il rendering
-    # prima dell'applicazione dello stile grafico.
-    _v256_status_slot = st.container()
-
-    _v255_token_key = f"_v255_live_token_{league_id}_{int(stato['lot_id'])}"
-    st.session_state[_v255_token_key] = (
-        int(stato.get("version") or 0),
-        stato.get("current_team_id"),
-        stato.get("current_bid"),
-        str(stato.get("stato") or ""),
-    )
 
     team = stato.get("team")
     if team is None:
@@ -36838,6 +36792,77 @@ def render_bidding_inline_asta_v126():
         watcher_leader_asta_squadra_v255(
             league_id, int(stato["lot_id"]), team_id
         )
+
+
+
+def render_bidding_inline_asta_v126():
+    """
+    V250 - ASTA SQUADRA: maschera sempre visibile durante il lotto OPEN.
+    Se la squadra è leader viene disabilitato esclusivamente INVIA OFFERTA.
+    Nessun polling automatico nella pagina SQUADRA.
+    """
+    league_id = st.session_state.get("ml_league_id")
+    team_id = st.session_state.get("ml_team_id")
+
+    if league_id is None or team_id is None:
+        st.info("Seleziona una squadra della lega.")
+        return
+
+    league_id = int(league_id)
+    team_id = int(team_id)
+    t0 = time.perf_counter()
+
+    try:
+        stato = snapshot_lotto_live_v132(
+            league_id,
+            team_id
+        )
+    except Exception as errore:
+        st.warning("Impossibile leggere l'asta live: " + str(errore))
+        return
+
+    if st.session_state.get("team_bid_msg"):
+        st.success(st.session_state.pop("team_bid_msg"))
+    if st.session_state.get("team_bid_error"):
+        st.error(st.session_state.pop("team_bid_error"))
+
+    st.markdown("### 📡 ASTA LIVE")
+
+    st.button(
+        "🔄 AGGIORNA OFFERTE",
+        use_container_width=True,
+        key="v134_refresh_team_asta",
+        help="Rilegge immediatamente lo stato corrente dell'asta."
+    )
+
+    if stato is None:
+        st.info(
+            "⏳ Nessun giocatore è attualmente all'asta. "
+            "Attendi l'apertura del lotto da parte del Banditore."
+        )
+        return
+
+    # V171 - card specifica per la SQUADRA: stesso linguaggio grafico del
+    # Banditore, più compatto, con le informazioni tecniche storiche.
+    render_card_giocatore_squadra_v171(stato)
+
+    # V256 - riserviamo qui la posizione del banner live, ma il watcher
+    # viene ESEGUITO soltanto a fine render, dopo CSS e maschera offerte.
+    # In questo modo un eventuale st.rerun() non può interrompere il rendering
+    # prima dell'applicazione dello stile grafico.
+    _v256_status_slot = st.container()
+
+    _v255_token_key = f"_v255_live_token_{league_id}_{int(stato['lot_id'])}"
+    st.session_state[_v255_token_key] = (
+        int(stato.get("version") or 0),
+        stato.get("current_team_id"),
+        stato.get("current_bid"),
+        str(stato.get("stato") or ""),
+    )
+
+    # V257 - tutti i widget d'offerta vivono in un fragment interattivo
+    # separato e SENZA polling. Il watcher live non li ridisegna ogni 0,5 s.
+    render_maschera_offerta_squadra_v257(league_id, team_id)
 
     elapsed = time.perf_counter() - t0
     if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
