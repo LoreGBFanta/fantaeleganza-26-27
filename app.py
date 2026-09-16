@@ -18,8 +18,6 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
-BUILD_FANTAELEGANZA = "V252-SQUADRA-NO-TABELLA-NO-AUTOREFRESH"
-
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
