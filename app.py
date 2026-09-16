@@ -36300,7 +36300,7 @@ def render_bidding_inline_asta_v126():
 
         /* V232 - dimensione condivisa dei tre pulsanti rapidi */
         :root {
-            --v232-quick-bid-width: 228px;
+            --v232-quick-bid-width: 250px;
             --v232-quick-bid-height: 80px;
         }
 
@@ -36349,15 +36349,15 @@ def render_bidding_inline_asta_v126():
             font-size:18px !important;
             font-weight:800 !important;
             line-height:1 !important;
-            color:#ff343b !important;
-            background:#fff0f0 !important;
-            border:1px solid #ffd0d0 !important;
+            color:#176b3a !important;
+            background:#eaf8ef !important;
+            border:1px solid #bfe8cc !important;
             border-radius:10px !important;
             pointer-events:auto !important;
         }
         .st-key-v212_min button:hover p {
-            background:#ffe7e7 !important;
-            border-color:#ffbcbc !important;
+            background:#ddf3e5 !important;
+            border-color:#9fd9b2 !important;
         }
 
         /* V229 - +5 e +10: stessa geometria visiva di OFFERTA MINIMA V228.
@@ -36419,6 +36419,17 @@ def render_bidding_inline_asta_v126():
             background:#eaf0f7 !important;
             border-color:#cbd5e1 !important;
         }
+        /* V233 - colori progressivi richiesti */
+        .st-key-v212_p5 button p {
+            color:#0f5132 !important;
+            background:#bfe8cc !important;
+            border-color:#86c99d !important;
+        }
+        .st-key-v212_p5 button:hover p {
+            background:#addfbd !important;
+            border-color:#70bb89 !important;
+        }
+
 
         .st-key-v212_send {margin-top:8px;margin-bottom:12px;}
         .st-key-v212_send button {
