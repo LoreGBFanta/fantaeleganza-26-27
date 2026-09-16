@@ -36118,13 +36118,7 @@ def render_bidding_inline_asta_v126():
 
         st.markdown("#### 💰 Fai la tua offerta")
 
-        # V205 - riepilogo compatto: i due valori economici non occupano più
-        # l'intera larghezza della pagina.
-        m1,m2,_mspacer = st.columns([1.0,1.0,2.8], gap="small")
-        m1.metric("Budget residuo", f'{team["residuo"]:g}')
-        m2.metric("Offerta massima", f"{massimo:g}")
-
-        custom_key = f"v205_custom_{stato['lot_id']}_{team_id}"
+        custom_key = f"v206_custom_{stato['lot_id']}_{team_id}"
         current = st.session_state.get(custom_key, minimo)
         try:
             current = float(current)
@@ -36133,45 +36127,91 @@ def render_bidding_inline_asta_v126():
         if current < minimo or current > max(minimo,massimo):
             st.session_state[custom_key] = minimo
 
-        # V205 - unica riga operativa:
-        # OFFERTA PERSONALIZZATA grande | OFFERTA MINIMA | +5 | +10
-        _custom_col,_min_col,_p5_col,_p10_col = st.columns(
-            [3.4,1.55,1.0,1.0],
-            gap="small",
-            vertical_alignment="bottom"
-        )
+        # V206 - PRIMA la riga operativa, più alta:
+        # OFFERTA PERSONALIZZATA | OFFERTA MINIMA | +5 | +10
+        st.markdown("""
+        <style>
+        /* Campo offerta personalizzata più alto */
+        .st-key-v206_offer_row div[data-baseweb="input"] {
+            min-height: 54px !important;
+            height: 54px !important;
+        }
+        .st-key-v206_offer_row div[data-baseweb="input"] input {
+            min-height: 54px !important;
+            height: 54px !important;
+            font-size: 20px !important;
+        }
+        /* Pulsanti rapidi della stessa altezza del campo */
+        .st-key-v206_offer_row button {
+            height: 54px !important;
+            min-height: 54px !important;
+            max-height: 54px !important;
+            font-size: 16px !important;
+        }
 
-        with _custom_col:
-            st.number_input(
-                "Offerta personalizzata",
-                min_value=minimo,
-                max_value=max(minimo,massimo),
-                value=float(st.session_state.get(custom_key,minimo)),
-                step=float(team["incremento"]),
-                key=custom_key
+        /* Metriche economiche sottostanti più compatte in altezza */
+        .st-key-v206_metrics [data-testid="stMetric"] {
+            padding-top: 3px !important;
+            padding-bottom: 3px !important;
+            min-height: 0 !important;
+        }
+        .st-key-v206_metrics [data-testid="stMetricLabel"] {
+            font-size: 12px !important;
+            line-height: 1.05 !important;
+        }
+        .st-key-v206_metrics [data-testid="stMetricValue"] {
+            font-size: 22px !important;
+            line-height: 1.05 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        with st.container(key="v206_offer_row"):
+            _custom_col,_min_col,_p5_col,_p10_col = st.columns(
+                [3.4,1.55,1.0,1.0],
+                gap="small",
+                vertical_alignment="bottom"
             )
 
-        rapidi = [
-            ("OFFERTA MINIMA", minimo, _min_col),
-            ("+5", min(massimo, minimo + 5), _p5_col),
-            ("+10", min(massimo, minimo + 10), _p10_col),
-        ]
-        for label,valore,col in rapidi:
-            with col:
-                st.button(
-                    f"{label} · {valore:g}",
-                    use_container_width=True,
-                    type="primary" if label=="OFFERTA MINIMA" else "secondary",
-                    disabled=valore < minimo or valore > massimo,
-                    key=f"v205_bid_{stato['lot_id']}_{team_id}_{label}",
-                    on_click=callback_bid_rapido_v130,
-                    args=(
-                        league_id,
-                        stato["lot_id"],
-                        team_id,
-                        float(valore)
-                    )
+            with _custom_col:
+                st.number_input(
+                    "Offerta personalizzata",
+                    min_value=minimo,
+                    max_value=max(minimo,massimo),
+                    value=float(st.session_state.get(custom_key,minimo)),
+                    step=float(team["incremento"]),
+                    key=custom_key
                 )
+
+            rapidi = [
+                ("OFFERTA MINIMA", minimo, _min_col),
+                ("+5", min(massimo, minimo + 5), _p5_col),
+                ("+10", min(massimo, minimo + 10), _p10_col),
+            ]
+            for label,valore,col in rapidi:
+                with col:
+                    st.button(
+                        f"{label} · {valore:g}",
+                        use_container_width=True,
+                        type="primary" if label=="OFFERTA MINIMA" else "secondary",
+                        disabled=valore < minimo or valore > massimo,
+                        key=f"v206_bid_{stato['lot_id']}_{team_id}_{label}",
+                        on_click=callback_bid_rapido_v130,
+                        args=(
+                            league_id,
+                            stato["lot_id"],
+                            team_id,
+                            float(valore)
+                        )
+                    )
+
+        # V206 - DOPO la riga di offerta: Budget residuo e Offerta massima,
+        # più bassi e compatti.
+        with st.container(key="v206_metrics"):
+            m1,m2,_mspacer = st.columns([1.0,1.0,3.8], gap="small")
+            m1.metric("Budget residuo", f'{team["residuo"]:g}')
+            m2.metric("Offerta massima", f"{massimo:g}")
+
         st.button(
             "💰 INVIA OFFERTA",
             type="primary",
