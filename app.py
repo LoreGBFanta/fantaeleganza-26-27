@@ -34890,6 +34890,23 @@ def render_banditore_asta():
         help="Rilegge immediatamente lo stato corrente dell'asta."
     )
 
+    # V269 - titolo sotto NAVBAR + UNDO + AGGIORNA OFFERTE.
+    # Identità già sincronizzata nel parent: nessuna query DB aggiuntiva.
+    _v269_nome_lega = str(st.session_state.get("ml_league_nome") or "LEGA").strip()
+    _v269_stagione = str(st.session_state.get("ml_stagione") or "").strip()
+    _v269_titolo = (
+        f"ASTA {html.escape(_v269_nome_lega)}"
+        + (f" {html.escape(_v269_stagione)}" if _v269_stagione else "")
+        + " - IN CORSO"
+    )
+    st.markdown(
+        "<div style='width:100%;text-align:center;font-size:clamp(24px,3vw,46px);"
+        "line-height:1.08;font-weight:950;letter-spacing:.5px;margin:14px 0 18px 0;'>"
+        + _v269_titolo
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
     _nav_snap_key=f"_v197_nav_snapshot_{league_id}"
     _skip_live_key=f"_v197_skip_live_{league_id}"
     _nav_snapshot=st.session_state.pop(_nav_snap_key,None)
@@ -36894,18 +36911,6 @@ def render_navigazione_e_pagina():
 
         stile_tooltip_hover_banditore_v168()
 
-        _asta_titolo = (
-            f"ASTA {html.escape(_asta_nome_lega)}"
-            + (f" - {html.escape(_asta_anno_lega)}" if _asta_anno_lega else "")
-            + " IN CORSO"
-        )
-        st.markdown(
-            "<div style='width:100%;text-align:center;font-size:clamp(24px,3vw,46px);"
-            "line-height:1.08;font-weight:950;letter-spacing:.5px;margin:2px 0 18px 0;'>"
-            + _asta_titolo
-            + "</div>",
-            unsafe_allow_html=True,
-        )
 
     # ============================================================
     # NAVBAR
