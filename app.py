@@ -36326,11 +36326,12 @@ def render_bidding_inline_asta_v126():
             overflow:visible !important;
         }
         .st-key-v212_min button p {
-            width:100% !important;
+            width:125% !important;
             height:80px !important;
             min-height:80px !important;
             max-height:80px !important;
             margin:0 !important;
+            margin-left:-12.5% !important;
             padding:0 10px !important;
             box-sizing:border-box !important;
             display:flex !important;
@@ -36346,6 +36347,7 @@ def render_bidding_inline_asta_v126():
             border:1px solid #ffd0d0 !important;
             border-radius:10px !important;
             pointer-events:auto !important;
+            transform:translateY(21px) !important;
         }
         .st-key-v212_min button:hover p {
             background:#ffe7e7 !important;
