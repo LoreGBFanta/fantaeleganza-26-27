@@ -36292,7 +36292,85 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
     )
 
 
-@st.fragment
+def snapshot_leader_asta_squadra_v255(league_id, lot_id):
+    """V255: una sola SELECT minimale per leader/importo/versione del lotto."""
+    conn = _portal_raw_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT
+                l.current_bid,
+                l.current_team_id,
+                COALESCE(t.nome, ''),
+                COALESCE(l.version, 0),
+                l.stato
+            FROM auction_lots l
+            LEFT JOIN teams t
+              ON t.id = l.current_team_id
+             AND t.league_id = l.league_id
+            WHERE l.league_id = ?
+              AND l.id = ?
+            LIMIT 1
+            """,
+            (int(league_id), int(lot_id)),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "current_bid": row[0],
+            "current_team_id": row[1],
+            "current_team": row[2] or "",
+            "version": int(row[3] or 0),
+            "stato": str(row[4] or ""),
+        }
+    finally:
+        _portal_close(conn)
+
+
+@st.fragment(run_every=0.5)
+def watcher_leader_asta_squadra_v255(league_id, lot_id, team_id):
+    """
+    V255 - watcher indipendente dai widget di offerta.
+    Non contiene pulsanti/input. Se cambia il token live forza UN SOLO full rerun,
+    poi il nuovo token viene memorizzato dal render principale.
+    """
+    try:
+        live = snapshot_leader_asta_squadra_v255(league_id, lot_id)
+    except Exception:
+        return
+
+    if live is None:
+        return
+
+    token = (
+        int(live.get("version") or 0),
+        live.get("current_team_id"),
+        live.get("current_bid"),
+        str(live.get("stato") or ""),
+    )
+    key = f"_v255_live_token_{int(league_id)}_{int(lot_id)}"
+    precedente = st.session_state.get(key)
+
+    if precedente is None:
+        st.session_state[key] = token
+    elif tuple(precedente) != tuple(token):
+        st.session_state[key] = token
+        st.rerun(scope="app")
+
+    if live["current_bid"] is None:
+        st.info("Nessuna offerta registrata.")
+    elif live["current_team_id"] is not None and int(live["current_team_id"]) == int(team_id):
+        st.success(
+            f'🏆 Sei il miglior offerente · '
+            f'**{float(live["current_bid"]):g} crediti**'
+        )
+    else:
+        st.warning(
+            f'🏆 Migliore offerta: **{float(live["current_bid"]):g}** crediti · '
+            f'**{live["current_team"]}**'
+        )
+
+
 def render_bidding_inline_asta_v126():
     """
     V250 - ASTA SQUADRA: maschera sempre visibile durante il lotto OPEN.
@@ -36344,18 +36422,19 @@ def render_bidding_inline_asta_v126():
     # Banditore, più compatto, con le informazioni tecniche storiche.
     render_card_giocatore_squadra_v171(stato)
 
-    if stato["current_bid"] is None:
-        st.info("Nessuna offerta registrata.")
-    elif stato["current_team_id"] == team_id:
-        st.success(
-            f'🏆 Sei il miglior offerente · '
-            f'**{stato["current_bid"]:g} crediti**'
-        )
-    else:
-        st.warning(
-            f'🏆 Migliore offerta: **{stato["current_bid"]:g}** crediti · '
-            f'**{stato["current_team"]}**'
-        )
+    # V255 - inizializza il token dal medesimo snapshot usato dai controlli.
+    _v255_token_key = f"_v255_live_token_{league_id}_{int(stato['lot_id'])}"
+    st.session_state[_v255_token_key] = (
+        int(stato.get("version") or 0),
+        stato.get("current_team_id"),
+        stato.get("current_bid"),
+        str(stato.get("stato") or ""),
+    )
+
+    # Fragment live separato: non possiede né ridisegna alcun widget d'offerta.
+    watcher_leader_asta_squadra_v255(
+        league_id, int(stato["lot_id"]), team_id
+    )
 
     team = stato.get("team")
     if team is None:
