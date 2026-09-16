@@ -36298,59 +36298,73 @@ def render_bidding_inline_asta_v126():
             line-height:1 !important;
         }
 
-        /* V226 - OFFERTA MINIMA.
-           Niente position:absolute/height: Streamlit neutralizza l'altezza.
-           Aumentiamo invece la dimensione INTRINSECA del button con padding
-           verticale + box-sizing:content-box, come per un normale elemento HTML. */
+        /* V227 - OFFERTA MINIMA: bypass del box nativo Streamlit.
+           Il button resta tecnicamente nativo/cliccabile, ma diventa trasparente.
+           La superficie VISIVA da 80px viene disegnata dal <p> interno, che è
+           comunque figlio del button e quindi mantiene il click/callback. */
+        .st-key-v212_min {
+            min-height:80px !important;
+            height:80px !important;
+            overflow:visible !important;
+        }
         .st-key-v212_min [data-testid="stButton"] {
             width:100% !important;
-            height:auto !important;
-            min-height:0 !important;
-            max-height:none !important;
-            position:static !important;
+            height:80px !important;
+            min-height:80px !important;
+            overflow:visible !important;
         }
-        .st-key-v212_min [data-testid="stButton"] > button,
         .st-key-v212_min button {
-            position:static !important;
-            inset:auto !important;
             width:100% !important;
-            height:auto !important;
-            min-height:0 !important;
-            max-height:none !important;
-            padding-top:28px !important;
-            padding-bottom:28px !important;
-            padding-left:10px !important;
-            padding-right:10px !important;
-            border-radius:10px !important;
+            height:34px !important;
+            min-height:34px !important;
+            max-height:34px !important;
+            padding:0 !important;
+            margin:0 !important;
+            border:0 !important;
+            background:transparent !important;
+            box-shadow:none !important;
+            overflow:visible !important;
+        }
+        .st-key-v212_min button p {
+            width:100% !important;
+            height:80px !important;
+            min-height:80px !important;
+            max-height:80px !important;
+            margin:0 !important;
+            padding:0 10px !important;
+            box-sizing:border-box !important;
             display:flex !important;
             align-items:center !important;
             justify-content:center !important;
-            box-sizing:content-box !important;
-            line-height:22px !important;
-            box-shadow:none !important;
+            white-space:nowrap !important;
+            text-align:center !important;
+            font-size:18px !important;
+            font-weight:800 !important;
+            line-height:1 !important;
+            color:#ff343b !important;
+            background:#fff0f0 !important;
+            border:1px solid #ffd0d0 !important;
+            border-radius:10px !important;
+            pointer-events:auto !important;
         }
-        .st-key-v212_min [data-testid="stButton"] > button p,
-        .st-key-v212_min button p {
-            margin:0 !important;
-            line-height:22px !important;
+        .st-key-v212_min button:hover p {
+            background:#ffe7e7 !important;
+            border-color:#ffbcbc !important;
         }
+
         .st-key-v212_p5 button,.st-key-v212_p10 button {
             width:100% !important;height:72px !important;min-height:72px !important;max-height:72px !important;
             padding:0 10px !important;border-radius:10px !important;
             display:flex !important;align-items:center !important;justify-content:center !important;
             box-shadow:none !important;
         }
-        .st-key-v212_min button {
-            background:#fff0f0 !important;border:1px solid #ffd0d0 !important;
-        }
         .st-key-v212_p5 button,.st-key-v212_p10 button {
             background:#f2f5f9 !important;border:1px solid #dce3ec !important;
         }
-        .st-key-v212_min button p,.st-key-v212_p5 button p,.st-key-v212_p10 button p {
+        .st-key-v212_p5 button p,.st-key-v212_p10 button p {
             margin:0 !important;padding:0 !important;white-space:nowrap !important;
             text-align:center !important;font-size:18px !important;font-weight:800 !important;line-height:1 !important;
         }
-        .st-key-v212_min button p {color:#ff343b !important;}
 
         .st-key-v212_send {margin-top:8px;margin-bottom:12px;}
         .st-key-v212_send button {
