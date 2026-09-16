@@ -36295,9 +36295,9 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
 @st.fragment
 def render_bidding_inline_asta_v126():
     """
-    V248 - ASTA SQUADRA FAST: il fragment dei pulsanti resta senza polling.
-    Il controllo live è esterno ed esiste soltanto quando la squadra è in testa
-    e quindi la maschera di rilancio non è visualizzata.
+    V249 - ASTA SQUADRA FAST: nessun polling e nessun fragment concorrente.
+    La maschera offerte resta visibile anche al leader; INVIA è disabilitato
+    finché current_team_id indica questa squadra come miglior offerente.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
@@ -36334,20 +36334,11 @@ def render_bidding_inline_asta_v126():
     )
 
     if stato is None:
-        st.session_state["_v248_best_active"] = False
         st.info(
             "⏳ Nessun giocatore è attualmente all'asta. "
             "Attendi l'apertura del lotto da parte del Banditore."
         )
         return
-
-    # V248 - stato usato soltanto per montare il watcher quando NON esistono
-    # pulsanti di rilancio nella pagina.
-    st.session_state["_v248_best_active"] = (
-        stato.get("current_team_id") is not None
-        and int(stato.get("current_team_id")) == int(team_id)
-    )
-    st.session_state["_v248_best_lot"] = int(stato.get("lot_id") or 0)
 
     # V171 - card specifica per la SQUADRA: stesso linguaggio grafico del
     # Banditore, più compatto, con le informazioni tecniche storiche.
@@ -36370,13 +36361,23 @@ def render_bidding_inline_asta_v126():
     if team is None:
         return
 
-    # Le maschere spariscono se la squadra è già la migliore offerente.
-    if stato["current_team_id"] == team_id:
-        st.caption(
-            "Le offerte si aggiornano automaticamente."
-        )
+    # V249 - la maschera offerte resta SEMPRE visibile durante un lotto OPEN
+    # anche se questa squadra è già il miglior offerente.
+    # La leadership è quella autorevole di auction_lots.current_team_id,
+    # la stessa usata dalla tabella live del BANDITORE.
+    _v249_is_best = (
+        stato.get("current_team_id") is not None
+        and int(stato.get("current_team_id")) == int(team_id)
+    )
 
-    elif not team["can_bid"]:
+    # Se can_bid=False SOLO perché siamo già i migliori, mostriamo comunque
+    # tutta la maschera; sarà inibito esclusivamente INVIA OFFERTA.
+    _v249_show_offer_mask = (
+        str(stato.get("stato") or "").upper() == "OPEN"
+        and (_v249_is_best or bool(team.get("can_bid", False)))
+    )
+
+    if not _v249_show_offer_mask:
         st.info("ℹ️ " + str(team["motivo"]))
     else:
         minimo = float(team["offerta_minima"])
@@ -36726,9 +36727,15 @@ def render_bidding_inline_asta_v126():
             with st.container(key="v212_send"):
                 st.button(
                     "💰   INVIA OFFERTA   →",use_container_width=True,type="primary",
+                    disabled=_v249_is_best,
                     key=f"v212_send_{stato['lot_id']}_{team_id}",
                     on_click=callback_bid_personalizzato_v130,
-                    args=(league_id,stato["lot_id"],team_id,custom_key)
+                    args=(league_id,stato["lot_id"],team_id,custom_key),
+                    help=(
+                        "Hai già la migliore offerta in corso."
+                        if _v249_is_best
+                        else "Invia l'offerta selezionata."
+                    )
                 )
 
             st.markdown(
@@ -36751,16 +36758,6 @@ def render_bidding_inline_asta_v126():
                 </div>
                 """,unsafe_allow_html=True
             )
-
-    # V172 - la tabella offerte resta sempre l'ultimo blocco operativo
-    # della pagina ASTA SQUADRA; quando il form è disponibile compare
-    # quindi subito dopo il pulsante INVIA OFFERTA.
-    st.markdown("#### Offerte per squadra")
-    st.dataframe(
-        _tabella_offerte_live_v132(stato),
-        use_container_width=True,
-        hide_index=True
-    )
 
     elapsed = time.perf_counter() - t0
     if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
@@ -37069,60 +37066,6 @@ def stile_tooltip_hover_banditore_v168():
         unsafe_allow_html=True,
     )
 
-
-
-
-
-@st.fragment(run_every="1s")
-def watcher_seconda_posizione_v248(league_id, team_id, lot_id):
-    """
-    V248 - attivo SOLO mentre la pagina principale mostra
-    'Sei il miglior offerente'.
-
-    Legge la graduatoria reale delle offerte del lotto corrente. Se la squadra
-    non è più al primo posto (tipicamente è scesa al secondo), forza un solo
-    refresh completo della pagina SQUADRA. Dopo il refresh compare FAI LA TUA
-    OFFERTA e questo watcher non viene più montato.
-    """
-    if league_id is None or team_id is None or lot_id is None:
-        return
-
-    league_id = int(league_id)
-    team_id = int(team_id)
-    lot_id = int(lot_id)
-
-    conn = _portal_raw_connection()
-    cur = conn.cursor()
-    try:
-        # Una sola SELECT minima. MAX per squadra replica la logica della
-        # tabella offerte; poi ordiniamo per importo e ultimo bid come spareggio.
-        cur.execute("""
-            SELECT x.team_id
-            FROM (
-                SELECT
-                    b.team_id,
-                    MAX(b.amount) AS max_amount,
-                    MAX(b.id) AS last_bid_id
-                FROM bids b
-                WHERE b.league_id=? AND b.lot_id=?
-                GROUP BY b.team_id
-            ) x
-            ORDER BY x.max_amount DESC, x.last_bid_id DESC
-            LIMIT 1
-        """, (league_id, lot_id))
-        r = cur.fetchone()
-    finally:
-        _portal_close(conn)
-
-    leader_id = int(r[0]) if r and r[0] is not None else None
-
-    # Finché la graduatoria reale ci mantiene primi: nessun rerun.
-    if leader_id == team_id:
-        return
-
-    # Siamo scesi in seconda posizione (o comunque non siamo più primi).
-    # Un solo rerun riallinea snapshot, banner e maschera di rilancio.
-    st.rerun(scope="app")
 
 
 
@@ -37857,18 +37800,9 @@ def render_navigazione_e_pagina():
 
     elif sezione == "ASTA":
 
-        # Console bidding: continua SENZA polling.
+        # V246 - FAST PATH: un solo fragment interattivo, nessun polling
+        # concorrente nella sessione SQUADRA. Priorità alla risposta dei click.
         render_bidding_inline_asta_v126()
-
-        # V248 - il watcher viene montato esclusivamente quando questa pagina
-        # mostra "Sei il miglior offerente", quindi quando i pulsanti di
-        # rilancio NON sono presenti e non possono essere rallentati.
-        if st.session_state.get("_v248_best_active"):
-            watcher_seconda_posizione_v248(
-                st.session_state.get("ml_league_id"),
-                st.session_state.get("ml_team_id"),
-                st.session_state.get("_v248_best_lot"),
-            )
 
 
     elif sezione == "VENDUTI AD AVVERSARI":
