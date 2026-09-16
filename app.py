@@ -36341,7 +36341,7 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
 
 @st.fragment
 def render_maschera_offerta_squadra_v259(league_id,team_id,stato):
-    """Controlli senza polling e senza query DB sui click locali."""
+    """V265 - controlli locali minimali: nessun polling/query DB sui click di incremento."""
     team = stato.get("team")
     if team is None:
         return
@@ -36633,7 +36633,9 @@ def render_maschera_offerta_squadra_v259(league_id,team_id,stato):
             except Exception:
                 _custom_val_v222 = float(minimo)
             _custom_val_v222 = max(float(minimo), min(float(massimo), _custom_val_v222))
-            st.session_state[custom_key] = f"{_custom_val_v222:g}"
+            _custom_norm_v265 = f"{_custom_val_v222:g}"
+            if str(st.session_state.get(custom_key, "")) != _custom_norm_v265:
+                st.session_state[custom_key] = _custom_norm_v265
 
             st.markdown(
                 '<div class="st-key-v222_custom_label">Offerta personalizzata</div>',
