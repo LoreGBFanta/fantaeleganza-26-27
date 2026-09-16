@@ -36295,9 +36295,9 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
 @st.fragment
 def render_bidding_inline_asta_v126():
     """
-    V242 - ASTA SQUADRA interattiva SENZA polling nel fragment dei pulsanti.
-    È intenzionale: run_every sullo stesso fragment può interrompere i callback
-    OFFERTA MINIMA/+5/+10/INVIA. La snapshot DB viene riletta a ogni interazione.
+    V246 - ASTA SQUADRA FAST: nessun polling e nessun fragment concorrente.
+    OFFERTA MINIMA/+5/+10/INVIA hanno priorità assoluta; la snapshot DB viene
+    riletta soltanto a seguito di un'interazione esplicita della squadra.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
@@ -37060,62 +37060,6 @@ def stile_tooltip_hover_banditore_v168():
     )
 
 
-@st.fragment(run_every="1s")
-def watcher_superamento_miglior_offerente_v245(league_id, team_id):
-    """
-    V245 - sentinella sempre montata nella pagina ASTA, ma passiva.
-    Fa una sola SELECT minima. NON ricarica la pagina per ogni nuova offerta:
-    forza un rerun completo esclusivamente nella transizione
-    "ero miglior offerente" -> "non sono più miglior offerente".
-    """
-    if league_id is None or team_id is None:
-        return
-
-    league_id = int(league_id)
-    team_id = int(team_id)
-    key = f"_v245_was_best_{league_id}_{team_id}"
-
-    conn = _portal_raw_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT
-                l.id,
-                l.stato,
-                l.current_team_id
-            FROM auction_sessions s
-            LEFT JOIN auction_lots l
-              ON l.league_id=s.league_id
-             AND l.id=s.current_lot_id
-            WHERE s.league_id=?
-            LIMIT 1
-        """, (league_id,))
-        r = cur.fetchone()
-    finally:
-        _portal_close(conn)
-
-    is_best = bool(
-        r
-        and r[0] is not None
-        and str(r[1] or "").upper() == "OPEN"
-        and r[2] is not None
-        and int(r[2]) == team_id
-    )
-
-    was_best = st.session_state.get(key)
-
-    # Prima lettura: fotografa soltanto lo stato corrente.
-    if was_best is None:
-        st.session_state[key] = is_best
-        return
-
-    # Aggiorna sempre la memoria della sentinella.
-    st.session_state[key] = is_best
-
-    # È l'UNICO caso in cui il watcher provoca un rerun:
-    # questa squadra era in testa ed è stata appena superata.
-    if bool(was_best) and not is_best:
-        st.rerun(scope="app")
 
 
 def render_navigazione_e_pagina():
@@ -37849,16 +37793,9 @@ def render_navigazione_e_pagina():
 
     elif sezione == "ASTA":
 
-        # V245 - console interattiva: resta SENZA polling per preservare
-        # la massima velocità di OFFERTA MINIMA/+5/+10/INVIA OFFERTA.
+        # V246 - FAST PATH: un solo fragment interattivo, nessun polling
+        # concorrente nella sessione SQUADRA. Priorità alla risposta dei click.
         render_bidding_inline_asta_v126()
-
-        # Sentinella separata e sempre presente: una SELECT minima ogni secondo,
-        # nessun rerun salvo quando QUESTA squadra perde il primato.
-        watcher_superamento_miglior_offerente_v245(
-            st.session_state.get("ml_league_id"),
-            st.session_state.get("ml_team_id"),
-        )
 
 
     elif sezione == "VENDUTI AD AVVERSARI":
