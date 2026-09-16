@@ -36259,15 +36259,15 @@ def render_bidding_inline_asta_v126():
             margin:0 0 6px 0;
         }
         .st-key-v222_custom_text textarea {
-            height:136px !important;
-            min-height:136px !important;
-            max-height:136px !important;
+            height:80px !important;
+            min-height:80px !important;
+            max-height:80px !important;
             resize:none !important;
             overflow:hidden !important;
-            padding:42px 8px !important;
+            padding:17px 8px !important;
             box-sizing:border-box !important;
-            font-size:34px !important;
-            line-height:42px !important;
+            font-size:32px !important;
+            line-height:44px !important;
             font-weight:800 !important;
             text-align:center !important;
             color:#0f172a !important;
@@ -36280,9 +36280,9 @@ def render_bidding_inline_asta_v126():
         .st-key-v222_minus button,
         .st-key-v222_plus button {
             width:100% !important;
-            height:136px !important;
-            min-height:136px !important;
-            max-height:136px !important;
+            height:80px !important;
+            min-height:80px !important;
+            max-height:80px !important;
             padding:0 !important;
             border-radius:8px !important;
             background:#f2f5f9 !important;
@@ -36389,7 +36389,7 @@ def render_bidding_inline_asta_v126():
                         st.text_area(
                             "Offerta personalizzata",
                             key=custom_key,
-                            height=136,
+                            height=80,
                             label_visibility="collapsed",
                         )
 
