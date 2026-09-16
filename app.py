@@ -36038,6 +36038,11 @@ def render_card_giocatore_squadra_v171(live):
                     )
 
 
+def callback_seleziona_importo_offerta_v209(custom_key, valore):
+    """V209 - i pulsanti rapidi selezionano l'importo; non inviano l'offerta."""
+    st.session_state[str(custom_key)] = float(valore)
+
+
 def render_bidding_inline_asta_v126():
     """
     V132 - ASTA squadra: un solo fragment live, una sola query per refresh.
@@ -36118,7 +36123,7 @@ def render_bidding_inline_asta_v126():
 
         st.markdown("#### 💰 Fai la tua offerta")
 
-        custom_key = f"v207_custom_{stato['lot_id']}_{team_id}"
+        custom_key = f"v209_custom_{stato['lot_id']}_{team_id}"
         current = st.session_state.get(custom_key, minimo)
         try:
             current = float(current)
@@ -36127,124 +36132,149 @@ def render_bidding_inline_asta_v126():
         if current < minimo or current > max(minimo,massimo):
             st.session_state[custom_key] = minimo
 
-        # V207 - layout esattamente come il mockup:
-        # [offerta personalizzata] [offerta minima] [+5] [+10] [invia offerta]
-        # sotto: [budget residuo] [offerta massima]
+        # V209 - blocco offerta ridisegnato sul mockup approvato.
+        # I rapidi selezionano l'importo; SOLO "INVIA OFFERTA" effettua l'offerta.
         st.markdown("""
         <style>
-        /* Riga operativa: tutti i controlli alti 54px */
-        .st-key-v207_offer_row div[data-baseweb="input"] {
-            height:54px !important;
-            min-height:54px !important;
-            max-height:54px !important;
+        .st-key-v209_offer_card {
+            border:1px solid rgba(49,51,63,.12);
+            border-radius:14px;
+            background:white;
+            padding:18px 20px 16px 20px;
+            box-shadow:0 2px 10px rgba(15,23,42,.05);
+            margin-top:4px;
         }
-        .st-key-v207_offer_row div[data-baseweb="input"] input {
-            height:54px !important;
-            min-height:54px !important;
-            max-height:54px !important;
-            font-size:20px !important;
-            font-weight:500 !important;
+        .v209-head {
+            display:flex; align-items:flex-start; justify-content:space-between;
+            gap:20px; margin-bottom:18px;
         }
-        .st-key-v207_offer_row button {
-            height:54px !important;
-            min-height:54px !important;
-            max-height:54px !important;
-            box-sizing:border-box !important;
-            font-size:20px !important;
-            font-weight:600 !important;
-            line-height:1 !important;
+        .v209-title {font-size:28px;font-weight:800;line-height:1.05;color:#0f172a;}
+        .v209-sub {font-size:14px;color:#64748b;margin-top:5px;}
+        .v209-minbox {
+            background:#eaf3ff;border:1px solid #d8e8ff;border-radius:10px;
+            min-width:205px;padding:9px 16px;text-align:center;color:#123b78;
         }
-        .st-key-v207_offer_row button p {
-            font-size:20px !important;
-            font-weight:600 !important;
-            line-height:1 !important;
-            margin:0 !important;
+        .v209-minlabel {font-size:12px;font-weight:600;}
+        .v209-minvalue {font-size:26px;font-weight:800;line-height:1.05;margin-top:2px;}
+
+        /* Riga selezione: input più largo, poi tre scelte rapide. */
+        .st-key-v209_select_row div[data-baseweb="input"] {
+            height:62px !important;min-height:62px !important;max-height:62px !important;
+            border-radius:9px !important;
+        }
+        .st-key-v209_select_row div[data-baseweb="input"] input {
+            height:62px !important;min-height:62px !important;max-height:62px !important;
+            font-size:28px !important;font-weight:700 !important;text-align:center !important;
+        }
+        .st-key-v209_select_row button {
+            height:62px !important;min-height:62px !important;max-height:62px !important;
+            border-radius:9px !important;font-size:17px !important;font-weight:700 !important;
+        }
+        .st-key-v209_select_row button p {
+            font-size:17px !important;font-weight:700 !important;line-height:1.05 !important;
+            white-space:pre-line !important;text-align:center !important;
         }
 
-        /* Celle inferiori: due metà esatte e più basse */
-        .st-key-v207_metrics [data-testid="stMetric"] {
-            height:64px !important;
-            min-height:64px !important;
-            max-height:64px !important;
-            box-sizing:border-box !important;
-            padding:7px 10px !important;
-            border:1px solid rgba(49,51,63,.20) !important;
-            border-radius:7px !important;
-            background:white !important;
-            text-align:center !important;
+        /* Unica azione di conferma, grande e inequivocabile. */
+        .st-key-v209_send button {
+            width:100% !important;height:58px !important;min-height:58px !important;
+            max-height:58px !important;border-radius:9px !important;
+            font-size:23px !important;font-weight:800 !important;
         }
-        .st-key-v207_metrics [data-testid="stMetric"] > div {
-            justify-content:center !important;
-            text-align:center !important;
+        .st-key-v209_send button p {
+            font-size:23px !important;font-weight:800 !important;
         }
-        .st-key-v207_metrics [data-testid="stMetricLabel"],
-        .st-key-v207_metrics [data-testid="stMetricValue"] {
-            justify-content:center !important;
-            text-align:center !important;
-            width:100% !important;
+
+        /* Due indicatori finanziari compatti sotto l'azione. */
+        .st-key-v209_metrics [data-testid="stMetric"] {
+            height:72px !important;min-height:72px !important;max-height:72px !important;
+            box-sizing:border-box !important;padding:10px 18px !important;
+            border:1px solid rgba(49,51,63,.13) !important;border-radius:10px !important;
         }
-        .st-key-v207_metrics [data-testid="stMetricLabel"] p {
-            font-size:12px !important;
-            line-height:1 !important;
-            margin:0 !important;
+        .st-key-v209_metrics div[data-testid="column"]:first-child [data-testid="stMetric"] {
+            background:#eefaf3 !important;
         }
-        .st-key-v207_metrics [data-testid="stMetricValue"] {
-            font-size:22px !important;
-            line-height:1.05 !important;
+        .st-key-v209_metrics div[data-testid="column"]:last-child [data-testid="stMetric"] {
+            background:#eef6ff !important;
+        }
+        .st-key-v209_metrics [data-testid="stMetricLabel"] p {
+            font-size:13px !important;font-weight:650 !important;line-height:1 !important;
+        }
+        .st-key-v209_metrics [data-testid="stMetricValue"] {
+            font-size:27px !important;font-weight:800 !important;line-height:1.05 !important;
         }
         </style>
-        """, unsafe_allow_html=True)
+        """,unsafe_allow_html=True)
 
-        with st.container(key="v207_offer_row"):
-            _custom_col,_min_col,_p5_col,_p10_col,_send_col = st.columns(
-                [2.25,2.65,1.0,1.0,2.25],
-                gap="small",
-                vertical_alignment="bottom"
+        with st.container(key="v209_offer_card"):
+            st.markdown(
+                f"""
+                <div class="v209-head">
+                    <div>
+                        <div class="v209-title">💰 Fai la tua offerta</div>
+                        <div class="v209-sub">Imposta l'importo e conferma la tua offerta</div>
+                    </div>
+                    <div class="v209-minbox">
+                        <div class="v209-minlabel">🔨 Offerta minima per rilanciare</div>
+                        <div class="v209-minvalue">{minimo:g}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
-            with _custom_col:
-                st.number_input(
-                    "Offerta personalizzata",
-                    min_value=minimo,
-                    max_value=max(minimo,massimo),
-                    value=float(st.session_state.get(custom_key,minimo)),
-                    step=float(team["incremento"]),
-                    key=custom_key
+            with st.container(key="v209_select_row"):
+                _custom_col,_min_col,_p5_col,_p10_col = st.columns(
+                    [3.25,1.55,1.15,1.15],gap="small",vertical_alignment="bottom"
                 )
-
-            rapidi = [
-                ("OFFERTA MINIMA", minimo, _min_col),
-                ("+5", min(massimo, minimo + 5), _p5_col),
-                ("+10", min(massimo, minimo + 10), _p10_col),
-            ]
-            for label,valore,col in rapidi:
-                with col:
-                    st.button(
-                        f"{label} • +{valore:g}" if label=="OFFERTA MINIMA" else label,
-                        use_container_width=True,
-                        type="primary",
-                        disabled=valore < minimo or valore > massimo,
-                        key=f"v207_bid_{stato['lot_id']}_{team_id}_{label}",
-                        on_click=callback_bid_rapido_v130,
-                        args=(league_id,stato["lot_id"],team_id,float(valore))
+                with _custom_col:
+                    st.number_input(
+                        "Offerta personalizzata",
+                        min_value=minimo,
+                        max_value=max(minimo,massimo),
+                        value=float(st.session_state.get(custom_key,minimo)),
+                        step=float(team["incremento"]),
+                        key=custom_key
                     )
 
-            with _send_col:
+                _quick = [
+                    ("OFFERTA MINIMA", float(minimo), _min_col),
+                    ("+5", float(min(massimo,minimo+5)), _p5_col),
+                    ("+10", float(min(massimo,minimo+10)), _p10_col),
+                ]
+                for _label,_val,_col in _quick:
+                    with _col:
+                        _txt = (
+                            f"OFFERTA MINIMA\n{_val:g}"
+                            if _label=="OFFERTA MINIMA"
+                            else f"{_label}\n{_val:g}"
+                        )
+                        st.button(
+                            _txt,
+                            use_container_width=True,
+                            type="secondary",
+                            disabled=_val < minimo or _val > massimo,
+                            key=f"v209_pick_{stato['lot_id']}_{team_id}_{_label}",
+                            on_click=callback_seleziona_importo_offerta_v209,
+                            args=(custom_key,float(_val))
+                        )
+
+            with st.container(key="v209_send"):
                 st.button(
-                    "💰 INVIA OFFERTA",
+                    "💰  INVIA OFFERTA  →",
                     use_container_width=True,
                     type="primary",
-                    key=f"v207_send_{stato['lot_id']}_{team_id}",
+                    key=f"v209_send_{stato['lot_id']}_{team_id}",
                     on_click=callback_bid_personalizzato_v130,
                     args=(league_id,stato["lot_id"],team_id,custom_key)
                 )
 
-        with st.container(key="v207_metrics"):
-            _budget_col,_max_col = st.columns([1,1],gap="small")
-            with _budget_col:
-                st.metric("BUDGET RESIDUO",f'{team["residuo"]:g}')
-            with _max_col:
-                st.metric("OFFERTA MASSIMA",f"{massimo:g}")
+            with st.container(key="v209_metrics"):
+                _budget_col,_max_col=st.columns([1,1],gap="small")
+                with _budget_col:
+                    st.metric("💳  Budget residuo",f'{team["residuo"]:g}')
+                with _max_col:
+                    st.metric("📈  Offerta massima",f"{massimo:g}")
 
     # V172 - la tabella offerte resta sempre l'ultimo blocco operativo
     # della pagina ASTA SQUADRA; quando il form è disponibile compare
