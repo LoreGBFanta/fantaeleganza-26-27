@@ -36452,9 +36452,16 @@ def render_bidding_inline_asta_v126():
             font-weight:850 !important;color:#fff !important;text-align:center !important;
         }
 
+        /* V235 - margine interno aggiuntivo per staccare le celle finanziarie
+           dal bordo del riquadro bianco "Fai la tua offerta". */
         .v212-finance {
             display:grid;grid-template-columns:1fr 1fr;height:76px;
             border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;
+            width:calc(100% - 24px);
+            margin-left:12px;
+            margin-right:12px;
+            margin-bottom:2px;
+            box-sizing:border-box;
         }
         .v212-fin {display:flex;align-items:center;justify-content:center;gap:15px;padding:8px 18px;}
         .v212-budget {background:linear-gradient(90deg,#eefbf3,#f7fcf9);color:#087a39;}
