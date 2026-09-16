@@ -34754,7 +34754,7 @@ def render_ricerca_giocatore_banditore_v169(league_id):
         help="Apre immediatamente il lotto sul giocatore selezionato."
     )
 
-@st.fragment
+@st.fragment(run_every="1s")
 def render_banditore_asta():
     if st.session_state.get("ml_modalita_accesso") != "BANDITORE":
         st.error("Accedi con il livello BANDITORE per usare Gestione Asta.")
@@ -36169,9 +36169,8 @@ def render_card_giocatore_squadra_v171(live):
 
 
 def callback_seleziona_importo_offerta_v209(custom_key, valore):
-    """V238 - selezione locale: solo session_state, zero DB e zero I/O."""
+    """V241 - selezione importo minimale: una sola scrittura locale."""
     st.session_state[str(custom_key)] = f"{float(valore):g}"
-    st.session_state["_bid_pick_ts_v238"] = time.perf_counter()
 
 
 def callback_varia_offerta_personalizzata_v222(custom_key, delta, minimo, massimo):
@@ -36276,13 +36275,12 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
     )
 
 
-@st.fragment
+@st.fragment(run_every="2s")
 def render_bidding_inline_asta_v126():
     """
-    V238 - ASTA SQUADRA isolata in un fragment interattivo SENZA polling interno.
-    Ogni click riesegue soltanto questa sezione. Evitiamo la concorrenza tra
-    run_every e callback dei pulsanti, che nella V237 poteva rendere i click
-    inaffidabili. La snapshot DB viene riletta a ogni interazione.
+    V241 - ASTA SQUADRA live con refresh automatico locale ogni 2 secondi.
+    Nessun watcher esterno e nessun rerun globale aggiunto: il fragment
+    rilegge lo stato DB e riapre la maschera quando la squadra viene superata.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
@@ -37044,69 +37042,6 @@ def stile_tooltip_hover_banditore_v168():
         unsafe_allow_html=True,
     )
 
-
-@st.fragment(run_every="1s")
-def watcher_asta_live_v240(league_id):
-    """
-    V240 - heartbeat live separato dai controlli interattivi.
-    Legge solo l'identità/versione del lotto corrente. Se cambia, forza un
-    refresh dell'app così BANDITORE e SQUADRE vedono subito la nuova offerta.
-    Il polling NON contiene pulsanti e quindi non interferisce con i click.
-    """
-    if league_id is None:
-        return
-
-    league_id = int(league_id)
-    conn = _portal_raw_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT
-                s.current_lot_id,
-                COALESCE(l.stato,''),
-                COALESCE(l.version,0),
-                COALESCE(l.bid_count,0),
-                COALESCE(l.current_team_id,0),
-                COALESCE(l.current_bid,0)
-            FROM auction_sessions s
-            LEFT JOIN auction_lots l
-              ON l.league_id=s.league_id
-             AND l.id=s.current_lot_id
-            WHERE s.league_id=?
-            LIMIT 1
-        """, (league_id,))
-        r = cur.fetchone()
-    finally:
-        _portal_close(conn)
-
-    if r:
-        token = (
-            int(r[0]) if r[0] is not None else 0,
-            str(r[1] or ""),
-            int(r[2] or 0),
-            int(r[3] or 0),
-            int(r[4] or 0),
-            round(float(r[5] or 0), 2),
-        )
-    else:
-        token = (0, "", 0, 0, 0, 0.0)
-
-    key = f"_v240_live_token_{league_id}"
-    precedente = st.session_state.get(key)
-
-    # Prima esecuzione: inizializza soltanto il riferimento.
-    if precedente is None:
-        st.session_state[key] = token
-        return
-
-    if tuple(precedente) != tuple(token):
-        st.session_state[key] = token
-        # Il watcher è un fragment distinto dai pulsanti: il refresh completo
-        # avviene soltanto quando il DB segnala una variazione reale.
-        st.rerun(scope="app")
-
-
-
 def render_navigazione_e_pagina():
     # V166 - ADMIN mantiene i controlli generali in alto.
     # Nel BANDITORE, destinato alla proiezione, CAMBIA LIVELLO e MENU
@@ -37374,9 +37309,6 @@ def render_navigazione_e_pagina():
     elif sezione == "GESTIONE ASTA":
 
         _t_banditore_route = time.perf_counter()
-        # V240 - watcher live indipendente: aggiorna automaticamente
-        # la tabella ULTIME OFFERTE quando una squadra rilancia.
-        watcher_asta_live_v240(st.session_state.get("ml_league_id"))
         render_banditore_asta()
 
     elif sezione == "STORICO ASTA":
@@ -37841,12 +37773,8 @@ def render_navigazione_e_pagina():
 
     elif sezione == "ASTA":
 
-        # V240 - heartbeat separato dal fragment dei pulsanti.
-        # Se un'altra squadra rilancia, questa sessione si aggiorna da sola
-        # e riapre immediatamente la maschera di offerta se siamo stati superati.
-        watcher_asta_live_v240(st.session_state.get("ml_league_id"))
-
-        # La console offerte resta un fragment SENZA polling: massima velocità click.
+        # V132: la sezione ASTA è esclusivamente la console live della squadra.
+        # Ricerca/listone restano nella sezione LISTONE.
         render_bidding_inline_asta_v126()
 
 
