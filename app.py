@@ -36298,6 +36298,12 @@ def render_bidding_inline_asta_v126():
             line-height:1 !important;
         }
 
+        /* V232 - dimensione condivisa dei tre pulsanti rapidi */
+        :root {
+            --v232-quick-bid-width: 228px;
+            --v232-quick-bid-height: 80px;
+        }
+
         /* V227 - OFFERTA MINIMA: bypass del box nativo Streamlit.
            Il button resta tecnicamente nativo/cliccabile, ma diventa trasparente.
            La superficie VISIVA da 80px viene disegnata dal <p> interno, che è
@@ -36326,12 +36332,13 @@ def render_bidding_inline_asta_v126():
             overflow:visible !important;
         }
         .st-key-v212_min button p {
-            width:125% !important;
-            height:80px !important;
-            min-height:80px !important;
-            max-height:80px !important;
+            width:var(--v232-quick-bid-width) !important;
+            height:var(--v232-quick-bid-height) !important;
+            min-height:var(--v232-quick-bid-height) !important;
+            max-height:var(--v232-quick-bid-height) !important;
             margin:0 !important;
-            margin-left:-12.5% !important;
+            margin-left:50% !important;
+            transform:translate(-50%, 21px) !important;
             padding:0 10px !important;
             box-sizing:border-box !important;
             display:flex !important;
@@ -36347,7 +36354,6 @@ def render_bidding_inline_asta_v126():
             border:1px solid #ffd0d0 !important;
             border-radius:10px !important;
             pointer-events:auto !important;
-            transform:translateY(21px) !important;
         }
         .st-key-v212_min button:hover p {
             background:#ffe7e7 !important;
@@ -36385,12 +36391,13 @@ def render_bidding_inline_asta_v126():
         }
         .st-key-v212_p5 button p,
         .st-key-v212_p10 button p {
-            width:220% !important;
-            height:80px !important;
-            min-height:80px !important;
-            max-height:80px !important;
+            width:var(--v232-quick-bid-width) !important;
+            height:var(--v232-quick-bid-height) !important;
+            min-height:var(--v232-quick-bid-height) !important;
+            max-height:var(--v232-quick-bid-height) !important;
             margin:0 !important;
-            margin-left:-60% !important;
+            margin-left:50% !important;
+            transform:translate(-50%, 21px) !important;
             padding:0 10px !important;
             box-sizing:border-box !important;
             display:flex !important;
@@ -36406,7 +36413,6 @@ def render_bidding_inline_asta_v126():
             border:1px solid #dce3ec !important;
             border-radius:10px !important;
             pointer-events:auto !important;
-            transform:translateY(21px) !important;
         }
         .st-key-v212_p5 button:hover p,
         .st-key-v212_p10 button:hover p {
