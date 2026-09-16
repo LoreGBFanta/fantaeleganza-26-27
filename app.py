@@ -36118,36 +36118,13 @@ def render_bidding_inline_asta_v126():
 
         st.markdown("#### 💰 Fai la tua offerta")
 
-        m1,m2,m3 = st.columns(3)
+        # V205 - riepilogo compatto: i due valori economici non occupano più
+        # l'intera larghezza della pagina.
+        m1,m2,_mspacer = st.columns([1.0,1.0,2.8], gap="small")
         m1.metric("Budget residuo", f'{team["residuo"]:g}')
-        m2.metric("Offerta minima", f"{minimo:g}")
-        m3.metric("Offerta massima", f"{massimo:g}")
+        m2.metric("Offerta massima", f"{massimo:g}")
 
-        c1,c2,c3 = st.columns(3)
-        rapidi = [
-            ("OFFERTA MINIMA", minimo),
-            ("+5", min(massimo, minimo + 5)),
-            ("+10", min(massimo, minimo + 10)),
-        ]
-
-        for col,(label,valore) in zip((c1,c2,c3),rapidi):
-            with col:
-                st.button(
-                    f"{label} · {valore:g}",
-                    use_container_width=True,
-                    type="primary" if label=="OFFERTA MINIMA" else "secondary",
-                    disabled=valore < minimo or valore > massimo,
-                    key=f"v132_bid_{stato['lot_id']}_{team_id}_{label}",
-                    on_click=callback_bid_rapido_v130,
-                    args=(
-                        league_id,
-                        stato["lot_id"],
-                        team_id,
-                        float(valore)
-                    )
-                )
-
-        custom_key = f"v132_custom_{stato['lot_id']}_{team_id}"
+        custom_key = f"v205_custom_{stato['lot_id']}_{team_id}"
         current = st.session_state.get(custom_key, minimo)
         try:
             current = float(current)
@@ -36156,14 +36133,45 @@ def render_bidding_inline_asta_v126():
         if current < minimo or current > max(minimo,massimo):
             st.session_state[custom_key] = minimo
 
-        st.number_input(
-            "Offerta personalizzata",
-            min_value=minimo,
-            max_value=max(minimo,massimo),
-            value=float(st.session_state.get(custom_key,minimo)),
-            step=float(team["incremento"]),
-            key=custom_key
+        # V205 - unica riga operativa:
+        # OFFERTA PERSONALIZZATA grande | OFFERTA MINIMA | +5 | +10
+        _custom_col,_min_col,_p5_col,_p10_col = st.columns(
+            [3.4,1.55,1.0,1.0],
+            gap="small",
+            vertical_alignment="bottom"
         )
+
+        with _custom_col:
+            st.number_input(
+                "Offerta personalizzata",
+                min_value=minimo,
+                max_value=max(minimo,massimo),
+                value=float(st.session_state.get(custom_key,minimo)),
+                step=float(team["incremento"]),
+                key=custom_key
+            )
+
+        rapidi = [
+            ("OFFERTA MINIMA", minimo, _min_col),
+            ("+5", min(massimo, minimo + 5), _p5_col),
+            ("+10", min(massimo, minimo + 10), _p10_col),
+        ]
+        for label,valore,col in rapidi:
+            with col:
+                st.button(
+                    f"{label} · {valore:g}",
+                    use_container_width=True,
+                    type="primary" if label=="OFFERTA MINIMA" else "secondary",
+                    disabled=valore < minimo or valore > massimo,
+                    key=f"v205_bid_{stato['lot_id']}_{team_id}_{label}",
+                    on_click=callback_bid_rapido_v130,
+                    args=(
+                        league_id,
+                        stato["lot_id"],
+                        team_id,
+                        float(valore)
+                    )
+                )
         st.button(
             "💰 INVIA OFFERTA",
             type="primary",
