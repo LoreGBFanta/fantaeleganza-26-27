@@ -1993,6 +1993,53 @@ def render_profilo_utente():
 
 
 def render_portale_iniziale():
+    # V203 - helper locale di bootstrap: il portale non dipende dal nome globale.
+    def _render_incremento_portale_v203(prefix, tipo_default="FISSO", base_default=1.0, fasce_default=None):
+        tipo_default = str(tipo_default or "FISSO").upper()
+        tipo = st.radio(
+            "Tipo incremento minimo asta", ["FISSO", "SCALARE"],
+            index=1 if tipo_default == "SCALARE" else 0,
+            horizontal=True, key=f"{prefix}_tipo_inc",
+            help=("FISSO: lo stesso incremento vale per tutta l'asta. "
+                  "SCALARE: l'incremento cambia quando l'offerta corrente raggiunge le soglie impostate.")
+        )
+        base = st.selectbox(
+            "Incremento minimo asta" if tipo == "FISSO" else "Incremento iniziale",
+            INCREMENTI_ASTA_AMMESSI_V186,
+            index=_indice_incremento_asta_v186(base_default),
+            format_func=lambda x: f"{x:.2f}", key=f"{prefix}_base_inc"
+        )
+        fasce = []
+        if tipo == "SCALARE":
+            defaults = fasce_default or [{"soglia": 50.0, "incremento": 2.0}]
+            n = st.number_input(
+                "Numero soglie incremento", min_value=1, max_value=8,
+                value=max(1, min(8, len(defaults))), step=1,
+                key=f"{prefix}_n_soglie"
+            )
+            st.caption("Al raggiungimento di ogni soglia, la prossima offerta usa l'incremento associato.")
+            for i in range(int(n)):
+                d = defaults[i] if i < len(defaults) else {
+                    "soglia": float((i+1)*50), "incremento": float(base)
+                }
+                c1,c2=st.columns(2)
+                with c1:
+                    soglia=st.number_input(
+                        f"Soglia offerta {i+1}", min_value=0.10, max_value=1000000.0,
+                        value=max(0.10,float(d.get("soglia",(i+1)*50))),
+                        step=1.0,key=f"{prefix}_soglia_{i}"
+                    )
+                with c2:
+                    inc0=float(d.get("incremento",base))
+                    incremento_fascia=st.selectbox(
+                        f"Incremento minimo oltre soglia {i+1}",
+                        INCREMENTI_ASTA_AMMESSI_V186,
+                        index=_indice_incremento_asta_v186(inc0),
+                        format_func=lambda x:f"{x:.2f}",key=f"{prefix}_inc_{i}"
+                    )
+                fasce.append({"soglia":float(soglia),"incremento":float(incremento_fascia)})
+        return tipo,float(base),fasce
+
 
     st.markdown(
         """
@@ -2217,7 +2264,7 @@ def render_portale_iniziale():
                         step=1.0
                     )
 
-                tipo_incremento_portale, incremento, incrementi_scalari_portale = _render_incremento_asta_v187(
+                tipo_incremento_portale, incremento, incrementi_scalari_portale = _render_incremento_portale_v203(
                     "ml187_portale", "FISSO", 1.0, []
                 )
 
