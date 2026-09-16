@@ -36118,7 +36118,7 @@ def render_bidding_inline_asta_v126():
 
         st.markdown("#### 💰 Fai la tua offerta")
 
-        custom_key = f"v206_custom_{stato['lot_id']}_{team_id}"
+        custom_key = f"v207_custom_{stato['lot_id']}_{team_id}"
         current = st.session_state.get(custom_key, minimo)
         try:
             current = float(current)
@@ -36127,48 +36127,77 @@ def render_bidding_inline_asta_v126():
         if current < minimo or current > max(minimo,massimo):
             st.session_state[custom_key] = minimo
 
-        # V206 - PRIMA la riga operativa, più alta:
-        # OFFERTA PERSONALIZZATA | OFFERTA MINIMA | +5 | +10
+        # V207 - layout esattamente come il mockup:
+        # [offerta personalizzata] [offerta minima] [+5] [+10] [invia offerta]
+        # sotto: [budget residuo] [offerta massima]
         st.markdown("""
         <style>
-        /* Campo offerta personalizzata più alto */
-        .st-key-v206_offer_row div[data-baseweb="input"] {
-            min-height: 54px !important;
-            height: 54px !important;
+        /* Riga operativa: tutti i controlli alti 54px */
+        .st-key-v207_offer_row div[data-baseweb="input"] {
+            height:54px !important;
+            min-height:54px !important;
+            max-height:54px !important;
         }
-        .st-key-v206_offer_row div[data-baseweb="input"] input {
-            min-height: 54px !important;
-            height: 54px !important;
-            font-size: 20px !important;
+        .st-key-v207_offer_row div[data-baseweb="input"] input {
+            height:54px !important;
+            min-height:54px !important;
+            max-height:54px !important;
+            font-size:20px !important;
+            font-weight:500 !important;
         }
-        /* Pulsanti rapidi della stessa altezza del campo */
-        .st-key-v206_offer_row button {
-            height: 54px !important;
-            min-height: 54px !important;
-            max-height: 54px !important;
-            font-size: 16px !important;
+        .st-key-v207_offer_row button {
+            height:54px !important;
+            min-height:54px !important;
+            max-height:54px !important;
+            box-sizing:border-box !important;
+            font-size:20px !important;
+            font-weight:600 !important;
+            line-height:1 !important;
+        }
+        .st-key-v207_offer_row button p {
+            font-size:20px !important;
+            font-weight:600 !important;
+            line-height:1 !important;
+            margin:0 !important;
         }
 
-        /* Metriche economiche sottostanti più compatte in altezza */
-        .st-key-v206_metrics [data-testid="stMetric"] {
-            padding-top: 3px !important;
-            padding-bottom: 3px !important;
-            min-height: 0 !important;
+        /* Celle inferiori: due metà esatte e più basse */
+        .st-key-v207_metrics [data-testid="stMetric"] {
+            height:64px !important;
+            min-height:64px !important;
+            max-height:64px !important;
+            box-sizing:border-box !important;
+            padding:7px 10px !important;
+            border:1px solid rgba(49,51,63,.20) !important;
+            border-radius:7px !important;
+            background:white !important;
+            text-align:center !important;
         }
-        .st-key-v206_metrics [data-testid="stMetricLabel"] {
-            font-size: 12px !important;
-            line-height: 1.05 !important;
+        .st-key-v207_metrics [data-testid="stMetric"] > div {
+            justify-content:center !important;
+            text-align:center !important;
         }
-        .st-key-v206_metrics [data-testid="stMetricValue"] {
-            font-size: 22px !important;
-            line-height: 1.05 !important;
+        .st-key-v207_metrics [data-testid="stMetricLabel"],
+        .st-key-v207_metrics [data-testid="stMetricValue"] {
+            justify-content:center !important;
+            text-align:center !important;
+            width:100% !important;
+        }
+        .st-key-v207_metrics [data-testid="stMetricLabel"] p {
+            font-size:12px !important;
+            line-height:1 !important;
+            margin:0 !important;
+        }
+        .st-key-v207_metrics [data-testid="stMetricValue"] {
+            font-size:22px !important;
+            line-height:1.05 !important;
         }
         </style>
         """, unsafe_allow_html=True)
 
-        with st.container(key="v206_offer_row"):
-            _custom_col,_min_col,_p5_col,_p10_col = st.columns(
-                [3.4,1.55,1.0,1.0],
+        with st.container(key="v207_offer_row"):
+            _custom_col,_min_col,_p5_col,_p10_col,_send_col = st.columns(
+                [2.25,2.65,1.0,1.0,2.25],
                 gap="small",
                 vertical_alignment="bottom"
             )
@@ -36191,40 +36220,31 @@ def render_bidding_inline_asta_v126():
             for label,valore,col in rapidi:
                 with col:
                     st.button(
-                        f"{label} · {valore:g}",
+                        f"{label} • +{valore:g}" if label=="OFFERTA MINIMA" else label,
                         use_container_width=True,
-                        type="primary" if label=="OFFERTA MINIMA" else "secondary",
+                        type="primary",
                         disabled=valore < minimo or valore > massimo,
-                        key=f"v206_bid_{stato['lot_id']}_{team_id}_{label}",
+                        key=f"v207_bid_{stato['lot_id']}_{team_id}_{label}",
                         on_click=callback_bid_rapido_v130,
-                        args=(
-                            league_id,
-                            stato["lot_id"],
-                            team_id,
-                            float(valore)
-                        )
+                        args=(league_id,stato["lot_id"],team_id,float(valore))
                     )
 
-        # V206 - DOPO la riga di offerta: Budget residuo e Offerta massima,
-        # più bassi e compatti.
-        with st.container(key="v206_metrics"):
-            m1,m2,_mspacer = st.columns([1.0,1.0,3.8], gap="small")
-            m1.metric("Budget residuo", f'{team["residuo"]:g}')
-            m2.metric("Offerta massima", f"{massimo:g}")
+            with _send_col:
+                st.button(
+                    "💰 INVIA OFFERTA",
+                    use_container_width=True,
+                    type="primary",
+                    key=f"v207_send_{stato['lot_id']}_{team_id}",
+                    on_click=callback_bid_custom_v130,
+                    args=(league_id,stato["lot_id"],team_id,custom_key)
+                )
 
-        st.button(
-            "💰 INVIA OFFERTA",
-            type="primary",
-            use_container_width=True,
-            key=f"v132_custom_submit_{stato['lot_id']}_{team_id}",
-            on_click=callback_bid_personalizzato_v130,
-            args=(
-                league_id,
-                stato["lot_id"],
-                team_id,
-                custom_key
-            )
-        )
+        with st.container(key="v207_metrics"):
+            _budget_col,_max_col = st.columns([1,1],gap="small")
+            with _budget_col:
+                st.metric("BUDGET RESIDUO",f'{team["residuo"]:g}')
+            with _max_col:
+                st.metric("OFFERTA MASSIMA",f"{massimo:g}")
 
     # V172 - la tabella offerte resta sempre l'ultimo blocco operativo
     # della pagina ASTA SQUADRA; quando il form è disponibile compare
