@@ -34350,20 +34350,37 @@ def render_card_giocatore_live_v140(live):
 def render_ultime_offerte_proiezione_v165(live):
     """Ultime 3 offerte in formato grande, senza dataframe/toolbar Streamlit."""
     rows = []
-    for bid in (live.get("offerte") or [])[:3]:
+    for _idx_bid, bid in enumerate((live.get("offerte") or [])[:3]):
         raw_time = str(bid.get("Orario") or "")
         # SQLite CURRENT_TIMESTAMP -> YYYY-MM-DD HH:MM:SS: sul proiettore basta HH:MM:SS.
         ora = raw_time.split(" ")[-1][:8] if raw_time else "—"
         squadra = html.escape(str(bid.get("Squadra") or "—"))
         offerta = float(bid.get("Offerta") or 0)
+        # V260: la prima riga è l'offerta corrente/migliore e viene evidenziata nettamente.
+        _leader_class = ' class="fe-current-leader"' if _idx_bid == 0 else ""
         rows.append(
-            f'<tr><td>{squadra}</td><td class="fe-bid-amount">{offerta:g}</td><td>{html.escape(ora)}</td></tr>'
+            f'<tr{_leader_class}><td>{squadra}</td><td class="fe-bid-amount">{offerta:g}</td><td>{html.escape(ora)}</td></tr>'
         )
     if not rows:
         rows.append('<tr><td colspan="3" class="fe-no-bids">In attesa della prima offerta</td></tr>')
 
     st.markdown(
         """
+        <style>
+        .fe-proj-bids tbody tr.fe-current-leader td {
+            background:#c9f7d5 !important;
+            color:#073b1d !important;
+            font-weight:900 !important;
+            border-top:2px solid #16a34a !important;
+            border-bottom:2px solid #16a34a !important;
+        }
+        .fe-proj-bids tbody tr.fe-current-leader td:first-child {
+            border-left:2px solid #16a34a !important;
+        }
+        .fe-proj-bids tbody tr.fe-current-leader td:last-child {
+            border-right:2px solid #16a34a !important;
+        }
+        </style>
         <div class="fe-proj-bids-title">ULTIME OFFERTE</div>
         <table class="fe-proj-bids">
           <thead><tr><th>NOME SQUADRA</th><th>OFFERTA</th><th>ORARIO OFFERTA</th></tr></thead>
@@ -35993,7 +36010,6 @@ def callback_bid_rapido_v130(league_id, lot_id, team_id, amount):
             "version": int(esito.get("version", 0)),
             "ts": time.time(),
         }
-        st.session_state["_v259_force_app_rerun"] = True
     except Exception as errore:
         _salva_esito_bid_v130(False, str(errore))
 
@@ -36293,51 +36309,9 @@ def forza_dimensione_number_input_dom_v217(container_class="st-key-v212_custom",
     )
 
 
-def snapshot_leader_minimo_v259(league_id,lot_id):
-    """Una SELECT minimale per leader/importo/versione/stato."""
-    conn=_portal_raw_connection()
-    try:
-        row=conn.execute(
-            "SELECT current_bid,current_team_id,COALESCE(version,0),stato "
-            "FROM auction_lots WHERE league_id=? AND id=? LIMIT 1",
-            (int(league_id),int(lot_id))
-        ).fetchone()
-        if row is None:
-            return None
-        return {"current_bid":row[0],"current_team_id":row[1],
-                "version":int(row[2] or 0),"stato":str(row[3] or "")}
-    finally:
-        _portal_close(conn)
-
-
-@st.fragment(run_every="1s")
-def watcher_solo_miglior_offerente_v259(league_id,lot_id,team_id):
-    """Interroga il DB solo mentre questa sessione crede di essere leader."""
-    key=f"_v259_watch_leader_{int(league_id)}_{int(lot_id)}_{int(team_id)}"
-    if not bool(st.session_state.get(key,False)):
-        return
-    try:
-        live=snapshot_leader_minimo_v259(league_id,lot_id)
-    except Exception:
-        return
-    if live is None:
-        return
-    ancora_leader=(
-        live.get("current_team_id") is not None
-        and int(live["current_team_id"])==int(team_id)
-        and str(live.get("stato") or "").upper()=="OPEN"
-    )
-    if not ancora_leader:
-        st.session_state[key]=False
-        st.rerun(scope="app")
-
-
 @st.fragment
 def render_maschera_offerta_squadra_v259(league_id,team_id,stato):
     """Controlli senza polling e senza query DB sui click locali."""
-    if st.session_state.pop("_v259_force_app_rerun",False):
-        st.rerun(scope="app")
-
     team = stato.get("team")
     if team is None:
         return
@@ -36347,11 +36321,6 @@ def render_maschera_offerta_squadra_v259(league_id,team_id,stato):
     if str(stato.get("stato") or "").upper() != "OPEN":
         st.info("ℹ️ Il lotto non è aperto alle offerte.")
         return
-
-    is_best_offer_team = (
-        stato.get("current_team_id") is not None
-        and int(stato.get("current_team_id")) == int(team_id)
-    )
 
     # V251 - nessun return basato su can_bid prima della maschera.
     # Durante OPEN la maschera è SEMPRE visibile.
@@ -36702,15 +36671,10 @@ def render_maschera_offerta_squadra_v259(league_id,team_id,stato):
         with st.container(key="v212_send"):
             st.button(
                 "💰   INVIA OFFERTA   →",use_container_width=True,type="primary",
-                disabled=is_best_offer_team,
                 key=f"v212_send_{stato['lot_id']}_{team_id}",
                 on_click=callback_bid_personalizzato_v130,
                 args=(league_id,stato["lot_id"],team_id,custom_key),
-                help=(
-                    "Hai già la migliore offerta in corso."
-                    if is_best_offer_team
-                    else "Invia l'offerta selezionata."
-                )
+                help="Invia l'offerta selezionata."
             )
 
         st.markdown(
@@ -36787,30 +36751,8 @@ def render_bidding_inline_asta_v126():
     # Banditore, più compatto, con le informazioni tecniche storiche.
     render_card_giocatore_squadra_v171(stato)
 
-    if stato["current_bid"] is None:
-        st.info("Nessuna offerta registrata.")
-    elif stato["current_team_id"] == team_id:
-        st.success(
-            f'🏆 Sei il miglior offerente · '
-            f'**{stato["current_bid"]:g} crediti**'
-        )
-    else:
-        st.warning(
-            f'🏆 Migliore offerta: **{stato["current_bid"]:g}** crediti · '
-            f'**{stato["current_team"]}**'
-        )
-
-    # V259: controlli e watcher sono fragment fratelli.
+    # V260: nessun watcher/polling nella pagina ASTA SQUADRA; priorità assoluta ai click.
     render_maschera_offerta_squadra_v259(league_id,team_id,stato)
-
-    _v259_watch_key=f"_v259_watch_leader_{league_id}_{int(stato['lot_id'])}_{team_id}"
-    _v259_is_best=(
-        stato.get("current_team_id") is not None
-        and int(stato["current_team_id"])==team_id
-        and str(stato.get("stato") or "").upper()=="OPEN"
-    )
-    st.session_state[_v259_watch_key]=bool(_v259_is_best)
-    watcher_solo_miglior_offerente_v259(league_id,int(stato["lot_id"]),team_id)
 
     elapsed = time.perf_counter() - t0
     if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
