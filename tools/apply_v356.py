@@ -82,3 +82,5 @@ ast.parse(out)
 p.write_text(out,encoding="utf-8")
 py_compile.compile(str(p),doraise=True)
 print("V356 OK: ast.parse + py_compile")
+
+# trigger validator
