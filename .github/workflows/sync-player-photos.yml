@@ -20,7 +20,7 @@ jobs:
       - name: Download verified reusable photos
         shell: python
         run: |
-          import csv, pathlib, urllib.request
+          import csv, pathlib, urllib.request, urllib.parse
           manifest = pathlib.Path("static/players/manifest.csv")
           outdir = pathlib.Path("static/players")
           allowed = ("CC0", "CC BY", "CC-BY", "PUBLIC DOMAIN")
@@ -37,7 +37,7 @@ jobs:
               if "commons.wikimedia.org/wiki/File:" not in source:
                   continue
               filename = source.split("/wiki/File:",1)[1]
-              url = "https://commons.wikimedia.org/wiki/Special:Redirect/file/" + filename
+              url = "https://commons.wikimedia.org/wiki/Special:Redirect/file/" + urllib.parse.quote(filename)
               req = urllib.request.Request(url, headers={"User-Agent":"FantaEleganzaPhotoSync/1.0"})
               try:
                   data = urllib.request.urlopen(req, timeout=30).read()
