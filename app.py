@@ -21250,6 +21250,8 @@ if (
         "_titolarita_cache",
         "_formazioni_tipo_fast_cache",
         "_ml16_sidebar_metrics"
+        "_v297_sidebar_snapshot",
+        "_v297_undo_snapshot",
     ]:
 
         st.session_state.pop(
@@ -21367,6 +21369,9 @@ else:
     budget_rimanente = budget_asta
 
 
+# V297 - il callback navbar viene eseguito prima del full-run.
+_v297_nav_fast = bool(st.session_state.pop("_v297_nav_fast_once", False))
+
 # ============================================================
 # V154 - SIDEBAR SQUADRA VISIBILE E SINCRONIZZATA SU TUTTI I LIVELLI
 # Il budget e' scritto esclusivamente dal livello SQUADRA e letto sempre
@@ -21376,104 +21381,156 @@ _sidebar_team_id = st.session_state.get("ml_sidebar_team_id")
 _sidebar_team_nome = str(st.session_state.get("ml_sidebar_team_nome") or TEAM_ATTIVO_NOME or "")
 _sidebar_league_id = st.session_state.get("ml_league_id")
 
+_v297_sidebar_cache_key = (
+    int(_sidebar_league_id) if _sidebar_league_id is not None else None,
+    int(_sidebar_team_id) if _sidebar_team_id is not None else None,
+    str(st.session_state.get("ml_modalita") or "MANTRA").upper(),
+)
+_v297_sidebar_cached = st.session_state.get("_v297_sidebar_snapshot")
+
 if (
     MODALITA_ACCESSO_ATTIVA == "SQUADRA"
-    and _sidebar_league_id is not None
-    and _sidebar_team_id is not None
+    and _v297_nav_fast
+    and isinstance(_v297_sidebar_cached, dict)
+    and _v297_sidebar_cached.get("key") == _v297_sidebar_cache_key
 ):
-    _sid_lid = int(_sidebar_league_id)
-    _sid_tid = int(_sidebar_team_id)
-    _conn_sid = _portal_raw_connection()
-    try:
-        # Catalogo completo di lega necessario per il calcolo IQR.
-        df_completo = pd.read_sql_query("""
-            SELECT
-                c.player_id AS Id,
-                c.ruolo_classico AS R,
-                c.ruolo_mantra AS RM,
-                c.nome AS Nome,
-                c.squadra AS Squadra,
-                c.quotazione_attuale AS "Qt.A",
-                c.quotazione_iniziale AS "Qt.I",
-                c.differenza AS "Diff.",
-                c.quotazione_attuale_mantra AS "Qt.A M",
-                c.quotazione_iniziale_mantra AS "Qt.I M",
-                c.differenza_mantra AS "Diff.M",
-                c.fvm AS FVM,
-                c.fvm_mantra AS "FVM M",
-                CASE
-                    WHEN lp.stato='ASSEGNATO' AND lp.assigned_team_id=? THEN 'MIO'
-                    WHEN lp.stato='ASSEGNATO' THEN 'VENDUTO'
-                    ELSE 'DISPONIBILE'
-                END AS Stato,
-                CASE
-                    WHEN lp.stato='ASSEGNATO' AND lp.assigned_team_id=?
-                    THEN lp.prezzo_assegnazione
-                    ELSE NULL
-                END AS Prezzo
-            FROM league_player_catalog c
-            LEFT JOIN league_players lp
-              ON lp.league_id=c.league_id
-             AND lp.player_id=c.player_id
-            WHERE c.league_id=?
-        """, _conn_sid, params=(_sid_tid, _sid_tid, _sid_lid))
+    # V297 - transizione navbar: ZERO query sidebar/Turso.
+    df_completo = _v297_sidebar_cached["df_completo"]
+    df_rosa_globale = _v297_sidebar_cached["df_rosa_globale"]
+    valore_attivi = _v297_sidebar_cached["valore_attivi"]
+    numero_rosa = _v297_sidebar_cached["numero_rosa"]
+    numero_portieri = _v297_sidebar_cached["numero_portieri"]
+    slot_liberi = _v297_sidebar_cached["slot_liberi"]
+    iqr = _v297_sidebar_cached["iqr"]
+    budget_asta = _v297_sidebar_cached["budget_asta"]
+    valore_acquisti = _v297_sidebar_cached["valore_acquisti"]
+    spesa_effettiva = _v297_sidebar_cached["spesa_effettiva"]
+    costi_svincoli = _v297_sidebar_cached["costi_svincoli"]
+    oltre_soglia = _v297_sidebar_cached["oltre_soglia"]
+    budget_rimanente = _v297_sidebar_cached["budget_rimanente"]
+    st.session_state["budget_asta_corrente"] = budget_asta
+    st.session_state["budget_asta_input"] = budget_asta
+else:
+    if (
+        MODALITA_ACCESSO_ATTIVA == "SQUADRA"
+        and _sidebar_league_id is not None
+        and _sidebar_team_id is not None
+    ):
+        _sid_lid = int(_sidebar_league_id)
+        _sid_tid = int(_sidebar_team_id)
+        _conn_sid = _portal_raw_connection()
+        try:
+            # Catalogo completo di lega necessario per il calcolo IQR.
+            df_completo = pd.read_sql_query("""
+                SELECT
+                    c.player_id AS Id,
+                    c.ruolo_classico AS R,
+                    c.ruolo_mantra AS RM,
+                    c.nome AS Nome,
+                    c.squadra AS Squadra,
+                    c.quotazione_attuale AS "Qt.A",
+                    c.quotazione_iniziale AS "Qt.I",
+                    c.differenza AS "Diff.",
+                    c.quotazione_attuale_mantra AS "Qt.A M",
+                    c.quotazione_iniziale_mantra AS "Qt.I M",
+                    c.differenza_mantra AS "Diff.M",
+                    c.fvm AS FVM,
+                    c.fvm_mantra AS "FVM M",
+                    CASE
+                        WHEN lp.stato='ASSEGNATO' AND lp.assigned_team_id=? THEN 'MIO'
+                        WHEN lp.stato='ASSEGNATO' THEN 'VENDUTO'
+                        ELSE 'DISPONIBILE'
+                    END AS Stato,
+                    CASE
+                        WHEN lp.stato='ASSEGNATO' AND lp.assigned_team_id=?
+                        THEN lp.prezzo_assegnazione
+                        ELSE NULL
+                    END AS Prezzo
+                FROM league_player_catalog c
+                LEFT JOIN league_players lp
+                  ON lp.league_id=c.league_id
+                 AND lp.player_id=c.player_id
+                WHERE c.league_id=?
+            """, _conn_sid, params=(_sid_tid, _sid_tid, _sid_lid))
 
-        # V182 - la colonna operativa RM segue la modalità della lega.
-        # In CLASSIC tutti i componenti esistenti vedono P/D/C/A; in MANTRA
-        # continuano a vedere i ruoli Mantra originali.
-        if str(st.session_state.get("ml_modalita") or "MANTRA").upper() == "CLASSIC":
-            df_completo["RM"] = df_completo["R"].astype(str)
-            df_completo["FVM M"] = df_completo["FVM"]
-            df_completo["Qt.A M"] = df_completo["Qt.A"]
-            df_completo["Qt.I M"] = df_completo["Qt.I"]
+            # V182 - la colonna operativa RM segue la modalità della lega.
+            # In CLASSIC tutti i componenti esistenti vedono P/D/C/A; in MANTRA
+            # continuano a vedere i ruoli Mantra originali.
+            if str(st.session_state.get("ml_modalita") or "MANTRA").upper() == "CLASSIC":
+                df_completo["RM"] = df_completo["R"].astype(str)
+                df_completo["FVM M"] = df_completo["FVM"]
+                df_completo["Qt.A M"] = df_completo["Qt.A"]
+                df_completo["Qt.I M"] = df_completo["Qt.I"]
 
-        df_rosa_globale = df_completo[df_completo["Stato"] == "MIO"].copy()
-        _prezzi_sidebar = pd.to_numeric(
-            df_rosa_globale.get("Prezzo", pd.Series(dtype=float)),
-            errors="coerce"
-        ).fillna(0)
-        valore_attivi = round(float(_prezzi_sidebar.sum()), 2)
-        numero_rosa = int(len(df_rosa_globale))
-        numero_portieri = conta_portieri(df_rosa_globale)
-        slot_liberi = max(0, MAX_GIOCATORI - numero_rosa)
-        iqr = calcola_iqr(df_rosa_globale, df_completo, MAX_GIOCATORI)
+            df_rosa_globale = df_completo[df_completo["Stato"] == "MIO"].copy()
+            _prezzi_sidebar = pd.to_numeric(
+                df_rosa_globale.get("Prezzo", pd.Series(dtype=float)),
+                errors="coerce"
+            ).fillna(0)
+            valore_attivi = round(float(_prezzi_sidebar.sum()), 2)
+            numero_rosa = int(len(df_rosa_globale))
+            numero_portieri = conta_portieri(df_rosa_globale)
+            slot_liberi = max(0, MAX_GIOCATORI - numero_rosa)
+            iqr = calcola_iqr(df_rosa_globale, df_completo, MAX_GIOCATORI)
 
-        _cur_sid = _conn_sid.cursor()
-        _cur_sid.execute("""
-            SELECT
-                COALESCE(tb.budget_impostato, r.budget_iniziale, ?),
-                COALESCE(tb.valore_acquisti, 0),
-                COALESCE(tb.spesa_effettiva, 0),
-                COALESCE(r.soglia_budget, r.budget_iniziale, ?)
-            FROM teams t
-            LEFT JOIN league_rules r ON r.league_id=t.league_id
-            LEFT JOIN team_budgets tb
-              ON tb.league_id=t.league_id AND tb.team_id=t.id
-            WHERE t.league_id=? AND t.id=?
-            LIMIT 1
-        """, (SOGLIA_BASE, SOGLIA_BASE, _sid_lid, _sid_tid))
-        _r_sid = _cur_sid.fetchone()
+            _cur_sid = _conn_sid.cursor()
+            _cur_sid.execute("""
+                SELECT
+                    COALESCE(tb.budget_impostato, r.budget_iniziale, ?),
+                    COALESCE(tb.valore_acquisti, 0),
+                    COALESCE(tb.spesa_effettiva, 0),
+                    COALESCE(r.soglia_budget, r.budget_iniziale, ?)
+                FROM teams t
+                LEFT JOIN league_rules r ON r.league_id=t.league_id
+                LEFT JOIN team_budgets tb
+                  ON tb.league_id=t.league_id AND tb.team_id=t.id
+                WHERE t.league_id=? AND t.id=?
+                LIMIT 1
+            """, (SOGLIA_BASE, SOGLIA_BASE, _sid_lid, _sid_tid))
+            _r_sid = _cur_sid.fetchone()
 
-        if _r_sid:
-            budget_asta = float(_r_sid[0] if _r_sid[0] is not None else SOGLIA_BASE)
-            valore_acquisti = float(_r_sid[1] if _r_sid[1] is not None else valore_attivi)
-            spesa_effettiva = float(_r_sid[2] if _r_sid[2] is not None else valore_acquisti)
-            _soglia_sid = float(_r_sid[3] if _r_sid[3] is not None else SOGLIA_BASE)
-        else:
-            budget_asta = float(SOGLIA_BASE)
-            valore_acquisti = float(valore_attivi)
-            spesa_effettiva = float(valore_acquisti)
-            _soglia_sid = float(SOGLIA_BASE)
+            if _r_sid:
+                budget_asta = float(_r_sid[0] if _r_sid[0] is not None else SOGLIA_BASE)
+                valore_acquisti = float(_r_sid[1] if _r_sid[1] is not None else valore_attivi)
+                spesa_effettiva = float(_r_sid[2] if _r_sid[2] is not None else valore_acquisti)
+                _soglia_sid = float(_r_sid[3] if _r_sid[3] is not None else SOGLIA_BASE)
+            else:
+                budget_asta = float(SOGLIA_BASE)
+                valore_acquisti = float(valore_attivi)
+                spesa_effettiva = float(valore_acquisti)
+                _soglia_sid = float(SOGLIA_BASE)
 
-        costi_svincoli = round(max(0.0, valore_acquisti - valore_attivi), 2)
-        oltre_soglia = round(max(0.0, valore_acquisti - _soglia_sid), 2)
-        budget_rimanente = round(budget_asta - spesa_effettiva, 2)
+            costi_svincoli = round(max(0.0, valore_acquisti - valore_attivi), 2)
+            oltre_soglia = round(max(0.0, valore_acquisti - _soglia_sid), 2)
+            budget_rimanente = round(budget_asta - spesa_effettiva, 2)
 
-        # Il widget Budget viene mostrato in sola lettura fuori dal livello Squadra.
-        st.session_state["budget_asta_corrente"] = budget_asta
-        st.session_state["budget_asta_input"] = budget_asta
-    finally:
-        _portal_close(_conn_sid)
+            # Il widget Budget viene mostrato in sola lettura fuori dal livello Squadra.
+            st.session_state["budget_asta_corrente"] = budget_asta
+            st.session_state["budget_asta_input"] = budget_asta
+        finally:
+            _portal_close(_conn_sid)
+
+    if (
+        MODALITA_ACCESSO_ATTIVA == "SQUADRA"
+        and _sidebar_league_id is not None
+        and _sidebar_team_id is not None
+    ):
+        st.session_state["_v297_sidebar_snapshot"] = {
+            "key": _v297_sidebar_cache_key,
+            "df_completo": df_completo,
+            "df_rosa_globale": df_rosa_globale,
+            "valore_attivi": valore_attivi,
+            "numero_rosa": numero_rosa,
+            "numero_portieri": numero_portieri,
+            "slot_liberi": slot_liberi,
+            "iqr": iqr,
+            "budget_asta": budget_asta,
+            "valore_acquisti": valore_acquisti,
+            "spesa_effettiva": spesa_effettiva,
+            "costi_svincoli": costi_svincoli,
+            "oltre_soglia": oltre_soglia,
+            "budget_rimanente": budget_rimanente,
+        }
 
 
 # ============================================================
@@ -37112,20 +37169,10 @@ def render_navigazione_e_pagina():
         st.session_state["pagina"] = PAGINE[0][1]
 
     def _naviga_a(pagina_destinazione):
-        pagina_precedente = st.session_state.get("pagina")
+        # V297 - il callback provoca già il rerun necessario.
         st.session_state.pagina = pagina_destinazione
-
-        # V148: entrando o uscendo da ASTA ricreiamo il fragment
-        # per attivare/disattivare il polling live da 1 secondo.
-        if (
-            MODALITA_ACCESSO_ATTIVA == "SQUADRA"
-            and (
-                pagina_precedente == "ASTA"
-                or pagina_destinazione == "ASTA"
-            )
-            and pagina_precedente != pagina_destinazione
-        ):
-            st.rerun()
+        if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
+            st.session_state["_v297_nav_fast_once"] = True
 
 
     st.markdown(
@@ -37165,7 +37212,13 @@ def render_navigazione_e_pagina():
 
     if sezione in _SEZIONI_CON_UNDO:
 
-        operazioni_undo = carica_ultime_operazioni()
+        if _v297_nav_fast:
+            operazioni_undo = st.session_state.get(
+                "_v297_undo_snapshot", pd.DataFrame()
+            )
+        else:
+            operazioni_undo = carica_ultime_operazioni()
+            st.session_state["_v297_undo_snapshot"] = operazioni_undo
 
         undo1, undo2 = st.columns([1.7, 7])
 
@@ -37853,7 +37906,10 @@ def render_navigazione_e_pagina():
         _rosa_league_id = st.session_state.get("ml_league_id")
         _rosa_team_id = st.session_state.get("ml_team_id")
 
-        if (
+        if _v297_nav_fast:
+            # V297 - già presente nello snapshot normalizzato: ZERO query rosa.
+            df_rosa = df_rosa_globale.copy()
+        elif (
             _rosa_league_id is not None
             and _rosa_team_id is not None
         ):
