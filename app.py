@@ -36917,24 +36917,9 @@ def render_controlli_top_admin_banditore_v154():
     if MODALITA_ACCESSO_ATTIVA not in ("ADMIN", "BANDITORE"):
         return
 
-    # V322 - ADMIN: Century Gothic forzato su tutto il livello.
-    if MODALITA_ACCESSO_ATTIVA == "ADMIN":
-        st.markdown("""
-        <style>
-        html, body, .stApp, [data-testid="stAppViewContainer"],
-        [data-testid="stMain"], button, input, textarea, select,
-        p, span, div, label, h1, h2, h3, h4, h5, h6,
-        table, th, td {
-            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
-        }
-        /* Mantiene funzionanti le icone interne Streamlit anche con Century Gothic. */
-        [data-testid="stIconMaterial"] {
-            font-family:"Material Symbols Rounded","Material Symbols Outlined","Material Icons" !important;
-            font-feature-settings:"liga" !important;
-            -webkit-font-feature-settings:"liga" !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+    # V328 - ADMIN usa lo stesso layout grafico del BANDITORE.
+    # Nessun override grafico/font esclusivo per ADMIN: entrambi ereditano
+    # la stessa base globale e gli stessi controlli top condivisi.
 
     # La sidebar non deve essere visibile, nemmeno come colonna/collapser vuoto.
     st.markdown(
@@ -36947,7 +36932,7 @@ def render_controlli_top_admin_banditore_v154():
             display: none !important;
         }
 
-        /* V323 - ADMIN e BANDITORE: controlli top IDENTICI. */
+        /* V328 - layout BANDITORE applicato identico anche ad ADMIN. */
         div[class*="st-key-ml154_switch_access_top"] button {
             width:100% !important;
             min-height:54px !important;
