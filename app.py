@@ -34989,21 +34989,43 @@ def render_banditore_asta():
         st.error(st.session_state.pop("auctioneer_error"))
 
 
-    if st.button(
-        "↩️ UNDO",
-        use_container_width=True,
-        key=f"v153_undo_auction_open_{league_id}",
-        
-    ):
-        dialog_undo_asta_v153(league_id)
+    # V343 - toolbar BANDITORE compatta e affiancata.
+    st.markdown("""
+    <style>
+    [class*="st-key-v153_undo_auction_open_"] button,
+    [class*="st-key-v134_refresh_banditore"] button {
+        height:34px !important;
+        min-height:34px !important;
+        max-height:34px !important;
+        padding:0 12px !important;
+        border-radius:7px !important;
+    }
+    [class*="st-key-v153_undo_auction_open_"] button p,
+    [class*="st-key-v134_refresh_banditore"] button p {
+        margin:0 !important;
+        font-size:13px !important;
+        line-height:1.1 !important;
+        font-weight:700 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    # Il pulsante stesso provoca un solo rerender del fragment.
-    st.button(
-        "🔄 AGGIORNA OFFERTE",
-        use_container_width=True,
-        key="v134_refresh_banditore",
-        
-    )
+    _v343_undo_col, _v343_refresh_col = st.columns(2, gap="small")
+
+    with _v343_undo_col:
+        if st.button(
+            "↩️ UNDO",
+            use_container_width=True,
+            key=f"v153_undo_auction_open_{league_id}",
+        ):
+            dialog_undo_asta_v153(league_id)
+
+    with _v343_refresh_col:
+        st.button(
+            "🔄 AGGIORNA OFFERTE",
+            use_container_width=True,
+            key="v134_refresh_banditore",
+        )
 
     # V269 - titolo sotto NAVBAR + UNDO + AGGIORNA OFFERTE.
     # Identità già sincronizzata nel parent: nessuna query DB aggiuntiva.
