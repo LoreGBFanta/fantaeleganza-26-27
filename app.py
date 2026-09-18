@@ -27482,7 +27482,7 @@ def modifica_assegnazione_storico_v147(
 ):
     """
     Corregge squadra/prezzo dallo STORICO ASTA.
-    Le viste ROSA e VENDUTI AD AVVERSARI si aggiornano automaticamente
+    Le viste ROSA e ROSE AVVERSARI si aggiornano automaticamente
     perché leggono dallo stesso league_players autorevole.
     """
     league_id = int(league_id)
@@ -37181,7 +37181,7 @@ def render_intestazione_squadra_v307(sezione):
         "MODULI": '<rect x="2" y="4" width="20" height="16" rx="1.5"/><path d="M12 4v16"/><circle cx="12" cy="12" r="2.5"/><path d="M2 8h3v8H2M22 8h-3v8h3"/>',
         # V307 - V di spunta
         "FORMAZIONI TIPO": '<path d="m4 12 5 5L20 6"/>',
-        "VENDUTI AD AVVERSARI": '<circle cx="12" cy="12" r="8" fill="#0a3157"/>',
+        "ROSE AVVERSARI": '<circle cx="12" cy="12" r="8" fill="#0a3157"/>',
         "PROFILO": '<circle cx="12" cy="8" r="4"/><path d="M4 21c.8-5 3.5-7 8-7s7.2 2 8 7"/>',
     }
     path = paths.get(nome, '<rect x="4" y="4" width="16" height="16" rx="2"/>')
@@ -37246,7 +37246,7 @@ def render_navigazione_e_pagina():
             ("", "ROSA"),
             ("", "MODULI"),
             ("", "FORMAZIONI TIPO"),
-            ("", "VENDUTI AD AVVERSARI"),
+            ("", "ROSE AVVERSARI"),
             ("", "PROFILO"),
         ]
 
@@ -37289,10 +37289,10 @@ def render_navigazione_e_pagina():
     .v309-section-FORMAZIONI-TIPO .v307-section-svg {
         stroke:#0a3157 !important;
     }
-    .v309-section-VENDUTI-AD-AVVERSARI .v307-section-svg {
+    .v309-section-ROSE-AVVERSARI .v307-section-svg {
         stroke:#0a3157 !important;
     }
-    .v309-section-VENDUTI-AD-AVVERSARI .v307-section-svg circle {
+    .v309-section-ROSE-AVVERSARI .v307-section-svg circle {
         fill:#0a3157 !important;
         stroke:#0a3157 !important;
     }
@@ -37355,13 +37355,13 @@ def render_navigazione_e_pagina():
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='m4 12 5 5L20 6'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='m4 12 5 5L20 6'/%3E%3C/svg%3E");
     }
-    [class*="st-key-nav_VENDUTI_AD_AVVERSARI"] button p::before {
+    [class*="st-key-nav_ROSE_AVVERSARI"] button p::before {
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black'/%3E%3C/svg%3E");
     }
     /* V309 - icone richieste esplicitamente blu */
     [class*="st-key-nav_FORMAZIONI_TIPO"] button p::before,
-    [class*="st-key-nav_VENDUTI_AD_AVVERSARI"] button p::before {
+    [class*="st-key-nav_ROSE_AVVERSARI"] button p::before {
         background:#0a3157 !important;
     }
     [class*="st-key-nav_PROFILO"] button p::before {
@@ -37984,8 +37984,7 @@ def render_navigazione_e_pagina():
         render_bidding_inline_asta_v126()
 
 
-    elif sezione == "VENDUTI AD AVVERSARI":
-
+    elif sezione == "ROSE AVVERSARI":
 
         league_id = (
             st.session_state.get("ml_league_id")
@@ -38001,27 +38000,55 @@ def render_navigazione_e_pagina():
         else:
             try:
                 avversari = venduti_avversari_normalizzati_multilega(
-                    int(league_id),
-                    int(team_id)
+                    int(league_id), int(team_id)
                 )
             except Exception as errore:
-                st.error(
-                    "Impossibile leggere i giocatori venduti: "
-                    + str(errore)
-                )
+                st.error("Impossibile leggere le rose avversarie: " + str(errore))
                 avversari = pd.DataFrame()
 
             if avversari.empty:
-                st.info("Nessun giocatore venduto agli avversari.")
+                st.info("Nessun giocatore assegnato alle squadre avversarie.")
             else:
-                st.caption(
-                    f"Giocatori assegnati alle altre squadre: {len(avversari)}"
-                )
-                st.dataframe(
-                    avversari,
-                    use_container_width=True,
-                    hide_index=True
-                )
+                # V312 - una tabella distinta per ciascuna squadra avversaria.
+                for nome_avversario, rosa_avversaria in avversari.groupby(
+                    "ASSEGNATO A", sort=True
+                ):
+                    st.markdown(
+                        '<div style="font-size:20px;font-weight:800;color:#0a3157;'
+                        'margin:18px 0 7px 2px;">'
+                        + html.escape(str(nome_avversario).upper()) + '</div>',
+                        unsafe_allow_html=True
+                    )
+
+                    tabella = rosa_avversaria[
+                        ["NOME GIOCATORE", "SQUADRA", "RUOLO", "PREZZO"]
+                    ].copy()
+                    tabella["PREZZO"] = pd.to_numeric(
+                        tabella["PREZZO"], errors="coerce"
+                    ).fillna(0)
+                    totale_pagato = float(tabella["PREZZO"].sum())
+
+                    tabella = pd.concat([
+                        tabella,
+                        pd.DataFrame([{
+                            "NOME GIOCATORE": "TOTALE",
+                            "SQUADRA": "",
+                            "RUOLO": "",
+                            "PREZZO": totale_pagato,
+                        }])
+                    ], ignore_index=True)
+
+                    st.dataframe(
+                        tabella,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "NOME GIOCATORE": st.column_config.TextColumn("NOME GIOCATORE"),
+                            "SQUADRA": st.column_config.TextColumn("SQUADRA"),
+                            "RUOLO": st.column_config.TextColumn("RUOLO"),
+                            "PREZZO": st.column_config.NumberColumn("PREZZO", format="%.0f"),
+                        }
+                    )
 
 
     elif sezione == "ROSA":
