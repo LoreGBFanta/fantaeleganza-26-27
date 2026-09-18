@@ -15592,7 +15592,7 @@ def render_admin_listone_lega():
 
     if _file_listone_admin is not None:
         if st.button(
-            "☁️ CARICA / AGGIORNA LISTONE DI LEGA",
+            "⇧ CARICA / AGGIORNA LISTONE DI LEGA",
             type="primary",
             use_container_width=True,
             key=f"admin_listone_commit_{int(_league_admin_listone)}"
@@ -15648,7 +15648,7 @@ def render_admin_export_rose_lega():
         st.error("Questa sezione è riservata agli amministratori della lega.")
         return
 
-    st.subheader("⬇️ Export rose lega")
+    st.subheader("⇩ Export rose lega")
     _league_admin_listone = st.session_state.get("ml_league_id")
     if _league_admin_listone is None:
         st.info("Nessuna lega selezionata.")
@@ -39231,6 +39231,19 @@ if MODALITA_ACCESSO_ATTIVA == "ADMIN":
     <style>
     [data-testid="stMain"] h1,
     [data-testid="stMain"] [data-baseweb="tab"] p {
+        color:#0a3157 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# V335 - ADMIN LISTONE / EXPORT: icone descrittive monocromatiche blu.
+if MODALITA_ACCESSO_ATTIVA == "ADMIN":
+    st.markdown("""
+    <style>
+    [data-testid="stMain"] h2,
+    [data-testid="stMain"] h3,
+    [data-testid="stMain"] h4 {
         color:#0a3157 !important;
     }
     </style>
