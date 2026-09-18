@@ -37286,7 +37286,7 @@ def render_navigazione_e_pagina():
     if MODALITA_ACCESSO_ATTIVA == "ADMIN":
         PAGINE = [
             ("⚙", "GESTIONE LEGA"),
-            ("", "LISTONE"),
+            ("☷", "LISTONE"),
             ("⇩", "EXPORT ROSE LEGA"),
         ]
     elif MODALITA_ACCESSO_ATTIVA == "BANDITORE":
@@ -39244,6 +39244,17 @@ if MODALITA_ACCESSO_ATTIVA == "ADMIN":
     [data-testid="stMain"] h2,
     [data-testid="stMain"] h3,
     [data-testid="stMain"] h4 {
+        color:#0a3157 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# V336 - ADMIN LISTONE: stessa icona dell'intestazione "☷ Listone di lega".
+if MODALITA_ACCESSO_ATTIVA == "ADMIN":
+    st.markdown("""
+    <style>
+    [class*="st-key-nav_LISTONE"] button p {
         color:#0a3157 !important;
     }
     </style>
