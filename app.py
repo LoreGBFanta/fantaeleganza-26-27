@@ -37180,8 +37180,8 @@ def render_intestazione_squadra_v307(sezione):
         # V307 - piccolo campo da calcio
         "MODULI": '<rect x="2" y="4" width="20" height="16" rx="1.5"/><path d="M12 4v16"/><circle cx="12" cy="12" r="2.5"/><path d="M2 8h3v8H2M22 8h-3v8h3"/>',
         # V307 - V di spunta
-        "FORMAZIONI TIPO": '<path d="m4 12 5 5L20 6"/>',
-        "ROSE AVVERSARI": '<circle cx="12" cy="12" r="8" fill="#0a3157"/>',
+        "FORMAZIONI TIPO": '<path d="M4 12.5 9.2 17.5 20 6"/>',
+        "ROSE AVVERSARI": '<circle cx="12" cy="12" r="6.5" fill="#0a3157"/>',
         "PROFILO": '<circle cx="12" cy="8" r="4"/><path d="M4 21c.8-5 3.5-7 8-7s7.2 2 8 7"/>',
     }
     path = paths.get(nome, '<rect x="4" y="4" width="16" height="16" rx="2"/>')
@@ -37359,10 +37359,16 @@ def render_navigazione_e_pagina():
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black'/%3E%3C/svg%3E");
     }
-    /* V309 - icone richieste esplicitamente blu */
-    [class*="st-key-nav_FORMAZIONI_TIPO"] button p::before,
+    /* V313 - icone esatte dei due tasti */
+    [class*="st-key-nav_FORMAZIONI_TIPO"] button p::before {
+        background:#0a3157 !important;
+        -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round' d='M4 12.5 9.2 17.5 20 6'/%3E%3C/svg%3E") !important;
+        mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round' d='M4 12.5 9.2 17.5 20 6'/%3E%3C/svg%3E") !important;
+    }
     [class*="st-key-nav_ROSE_AVVERSARI"] button p::before {
         background:#0a3157 !important;
+        -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='6.5' fill='black'/%3E%3C/svg%3E") !important;
+        mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='6.5' fill='black'/%3E%3C/svg%3E") !important;
     }
     [class*="st-key-nav_PROFILO"] button p::before {
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='M4 21c.8-5 3.5-7 8-7s7.2 2 8 7'/%3E%3C/svg%3E");
