@@ -37242,53 +37242,10 @@ def render_navigazione_e_pagina():
 
     # V119: la toolbar UNDO non interroga più il database entrando in
     # pagine puramente consultive. Viene caricata soltanto dove serve.
-    _SEZIONI_CON_UNDO = {"DASHBOARD", "ROSA"}
-
-    if sezione in _SEZIONI_CON_UNDO:
-
-        if _v297_nav_fast:
-            operazioni_undo = st.session_state.get(
-                "_v297_undo_snapshot", pd.DataFrame()
-            )
-        else:
-            operazioni_undo = carica_ultime_operazioni()
-            st.session_state["_v297_undo_snapshot"] = operazioni_undo
-
-        undo1, undo2 = st.columns([1.7, 7])
-
-        with undo1:
-            if st.button(
-                "↶ ANNULLA ULTIMA OPERAZIONE",
-                use_container_width=True,
-                disabled=operazioni_undo.empty,
-                key="btn_undo_generale"
-            ):
-                conferma_undo()
-
-        with undo2:
-            if not operazioni_undo.empty:
-                ultima = operazioni_undo.iloc[0]
-                testo_ultima = (
-                    f'<div class="operation-info">'
-                    f'Ultima operazione annullabile:&nbsp;'
-                    f'<b>{html.escape(str(ultima["Operazione"]))}'
-                    f' — {html.escape(str(ultima["Giocatore"]))}</b>'
-                    f'&nbsp;({len(operazioni_undo)}/10)'
-                    f'</div>'
-                )
-                st.markdown(testo_ultima, unsafe_allow_html=True)
-
-        with st.expander("📜 Ultime operazioni", expanded=False):
-            if operazioni_undo.empty:
-                st.caption("Nessuna operazione registrata.")
-            else:
-                st.dataframe(
-                    operazioni_undo[["Operazione", "Giocatore", "Data"]],
-                    use_container_width=True,
-                    hide_index=True
-                )
-    else:
-        operazioni_undo = pd.DataFrame()
+    # V304 - Dashboard e Rosa senza barra ANNULLA / Ultime operazioni.
+    # Le funzioni di undo restano nel codice per eventuali altri flussi,
+    # ma non vengono renderizzate in queste due sezioni.
+    operazioni_undo = pd.DataFrame()
 
 
 
