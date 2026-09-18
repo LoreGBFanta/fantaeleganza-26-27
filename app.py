@@ -39250,6 +39250,25 @@ if MODALITA_ACCESSO_ATTIVA == "ADMIN":
     """, unsafe_allow_html=True)
 
 
+# V337 - ADMIN LISTONE: elimina l'icona aggiuntiva ::before.
+# Resta soltanto il glyph reale ☷, identico all'intestazione.
+if MODALITA_ACCESSO_ATTIVA == "ADMIN":
+    st.markdown("""
+    <style>
+    [class*="st-key-nav_LISTONE"] button p::before {
+        content:none !important;
+        display:none !important;
+        width:0 !important;
+        height:0 !important;
+        flex:0 0 0 !important;
+        background:none !important;
+        -webkit-mask-image:none !important;
+        mask-image:none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
 # V336 - ADMIN LISTONE: stessa icona dell'intestazione "☷ Listone di lega".
 if MODALITA_ACCESSO_ATTIVA == "ADMIN":
     st.markdown("""
