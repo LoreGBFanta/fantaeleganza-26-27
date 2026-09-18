@@ -34455,22 +34455,83 @@ def callback_chiudi_assegna_v133(
 
 
 
+# ============================================================
+# V347 - EA SPORTS FC 27 CARD LAYER (ZERO DB / ZERO POLLING)
+# ============================================================
+# Baseline PRE CARD = V346.
+FC27_EA_ID_BY_NAME_V347 = {
+    "LORENZO PELLEGRINI": 228251,
+}
+
+def _normalizza_nome_fc27_v347(nome):
+    import unicodedata
+    _s = str(nome or "").strip().upper()
+    _s = "".join(c for c in unicodedata.normalize("NFKD", _s)
+                 if not unicodedata.combining(c))
+    _s = re.sub(r"[^A-Z0-9]+", " ", _s)
+    return re.sub(r"\s+", " ", _s).strip()
+
+def _ea_fc27_card_url_v347(nome):
+    _ea_id = FC27_EA_ID_BY_NAME_V347.get(_normalizza_nome_fc27_v347(nome))
+    if not _ea_id:
+        return ""
+    return "https://ratings-images-prod.pulse.ea.com/FC27/components/items/" + str(int(_ea_id)) + "_en.webp"
+
+
 def render_card_giocatore_live_v140(live):
-    """V165 - testata ad alta leggibilità pensata per TV/proiettore."""
-    nome = html.escape(str(live.get("nome") or "—"))
+    """V347 - testata live con card FC27 opzionale, senza query aggiuntive."""
+    _nome_raw = str(live.get("nome") or "—")
+    nome = html.escape(_nome_raw)
     squadra = html.escape(str(live.get("squadra") or "—"))
     _modo_lega = str(st.session_state.get("ml_modalita") or "MANTRA").upper()
     ruolo = html.escape(str(
         live.get("ruolo_classico") if _modo_lega == "CLASSIC"
         else live.get("ruolo_mantra")
     ) or "—")
+
+    _card_url = _ea_fc27_card_url_v347(_nome_raw)
+    _card_html = ""
+    _player_class = "fe-proj-main"
+    if _card_url:
+        _player_class += " v347-with-card"
+        _card_html = (
+            '<div class="v347-fc-card-wrap">'
+            f'<img class="v347-fc-card" src="{html.escape(_card_url, quote=True)}" '
+            f'alt="Card FC27 {nome}" loading="eager" decoding="async">'
+            '</div>'
+        )
+
     st.markdown(
         f"""
+        <style>
+        .fe-proj-main.v347-with-card {{
+            display:flex; align-items:center; gap:18px; min-width:0;
+        }}
+        .v347-fc-card-wrap {{
+            flex:0 0 auto; width:94px; height:112px;
+            display:flex; align-items:center; justify-content:center;
+            overflow:visible; margin:-8px 0;
+        }}
+        .v347-fc-card {{
+            display:block; width:auto; height:112px; max-width:94px;
+            object-fit:contain;
+            filter:drop-shadow(0 3px 5px rgba(0,0,0,.18));
+        }}
+        .v347-player-copy {{ min-width:0; flex:1 1 auto; }}
+        @media (max-width:800px) {{
+            .fe-proj-main.v347-with-card {{ gap:10px; }}
+            .v347-fc-card-wrap {{ width:72px; height:88px; margin:-3px 0; }}
+            .v347-fc-card {{ height:88px; max-width:72px; }}
+        }}
+        </style>
         <div class="fe-proj-player">
           <div class="fe-proj-row">
-            <div class="fe-proj-main">
-              <div class="fe-proj-label">GIOCATORE</div>
-              <div class="fe-proj-name">{nome}</div>
+            <div class="{_player_class}">
+              {_card_html}
+              <div class="v347-player-copy">
+                <div class="fe-proj-label">GIOCATORE</div>
+                <div class="fe-proj-name">{nome}</div>
+              </div>
             </div>
             <div class="fe-proj-box"><span>SQUADRA</span><strong>{squadra}</strong></div>
             <div class="fe-proj-box"><span>RUOLO</span><strong>{ruolo}</strong></div>
@@ -34479,86 +34540,6 @@ def render_card_giocatore_live_v140(live):
         """,
         unsafe_allow_html=True,
     )
-
-
-def render_ultime_offerte_proiezione_v165(live):
-    """Ultime 3 offerte in formato grande, senza dataframe/toolbar Streamlit."""
-    rows = []
-    for _idx_bid, bid in enumerate((live.get("offerte") or [])[:2]):
-        raw_time = str(bid.get("Orario") or "")
-        # V261 - SQLite/Turso CURRENT_TIMESTAMP è UTC.
-        # Conversione esplicita in Europe/Rome, con ora solare/legale automatica.
-        ora = "—"
-        if raw_time:
-            try:
-                from datetime import datetime, timezone
-                from zoneinfo import ZoneInfo
-                _dt_utc = datetime.strptime(
-                    raw_time[:19], "%Y-%m-%d %H:%M:%S"
-                ).replace(tzinfo=timezone.utc)
-                ora = _dt_utc.astimezone(
-                    ZoneInfo("Europe/Rome")
-                ).strftime("%H:%M:%S")
-            except Exception:
-                # Fallback solo visuale se il timestamp avesse un formato inatteso.
-                ora = raw_time.split(" ")[-1][:8]
-        squadra = html.escape(str(bid.get("Squadra") or "—"))
-        offerta = float(bid.get("Offerta") or 0)
-        # V260: la prima riga è l'offerta corrente/migliore e viene evidenziata nettamente.
-        _leader_class = ' class="fe-current-leader"' if _idx_bid == 0 else ' class="fe-previous-bid"'
-        _tipo_offerta = "MIGLIOR OFFERTA" if _idx_bid == 0 else "-"
-        rows.append(
-            f'<tr{_leader_class}><td class="fe-bid-status">{_tipo_offerta}</td><td>{squadra}</td><td class="fe-bid-amount">{offerta:g}</td><td>{html.escape(ora)}</td></tr>'
-        )
-    if not rows:
-        rows.append('<tr><td colspan="4" class="fe-no-bids">In attesa della prima offerta</td></tr>')
-
-    st.markdown(
-        """
-        <style>
-        .fe-proj-bids th,
-        .fe-proj-bids td {
-            text-align:center !important;
-            vertical-align:middle !important;
-        }
-        .fe-proj-bids tbody tr.fe-current-leader td {
-            background:#c9f7d5 !important;
-            color:#073b1d !important;
-            font-weight:900 !important;
-            border-top:2px solid #16a34a !important;
-            border-bottom:2px solid #16a34a !important;
-        }
-        .fe-proj-bids tbody tr.fe-current-leader td:first-child {
-            border-left:2px solid #16a34a !important;
-        }
-        .fe-proj-bids tbody tr.fe-current-leader td:last-child {
-            border-right:2px solid #16a34a !important;
-        }
-        /* V262 - offerte n. 2 e 3 volutamente meno prominenti. */
-        .fe-proj-bids tbody tr.fe-previous-bid td {
-            font-size:0.90em !important;
-            font-weight:600 !important;
-        }
-        .fe-proj-bids tbody tr.fe-previous-bid .fe-bid-amount {
-            font-size:0.92em !important;
-        }
-        .fe-proj-bids .fe-bid-status {
-            white-space:nowrap !important;
-            font-weight:800 !important;
-        }
-        .fe-proj-bids tbody tr.fe-current-leader .fe-bid-status {
-            font-weight:950 !important;
-        }
-        </style>
-        <div class="fe-proj-bids-title">ULTIME OFFERTE</div>
-        <table class="fe-proj-bids">
-          <thead><tr><th>STATO</th><th>NOME SQUADRA</th><th>OFFERTA</th><th>ORARIO OFFERTA</th></tr></thead>
-          <tbody>""" + "".join(rows) + """</tbody>
-        </table>
-        """,
-        unsafe_allow_html=True,
-    )
-
 
 
 # ============================================================
