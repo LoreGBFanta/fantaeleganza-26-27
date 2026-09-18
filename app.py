@@ -36713,6 +36713,12 @@ def render_maschera_offerta_squadra_v287(league_id,team_id,stato):
                   args=(league_id,stato["lot_id"],team_id,custom_key),
                   )
 
+        # V299 - INVIA → feedback → BUDGET RESIDUO / OFFERTA MASSIMA.
+        if st.session_state.get("team_bid_msg"):
+            st.success(st.session_state.pop("team_bid_msg"))
+        if st.session_state.get("team_bid_error"):
+            st.error(st.session_state.pop("team_bid_error"))
+
         st.markdown(f"""<div class="v212-finance">
         <div class="v212-fin v212-budget"><span class="v212-fin-icon v266-wallet-icon" aria-hidden="true"></span>
         <div class="v212-fin-copy"><div class="v212-fin-label">Budget residuo</div>
@@ -36791,12 +36797,6 @@ def render_bidding_inline_asta_v126():
     # V266: asset/CSS statici fuori dal fragment; i click ritrasmettono solo i controlli.
     render_stile_maschera_offerta_v266()
     render_maschera_offerta_squadra_v287(league_id,team_id,stato)
-
-    # V298 - feedback offerta subito sotto INVIA OFFERTA.
-    if st.session_state.get("team_bid_msg"):
-        st.success(st.session_state.pop("team_bid_msg"))
-    if st.session_state.get("team_bid_error"):
-        st.error(st.session_state.pop("team_bid_error"))
 
     # V291 - sincronizzazione chiusura solo in RAM: zero query periodiche SQUADRA.
     watcher_chiusura_squadra_v291(league_id,stato["lot_id"])
