@@ -36116,6 +36116,133 @@ def callback_bid_personalizzato_v130(
 
 
 
+def _html_popup_tiratori_v295(nome_giocatore,squadra):
+    dati=_specialisti_squadra(squadra)
+    def altri(lista,prefix):
+        out=[]
+        for i,n in enumerate((lista or [])[:3],start=1):
+            if _stesso_giocatore_specialista(nome_giocatore,n,squadra):
+                continue
+            out.append(f"<div style='padding:5px 0'><b>{prefix}{i}</b> · {html.escape(str(n))}</div>")
+        return "".join(out) or "<div style='color:#64748b'>Nessun altro indicato.</div>"
+    return (
+        f"<h3 style='margin:0 0 14px'>{html.escape(str(squadra))}</h3>"
+        "<div style='display:grid;grid-template-columns:1fr 1fr;gap:24px'>"
+        "<div><b>⚽ RIGORISTI</b><div style='margin-top:8px'>"
+        +altri(dati.get("rigoristi",[]),"R")+
+        "</div></div><div><b>🎯 CALCI PIAZZATI</b><div style='margin-top:8px'>"
+        +altri(dati.get("calci_piazzati",[]),"CP")+
+        "</div></div></div>"
+    )
+
+
+def _html_popup_disponibili_v295(giocatore,df_listone):
+    ruoli=sorted(
+        ruoli_giocatore(giocatore.get("RM","")),
+        key=lambda r: ORDINE_RUOLI.get(str(r).upper(),999)
+    )
+    if not ruoli:
+        rp=primo_ruolo(giocatore.get("RM","")).upper()
+        if rp: ruoli=[rp]
+    if not ruoli:
+        return "<div>Nessun ruolo Mantra valido.</div>"
+
+    ordine={"VERDE":1,"BLU":2,"ROSSO":3,"NERO":4}
+    blocchi=[]
+    for ruolo in ruoli:
+        comp=giocatori_compatibili(df_listone,str(ruolo).strip().upper())
+        if comp is None or comp.empty:
+            blocchi.append(f"<div><h3>{html.escape(str(ruolo))}</h3><p>Nessun giocatore disponibile.</p></div>")
+            continue
+        d=comp[comp["Stato"].astype(str).str.upper()=="DISPONIBILE"].copy()
+        if d.empty:
+            blocchi.append(f"<div><h3>{html.escape(str(ruolo))}</h3><p>Nessun giocatore disponibile.</p></div>")
+            continue
+        d["_fascia"]=d.apply(lambda r: fascia_iqr_giocatore(r.get("RM",""),r.get("FVM M")),axis=1)
+        d["_ord"]=d["_fascia"].map(ordine).fillna(99)
+        d["_fvm"]=pd.to_numeric(d["FVM M"],errors="coerce")
+        d=d.sort_values(["_ord","_fvm","Nome"],ascending=[True,False,True],na_position="last")
+        righe=[]
+        for _,r in d.iterrows():
+            nome=html.escape(str(r.get("Nome","")))
+            sq=html.escape(str(r.get("Squadra","")))
+            rm=html.escape(str(r.get("RM","")))
+            col=colore_fvm_mantra(r.get("RM",""),r.get("FVM M"))
+            righe.append(
+                "<tr>"
+                f"<td style='padding:5px 6px;border:1px solid #e5e7eb;font-weight:800;color:{col}'>{nome}</td>"
+                f"<td style='padding:5px 6px;border:1px solid #e5e7eb'>{sq}</td>"
+                f"<td style='padding:5px 6px;border:1px solid #e5e7eb;text-align:center'>{rm}</td>"
+                "</tr>"
+            )
+        blocchi.append(
+            f"<div><h3 style='margin:0 0 4px'>{html.escape(str(ruolo))}</h3>"
+            f"<div style='color:#64748b;margin-bottom:8px'>{len(d)} disponibili</div>"
+            "<div style='overflow:auto;max-height:55vh'><table style='width:100%;border-collapse:collapse;font-size:12px'>"
+            "<thead><tr style='background:#071a2f;color:white'>"
+            "<th style='padding:6px;text-align:left'>GIOCATORE</th>"
+            "<th style='padding:6px;text-align:left'>SQUADRA</th>"
+            "<th style='padding:6px'>RUOLO</th></tr></thead><tbody>"
+            +"".join(righe)+"</tbody></table></div></div>"
+        )
+    return (
+        "<div style='display:grid;grid-template-columns:repeat("
+        +str(max(1,len(ruoli)))+",minmax(0,1fr));gap:18px'>"
+        +"".join(blocchi)+"</div>"
+    )
+
+
+def render_popup_browser_v295(label,key,titolo,corpo_html):
+    """
+    V295 - popup puramente browser-side.
+    Il click non raggiunge Streamlit: nessun rerun Python, nessun DB, apertura immediata.
+    """
+    safe_label=json.dumps(str(label),ensure_ascii=False)
+    safe_title=json.dumps(str(titolo),ensure_ascii=False)
+    safe_body=json.dumps(str(corpo_html),ensure_ascii=False)
+    safe_key=re.sub(r"[^a-zA-Z0-9_-]","_",str(key))
+    components.html(
+        f"""
+        <button id="b_{safe_key}" style="
+          width:100%;height:42px;border:1px solid #d7dee8;border-radius:8px;
+          background:white;color:#071a2f;font-weight:800;cursor:pointer;
+          font-family:inherit">{html.escape(str(label))}</button>
+        <script>
+        (()=>{{
+          const btn=document.getElementById('b_{safe_key}');
+          btn.addEventListener('click',(ev)=>{{
+            ev.preventDefault(); ev.stopPropagation();
+            const d=window.parent.document;
+            const old=d.getElementById('fe_v295_popup');
+            if(old) old.remove();
+            const ov=d.createElement('div');
+            ov.id='fe_v295_popup';
+            ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(2,6,23,.50);display:flex;align-items:center;justify-content:center;padding:24px';
+            const box=d.createElement('div');
+            box.style.cssText='background:#fff;color:#0f172a;border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.28);width:min(1050px,94vw);max-height:86vh;overflow:auto;padding:22px 24px;font-family:Arial,sans-serif';
+            const title=d.createElement('div');
+            title.style.cssText='font-size:22px;font-weight:900;margin:0 42px 16px 0';
+            title.textContent={safe_title};
+            const close=d.createElement('button');
+            close.textContent='×';
+            close.style.cssText='position:absolute;right:18px;top:12px;border:0;background:transparent;font-size:34px;cursor:pointer;color:#475569';
+            const inner=d.createElement('div');
+            inner.innerHTML={safe_body};
+            box.style.position='relative';
+            box.appendChild(close); box.appendChild(title); box.appendChild(inner); ov.appendChild(box);
+            const shut=()=>ov.remove();
+            close.addEventListener('click',shut);
+            ov.addEventListener('click',(e)=>{{if(e.target===ov)shut();}});
+            d.addEventListener('keydown',function esc(e){{if(e.key==='Escape'){{shut();d.removeEventListener('keydown',esc);}}}});
+            d.body.appendChild(ov);
+          }});
+        }})();
+        </script>
+        """,
+        height=48,
+    )
+
+
 def render_card_giocatore_squadra_v171(live):
     """
     Card ASTA del livello SQUADRA.
@@ -36236,46 +36363,56 @@ def render_card_giocatore_squadra_v171(live):
         unsafe_allow_html=True,
     )
 
-    # V175 - strumenti allineati sotto le rispettive caselle.
+    # V295 - strumenti popup browser-side: click istantaneo, nessun rerun Streamlit.
     _tool_r_cp, _tool_disp, _tool_prio = st.columns([0.72, 1.0, 1.75], gap="small")
 
     with _tool_r_cp:
-        if st.button(
+        try:
+            _body_tiratori=_html_popup_tiratori_v295(nome_raw,squadra_raw)
+        except Exception as _e:
+            _body_tiratori="<p>Dati tiratori non disponibili.</p>"
+        render_popup_browser_v295(
             "⚽ 🎯 ALTRI TIRATORI SQUADRA",
-            key=f"v176_tiratori_{player_id}",
-            use_container_width=True,
-            
-        ):
-            mostra_altri_tiratori_squadra_v176(nome_raw, squadra_raw)
+            f"v295_tiratori_{player_id}",
+            "Altri tiratori squadra",
+            _body_tiratori
+        )
 
     with _tool_disp:
         if not disponibile:
-            if st.button(
+            _body_inf=(
+                f"<h3 style='margin:0 0 4px'>{html.escape(nome_raw)}</h3>"
+                f"<div style='color:#64748b;margin-bottom:12px'>{html.escape(squadra_raw)}</div>"
+                "<div style='border-left:5px solid #dc2626;background:#fff5f5;"
+                "padding:14px 16px;border-radius:8px;line-height:1.45'>"
+                +html.escape(str(info_disp.get("dettaglio") or ""))+
+                "</div><div style='color:#64748b;margin-top:12px;font-size:12px'>"
+                "Fonte: Fantacalcio.it · Indisponibili Serie A</div>"
+            )
+            render_popup_browser_v295(
                 "❌ DETTAGLIO INFORTUNIO E TEMPI DI RECUPERO",
-                key=f"v175_infortunio_{player_id}",
-                use_container_width=True,
-                
-            ):
-                mostra_dettaglio_infortunio(
-                    nome_raw,
-                    squadra_raw,
-                    str(info_disp.get("dettaglio") or "")
-                )
+                f"v295_infortunio_{player_id}",
+                "Dettaglio infortunio",
+                _body_inf
+            )
 
     with _tool_prio:
         if giocatore is not None:
-            if st.button(
+            _df_popup=globals().get("df_completo")
+            _cache_key=f"_v295_disp_html_{player_id}_{len(_df_popup) if _df_popup is not None else 0}"
+            _body_disp=st.session_state.get(_cache_key)
+            if _body_disp is None:
+                try:
+                    _body_disp=_html_popup_disponibili_v295(giocatore,_df_popup) if _df_popup is not None else "<p>Dati non disponibili.</p>"
+                except Exception:
+                    _body_disp="<p>Dati non disponibili.</p>"
+                st.session_state[_cache_key]=_body_disp
+            render_popup_browser_v295(
                 "📋 GIOCATORI ANCORA DISPONIBILI",
-                key=f"v175_rimasti_{player_id}",
-                use_container_width=True,
-                            ):
-                _df_popup = globals().get("df_completo")
-                if _df_popup is not None:
-                    mostra_dettaglio_priorita_acquisto(
-                        giocatore,
-                        priorita,
-                        _df_popup
-                    )
+                f"v295_disponibili_{player_id}",
+                "Giocatori disponibili per ruolo",
+                _body_disp
+            )
 
 
 def callback_seleziona_importo_offerta_v209(custom_key, valore):
