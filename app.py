@@ -34455,64 +34455,8 @@ def callback_chiudi_assegna_v133(
 
 
 
-# ============================================================
-# V351 - ARCHIVIO FOTO LOCALE GIOCATORI
-# Baseline PRE CARD = V346
-# ============================================================
-# Le immagini risiedono nel repository in:
-#   assets/players/<nome_file>
-# e vengono lette una sola volta per processo grazie a st.cache_data.
-# Nessun hotlink, API, ricerca web, polling o query Turso durante l'asta.
-
-PLAYER_PHOTO_FILES_V351 = {
-    "DOEKHI": "doekhi.webp",
-    "DANILHO DOEKHI": "doekhi.webp",
-    "DANILHO RAIMUND DOEKHI": "doekhi.webp",
-    "DANILHO RAIMUNDO DOEKHI": "doekhi.webp",
-}
-
-def _normalizza_nome_foto_v351(nome):
-    import unicodedata
-    _s = str(nome or "").strip().upper()
-    _s = "".join(
-        c for c in unicodedata.normalize("NFKD", _s)
-        if not unicodedata.combining(c)
-    )
-    _s = re.sub(r"[^A-Z0-9]+", " ", _s)
-    return re.sub(r"\s+", " ", _s).strip()
-
-@st.cache_data(show_spinner=False)
-def _foto_locale_data_uri_v351(nome_file):
-    """Legge l'asset locale una volta e restituisce una data URI browser-safe."""
-    import base64
-    import mimetypes
-    from pathlib import Path
-
-    _safe_name = Path(str(nome_file or "")).name
-    if not _safe_name:
-        return ""
-
-    _base_dir = Path(__file__).resolve().parent
-    _path = _base_dir / "assets" / "players" / _safe_name
-    if not _path.is_file():
-        return ""
-
-    try:
-        _raw = _path.read_bytes()
-        if not _raw:
-            return ""
-        _mime = mimetypes.guess_type(_path.name)[0] or "image/webp"
-        return "data:" + _mime + ";base64," + base64.b64encode(_raw).decode("ascii")
-    except Exception:
-        return ""
-
-def _foto_giocatore_v351(nome):
-    _file = PLAYER_PHOTO_FILES_V351.get(_normalizza_nome_foto_v351(nome), "")
-    return _foto_locale_data_uri_v351(_file) if _file else ""
-
-
 def render_card_giocatore_live_v140(live):
-    """V355 - card Banditore con foto statica per player_id, zero I/O Python runtime."""
+    """V165 - testata ad alta leggibilità pensata per TV/proiettore."""
     nome = html.escape(str(live.get("nome") or "—"))
     squadra = html.escape(str(live.get("squadra") or "—"))
     _modo_lega = str(st.session_state.get("ml_modalita") or "MANTRA").upper()
@@ -34520,47 +34464,22 @@ def render_card_giocatore_live_v140(live):
         live.get("ruolo_classico") if _modo_lega == "CLASSIC"
         else live.get("ruolo_mantra")
     ) or "—")
-
-    _pid = live.get("player_id") or live.get("id") or live.get("Id")
-    try:
-        _pid = str(int(float(_pid)))
-    except Exception:
-        _pid = ""
-
-    _foto = (
-        f'<div class="fe-v355-photo">'
-        f'<img src="app/static/players/{html.escape(_pid)}.jpg" '
-        f'alt="{nome}" loading="eager" decoding="async" '
-        f'onerror="this.parentElement.style.display=\'none\';'
-        f'this.closest(\'.fe-v355-card\').classList.add(\'fe-v355-no-photo\');">'
-        f'</div>'
-        if _pid else ""
+    st.markdown(
+        f"""
+        <div class="fe-proj-player">
+          <div class="fe-proj-row">
+            <div class="fe-proj-main">
+              <div class="fe-proj-label">GIOCATORE</div>
+              <div class="fe-proj-name">{nome}</div>
+            </div>
+            <div class="fe-proj-box"><span>SQUADRA</span><strong>{squadra}</strong></div>
+            <div class="fe-proj-box"><span>RUOLO</span><strong>{ruolo}</strong></div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-    _css = """
-    <style>
-    .fe-v355-card{display:grid;grid-template-columns:116px minmax(0,1fr);gap:14px;align-items:stretch}
-    .fe-v355-card.fe-v355-no-photo{grid-template-columns:minmax(0,1fr)}
-    .fe-v355-photo{width:116px;height:116px;border-radius:12px;overflow:hidden;background:#101820}
-    .fe-v355-photo img{width:100%;height:100%;display:block;object-fit:cover;object-position:center top}
-    .fe-v355-card .fe-proj-player{margin:0!important;height:100%;box-sizing:border-box}
-    @media(max-width:700px){
-      .fe-v355-card{grid-template-columns:82px minmax(0,1fr);gap:9px}
-      .fe-v355-photo{width:82px;height:96px}
-    }
-    </style>
-    """
-    _card = (
-        '<div class="fe-v355-card">'
-        + _foto
-        + '<div class="fe-proj-player"><div class="fe-proj-row">'
-        + '<div class="fe-proj-main"><div class="fe-proj-label">GIOCATORE</div>'
-        + f'<div class="fe-proj-name">{nome}</div></div>'
-        + f'<div class="fe-proj-box"><span>SQUADRA</span><strong>{squadra}</strong></div>'
-        + f'<div class="fe-proj-box"><span>RUOLO</span><strong>{ruolo}</strong></div>'
-        + '</div></div></div>'
-    )
-    st.markdown(_css + _card, unsafe_allow_html=True)
 
 def render_ultime_offerte_proiezione_v165(live):
     """Ultime 3 offerte in formato grande, senza dataframe/toolbar Streamlit."""
