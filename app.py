@@ -25955,13 +25955,22 @@ st.markdown(
     }
 
 /* V301 - contenuto principale vicino al bordo superiore */
+/* V302 - elimina anche lo spazio superiore riservato da Streamlit */
+[data-testid="stHeader"] {
+    height: 0 !important;
+    min-height: 0 !important;
+    background: transparent !important;
+}
+[data-testid="stToolbar"] {
+    top: 0 !important;
+}
 [data-testid="stAppViewContainer"] .main .block-container,
 [data-testid="stMain"] .block-container {
-    padding-top: 0.35rem !important;
+    padding-top: 0.05rem !important;
     margin-top: 0 !important;
 }
 [data-testid="stMainBlockContainer"] {
-    padding-top: 0.35rem !important;
+    padding-top: 0.05rem !important;
     margin-top: 0 !important;
 }
 /* Riduce anche il margine superiore del primo elemento della pagina */
