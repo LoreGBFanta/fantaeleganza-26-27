@@ -36930,6 +36930,17 @@ def render_controlli_top_admin_banditore_v154():
         </style>
         """, unsafe_allow_html=True)
 
+    # V323 - stessa tipografia dei controlli superiori anche in BANDITORE.
+    if MODALITA_ACCESSO_ATTIVA == "BANDITORE":
+        st.markdown("""
+        <style>
+        div[class*="st-key-ml154_switch_access_top"],
+        div[class*="st-key-ml322_top_menu_toggle"] {
+            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
     # La sidebar non deve essere visibile, nemmeno come colonna/collapser vuoto.
     st.markdown(
         """
@@ -36941,12 +36952,17 @@ def render_controlli_top_admin_banditore_v154():
             display: none !important;
         }
 
-        /* CAMBIA LIVELLO ACCESSO: stesso impatto visivo del comando sidebar. */
+        /* V323 - ADMIN e BANDITORE: controlli top IDENTICI. */
         div[class*="st-key-ml154_switch_access_top"] button {
-            min-height: 54px !important;
-            height: 54px !important;
-            border-radius: 10px !important;
-            font-weight: 850 !important;
+            width:100% !important;
+            min-height:54px !important;
+            height:54px !important;
+            border-radius:10px !important;
+            font-weight:850 !important;
+            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+        }
+        div[class*="st-key-ml154_switch_access_top"] button p {
+            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
         }
 
         /* V322 - barra MENU oro; il trigger non usa expand_more. */
@@ -36974,6 +36990,10 @@ def render_controlli_top_admin_banditore_v154():
         div[class*="st-key-ml322_top_menu_toggle"] label p {
             color:#ffc21c !important;
             font-weight:900 !important;
+            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+        }
+        div[class*="st-key-ml322_top_menu_toggle"] * {
+            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
         }
         div[class*="st-key-ml322_top_menu_toggle"] [data-baseweb="checkbox"] > div:first-child {
             display:none !important;
