@@ -26193,8 +26193,8 @@ if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
             st.session_state.get("ml_modalita_accesso") or "SQUADRA"
         ).upper()
 
-        # V300 - testata Squadra essenziale:
-        # FOTO PROFILO | NOME LEGA / STAGIONE / NOME SQUADRA
+        # V341 - testata Squadra:
+        # FOTO PROFILO | NOME SQUADRA / NOME LEGA / STAGIONE
         _v300_lega = str(LEGA_ATTIVA_NOME or "LEGA").strip()
         _v300_stagione = str(
             st.session_state.get("ml_stagione") or "2026/27"
@@ -26228,17 +26228,19 @@ if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
             'border:2px solid #ffc21c;border-radius:18px;'
             'background:#0a3157;display:flex;align-items:center;gap:16px;">'
             + _v300_avatar +
-            '<div style="min-width:0;line-height:1.08;">'
-            '<div style="color:#fff;font-size:20px;font-weight:900;'
-            'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
-            + html.escape(_v300_lega) + '</div>'
-            '<div style="color:#ffc21c;font-size:19px;font-weight:900;'
-            'margin-top:4px;">'
-            + html.escape(_v300_stagione) + '</div>'
-            '<div style="color:#fff;font-size:14px;font-weight:800;'
-            'margin-top:8px;white-space:nowrap;overflow:hidden;'
-            'text-overflow:ellipsis;">'
+            '<div style="min-width:0;flex:1 1 auto;line-height:1.06;overflow:hidden;">'
+            '<div style="color:#fff;font-size:clamp(16px,5.2vw,22px);'
+            'font-weight:900;white-space:nowrap;overflow:hidden;'
+            'text-overflow:ellipsis;max-width:100%;">'
             + html.escape(_v300_squadra) + '</div>'
+            '<div style="color:#fff;font-size:clamp(12px,4vw,16px);'
+            'font-weight:800;margin-top:5px;white-space:nowrap;overflow:hidden;'
+            'text-overflow:ellipsis;max-width:100%;">'
+            + html.escape(_v300_lega) + '</div>'
+            '<div style="color:#ffc21c;font-size:clamp(12px,4vw,16px);'
+            'font-weight:900;margin-top:4px;white-space:nowrap;overflow:hidden;'
+            'text-overflow:ellipsis;max-width:100%;">'
+            + html.escape(_v300_stagione) + '</div>'
             '</div></div>',
             unsafe_allow_html=True
         )
