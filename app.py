@@ -33085,6 +33085,41 @@ def chiudi_lotto_vuoto_v133(league_id, lot_id, player_id):
         _portal_close(conn)
 
 
+@st.cache_resource
+def _auction_live_bus_v291():
+    """V291 - bus RAM condiviso tra sessioni Streamlit; nessun accesso DB."""
+    return {}
+
+
+def pubblica_evento_asta_v291(league_id,lot_id,stato):
+    """Pubblica una transizione asta per le altre sessioni collegate."""
+    _auction_live_bus_v291()[int(league_id)] = {
+        "lot_id": int(lot_id),
+        "stato": str(stato or "").upper(),
+        "seq": time.time_ns(),
+    }
+
+
+def leggi_evento_asta_v291(league_id):
+    return _auction_live_bus_v291().get(int(league_id))
+
+
+@st.fragment(run_every="1s")
+def watcher_chiusura_squadra_v291(league_id,lot_id):
+    """
+    V291 - watcher solo RAM: nessuna query e nessuna connessione Turso.
+    Se il Banditore ha chiuso il lotto visualizzato, ricostruisce la pagina
+    SQUADRA che troverà auction_sessions senza current_lot_id e mostrerà ATTESA.
+    """
+    evento=leggi_evento_asta_v291(league_id)
+    if (
+        isinstance(evento,dict)
+        and int(evento.get("lot_id") or 0)==int(lot_id)
+        and str(evento.get("stato") or "").upper() in ("ASSIGNED","CLOSED","IDLE")
+    ):
+        st.rerun(scope="app")
+
+
 def callback_apri_lotto_v133(league_id, player_id, nome, squadra_reale='', ruolo_mantra=''):
     try:
         _v276_lot_id = apri_lotto_banditore(
@@ -33124,6 +33159,8 @@ def callback_chiudi_vuoto_v133(
         st.session_state["auctioneer_msg"] = (
             f"Lotto di {nome} chiuso senza assegnazione."
         )
+        # V291 - anche un lotto vuoto deve sparire automaticamente dalle SQUADRE.
+        pubblica_evento_asta_v291(league_id,lot_id,"CLOSED")
         st.session_state.pop("auctioneer_error", None)
 
         # V270 - anche la chiusura senza assegnazione torna alla console IDLE.
@@ -34268,6 +34305,8 @@ def callback_chiudi_assegna_v133(
             f'✅ {nome} assegnato a {esito["team"]} '
             f'a {esito["prezzo"]:g} crediti.'
         )
+        # V291 - avvisa tutte le sessioni SQUADRA senza interrogare il DB.
+        pubblica_evento_asta_v291(league_id,lot_id,"ASSIGNED")
         st.session_state.pop("auctioneer_error", None)
 
         # V270 - transizione LIVE -> IDLE: ricostruisce Gestione Asta e i controlli di navigazione.
@@ -36485,7 +36524,7 @@ def render_bidding_inline_asta_v126():
     """
     V250 - ASTA SQUADRA: maschera sempre visibile durante il lotto OPEN.
     Se la squadra è leader viene disabilitato esclusivamente INVIA OFFERTA.
-    V289 - fast path: +/- immediati nel browser; zero polling SQUADRA.
+    V291 - chiusura automatica SQUADRA via bus RAM; zero polling DB SQUADRA.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
@@ -36538,7 +36577,10 @@ def render_bidding_inline_asta_v126():
     render_stile_maschera_offerta_v266()
     render_maschera_offerta_squadra_v287(league_id,team_id,stato)
 
-    # V280 - durante OPEN nessun watcher server-side concorrente:
+    # V291 - sincronizzazione chiusura solo in RAM: zero query periodiche SQUADRA.
+    watcher_chiusura_squadra_v291(league_id,stato["lot_id"])
+
+    # V291 - nessun watcher DB server-side concorrente:
     # preserva il fast path V266 dei pulsanti e di INVIA OFFERTA.
     elapsed = time.perf_counter() - t0
     if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
