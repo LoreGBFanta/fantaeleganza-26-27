@@ -34456,18 +34456,19 @@ def callback_chiudi_assegna_v133(
 
 
 # ============================================================
-# V347 - EA SPORTS FC 27 CARD LAYER (ZERO DB / ZERO POLLING)
+# V350 - ARCHIVIO FOTO GIOCATORI (BASELINE PRE-CARD V346)
 # ============================================================
-# Baseline PRE CARD = V346.
-FC27_EA_ID_BY_NAME_V347 = {
-    # EA SPORTS FC 27 - ID ufficiali verificati.
-    "DANILHO DOEKHI": 232658,
-    "DOEKHI": 232658,  # alias del Listone FantaEleganza
-    "LORENZO PELLEGRINI": 228251,
-    "PELLEGRINI": 228251,
+# Archivio statico: nessuna ricerca web, API o query DB durante l'asta.
+# Le URL vengono verificate e aggiunte fuori dal percorso critico dell'asta.
+# Preferenza: fonti riutilizzabili/licenze chiare (es. Wikimedia Commons).
+PLAYER_PHOTO_ARCHIVE_V350 = {
+    # Nome Listone -> URL immagine stabile
+    "DOEKHI": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Danilho_Doekhi.jpg?width=360",
+    "DANILHO DOEKHI": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Danilho_Doekhi.jpg?width=360",
+    "DANILHO RAIMUND DOEKHI": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Danilho_Doekhi.jpg?width=360",
 }
 
-def _normalizza_nome_fc27_v347(nome):
+def _normalizza_nome_foto_v350(nome):
     import unicodedata
     _s = str(nome or "").strip().upper()
     _s = "".join(c for c in unicodedata.normalize("NFKD", _s)
@@ -34475,15 +34476,12 @@ def _normalizza_nome_fc27_v347(nome):
     _s = re.sub(r"[^A-Z0-9]+", " ", _s)
     return re.sub(r"\s+", " ", _s).strip()
 
-def _ea_fc27_card_url_v347(nome):
-    _ea_id = FC27_EA_ID_BY_NAME_V347.get(_normalizza_nome_fc27_v347(nome))
-    if not _ea_id:
-        return ""
-    return "https://ratings-images-prod.pulse.ea.com/FC27/components/items/" + str(int(_ea_id)) + "_en.webp"
+def _foto_giocatore_v350(nome):
+    return PLAYER_PHOTO_ARCHIVE_V350.get(_normalizza_nome_foto_v350(nome), "")
 
 
 def render_card_giocatore_live_v140(live):
-    """V348 - testata live con card FC27 opzionale, senza query aggiuntive."""
+    """V350 - testata live con foto giocatore da archivio statico."""
     _nome_raw = str(live.get("nome") or "—")
     nome = html.escape(_nome_raw)
     squadra = html.escape(str(live.get("squadra") or "—"))
@@ -34492,55 +34490,66 @@ def render_card_giocatore_live_v140(live):
         live.get("ruolo_classico") if _modo_lega == "CLASSIC"
         else live.get("ruolo_mantra")
     ) or "—")
-    _card_url = _ea_fc27_card_url_v347(_nome_raw)
 
-    if _card_url:
-        _player_inner = (
-            '<div class="v348-fc-card-wrap">'
-            f'<img class="v348-fc-card" src="{html.escape(_card_url, quote=True)}" '
-            f'alt="Card FC27 {nome}" loading="eager" decoding="async" '
+    _photo_url = _foto_giocatore_v350(_nome_raw)
+    if _photo_url:
+        _main_class = "fe-proj-main v350-with-photo"
+        _photo_html = (
+            '<div class="v350-player-photo-box">'
+            f'<img class="v350-player-photo" src="{html.escape(_photo_url, quote=True)}" '
+            f'alt="{nome}" loading="eager" decoding="async" '
             'onerror="this.parentElement.style.display=\'none\'">'
             '</div>'
-            '<div class="v348-player-copy">'
-            '<div class="fe-proj-label">GIOCATORE</div>'
-            f'<div class="fe-proj-name">{nome}</div>'
-            '</div>'
         )
-        _player_class = "fe-proj-main v348-with-card"
     else:
-        _player_inner = (
-            '<div class="fe-proj-label">GIOCATORE</div>'
-            f'<div class="fe-proj-name">{nome}</div>'
-        )
-        _player_class = "fe-proj-main"
+        _main_class = "fe-proj-main"
+        _photo_html = ""
 
     st.markdown(
         f"""
         <style>
-        .fe-proj-main.v348-with-card {{
+        .fe-proj-main.v350-with-photo {{
             flex-direction:row !important;
             align-items:center !important;
-            gap:18px;
+            gap:18px !important;
+            padding-right:8px;
         }}
-        .v348-fc-card-wrap {{
-            flex:0 0 94px; width:94px; height:112px;
-            display:flex; align-items:center; justify-content:center;
-            margin:-8px 0;
+        .v350-player-photo-box {{
+            flex:0 0 116px;
+            width:116px;
+            height:116px;
+            border-radius:14px;
+            overflow:hidden;
+            background:#eef2f6;
+            border:2px solid rgba(255,255,255,.22);
         }}
-        .v348-fc-card {{
-            display:block; height:112px; max-width:94px; width:auto;
-            object-fit:contain;
+        .v350-player-photo {{
+            width:100%;
+            height:100%;
+            display:block;
+            object-fit:cover;
+            object-position:center 20%;
         }}
-        .v348-player-copy {{min-width:0; flex:1 1 auto;}}
-        @media(max-width:800px) {{
-            .fe-proj-main.v348-with-card {{gap:10px;}}
-            .v348-fc-card-wrap {{flex-basis:72px;width:72px;height:88px;margin:-3px 0;}}
-            .v348-fc-card {{height:88px;max-width:72px;}}
+        .v350-player-copy {{
+            flex:1 1 auto;
+            min-width:0;
+        }}
+        @media(max-width:700px) {{
+            .fe-proj-main.v350-with-photo {{gap:11px !important;}}
+            .v350-player-photo-box {{
+                flex-basis:86px; width:86px; height:86px; border-radius:11px;
+            }}
         }}
         </style>
         <div class="fe-proj-player">
           <div class="fe-proj-row">
-            <div class="{_player_class}">{_player_inner}</div>
+            <div class="{_main_class}">
+              {_photo_html}
+              <div class="v350-player-copy">
+                <div class="fe-proj-label">GIOCATORE</div>
+                <div class="fe-proj-name">{nome}</div>
+              </div>
+            </div>
             <div class="fe-proj-box"><span>SQUADRA</span><strong>{squadra}</strong></div>
             <div class="fe-proj-box"><span>RUOLO</span><strong>{ruolo}</strong></div>
           </div>
@@ -34548,8 +34557,6 @@ def render_card_giocatore_live_v140(live):
         """,
         unsafe_allow_html=True,
     )
-
-
 def render_ultime_offerte_proiezione_v165(live):
     """Ultime 3 offerte in formato grande, senza dataframe/toolbar Streamlit."""
     rows = []
