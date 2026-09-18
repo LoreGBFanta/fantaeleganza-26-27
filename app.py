@@ -37135,15 +37135,7 @@ def render_controlli_top_admin_banditore_v154():
                 if nuovo_dark_top != st.session_state.dark_mode:
                     st.session_state.dark_mode = nuovo_dark_top
                     st.rerun()
-
-    # V157 - nel livello BANDITORE non mostriamo la dicitura/versione.
-    if st.session_state.get("ml_modalita_accesso") == "ADMIN":
-        st.markdown(
-            '<div style="color:#5f8db5;font-size:11px;padding:4px 3px 2px 3px;letter-spacing:.2px;">'
-            'MULTILEGA 5.6.3'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+    # V331 - etichetta versione ADMIN rimossa.
 
 @st.fragment(
     run_every=(
