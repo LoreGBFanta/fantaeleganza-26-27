@@ -25954,6 +25954,23 @@ st.markdown(
         stroke: currentColor !important;
     }
 
+/* V301 - contenuto principale vicino al bordo superiore */
+[data-testid="stAppViewContainer"] .main .block-container,
+[data-testid="stMain"] .block-container {
+    padding-top: 0.35rem !important;
+    margin-top: 0 !important;
+}
+[data-testid="stMainBlockContainer"] {
+    padding-top: 0.35rem !important;
+    margin-top: 0 !important;
+}
+/* Riduce anche il margine superiore del primo elemento della pagina */
+[data-testid="stMainBlockContainer"] > div:first-child,
+[data-testid="stMain"] .block-container > div:first-child {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
 </style>
     """,
     unsafe_allow_html=True
