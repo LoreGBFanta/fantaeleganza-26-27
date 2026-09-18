@@ -36954,37 +36954,33 @@ def render_controlli_top_admin_banditore_v154():
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
         }
 
-        /* V324 - MENU IDENTICO tra ADMIN e BANDITORE: barra oro full-width. */
-        div[class*="st-key-ml154_top_menu_wrap"] {
-            width:100% !important;
-        }
-        div[class*="st-key-ml154_top_menu_wrap"] details {
-            width:100% !important;
-            border:2px solid #ffc21c !important;
-            border-radius:11px !important;
-            background:transparent !important;
-            margin-top:8px !important;
-            margin-bottom:4px !important;
-            box-sizing:border-box !important;
-        }
-        div[class*="st-key-ml154_top_menu_wrap"] details > summary {
+        /* V325 - MENU: stesso pulsante puro in ADMIN e BANDITORE. */
+        div[class*="st-key-ml325_top_menu_button"] button {
             width:100% !important;
             min-height:44px !important;
             height:44px !important;
             padding:0 14px !important;
-            display:flex !important;
-            align-items:center !important;
+            border:2px solid #ffc21c !important;
+            border-radius:11px !important;
+            background:transparent !important;
             color:#ffc21c !important;
+            box-shadow:none !important;
+            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
             font-weight:900 !important;
-            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
-            box-sizing:border-box !important;
+            justify-content:flex-start !important;
         }
-        div[class*="st-key-ml154_top_menu_wrap"] details > summary * {
+        div[class*="st-key-ml325_top_menu_button"] button:hover,
+        div[class*="st-key-ml325_top_menu_button"] button:focus,
+        div[class*="st-key-ml325_top_menu_button"] button:active {
+            border-color:#ffc21c !important;
+            color:#ffc21c !important;
+            background:transparent !important;
+        }
+        div[class*="st-key-ml325_top_menu_button"] button p {
             color:#ffc21c !important;
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
-        }
-        div[class*="st-key-ml154_top_menu_wrap"] details[open] {
-            padding-bottom:8px !important;
+            font-weight:900 !important;
+            text-align:left !important;
         }
         </style>
         """,
@@ -37001,6 +36997,7 @@ def render_controlli_top_admin_banditore_v154():
         st.session_state.pop("ml_modalita_accesso", None)
         st.session_state.pop("ml_ruoli", None)
         st.session_state.pop("pagina", None)
+        st.session_state["_v325_top_menu_open"] = False
 
         for _top_key in [
             "ml_runtime_workspace_key",
@@ -37014,10 +37011,22 @@ def render_controlli_top_admin_banditore_v154():
 
         st.rerun()
 
-    # V324 - ADMIN e BANDITORE usano lo STESSO menu full-width.
-    # Ripristina la struttura grafica corretta visibile nel livello ADMIN.
-    with st.container(key="ml154_top_menu_wrap"):
-        with st.expander("☰  MENU", expanded=False):
+    # V325 - ADMIN e BANDITORE: stessa IDENTICA barra MENU.
+    # Pulsante puro: nessun expander/popover/toggle/material icon.
+    if "_v325_top_menu_open" not in st.session_state:
+        st.session_state["_v325_top_menu_open"] = False
+
+    if st.button(
+        "›   ☰ MENU",
+        use_container_width=True,
+        key="ml325_top_menu_button",
+    ):
+        st.session_state["_v325_top_menu_open"] = not bool(
+            st.session_state.get("_v325_top_menu_open", False)
+        )
+
+    if st.session_state.get("_v325_top_menu_open", False):
+        with st.container(key="ml154_top_menu_wrap"):
             menu_r1c1, menu_r1c2 = st.columns(2)
 
             with menu_r1c1:
