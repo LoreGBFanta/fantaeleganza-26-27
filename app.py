@@ -37245,8 +37245,8 @@ def render_navigazione_e_pagina():
             ("", "ASTA"),
             ("", "ROSA"),
             ("", "MODULI"),
-            ("", "FORMAZIONI TIPO"),
-            ("", "ROSE AVVERSARI"),
+            ("✓", "FORMAZIONI TIPO"),
+            ("●", "ROSE AVVERSARI"),
             ("", "PROFILO"),
         ]
 
@@ -37359,6 +37359,19 @@ def render_navigazione_e_pagina():
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black'/%3E%3C/svg%3E");
     }
+    /* V315 - i due simboli sono nel testo reale del bottone.
+       Nasconde il vecchio pseudo-elemento quadrato sulle posizioni 6 e 7. */
+    div[data-testid="stHorizontalBlock"] > div:nth-child(6) [class*="st-key-nav_"] button p::before,
+    div[data-testid="stHorizontalBlock"] > div:nth-child(7) [class*="st-key-nav_"] button p::before {
+        content:none !important;
+        display:none !important;
+        width:0 !important;
+        height:0 !important;
+        flex:0 0 0 !important;
+        background:transparent !important;
+        -webkit-mask:none !important;
+        mask:none !important;
+    }
     /* V314 - icone robuste senza CSS mask: evita il quadrato blu */
     [class*="st-key-nav_FORMAZIONI_TIPO"] button p::before {
         content:"✓" !important;
@@ -37410,8 +37423,15 @@ def render_navigazione_e_pagina():
 
     for col, (icona, pagina_nav) in zip(nav_cols, PAGINE):
         with col:
+            # V315 - per FORMAZIONI TIPO e ROSE AVVERSARI l'icona è
+            # parte reale dell'etichetta: nessuna dipendenza da pseudo-elementi CSS.
+            _nav_label = (
+                f"{icona}  {pagina_nav}"
+                if pagina_nav in ("FORMAZIONI TIPO", "ROSE AVVERSARI") and icona
+                else pagina_nav
+            )
             st.button(
-                pagina_nav,
+                _nav_label,
                 use_container_width=True,
                 type=(
                     "primary"
