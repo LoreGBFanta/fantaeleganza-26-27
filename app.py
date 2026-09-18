@@ -37275,8 +37275,19 @@ def render_navigazione_e_pagina():
         font-family:Arial,sans-serif; font-size:26px; line-height:30px;
         font-weight:800; color:#0f172a; letter-spacing:0;
     }
+    /* V310 - navbar SQUADRA leggermente più alta e più leggibile */
+    [class*="st-key-nav_"] button {
+        height:42px !important;
+        min-height:42px !important;
+        max-height:42px !important;
+        padding:0 12px !important;
+        border-radius:8px !important;
+    }
     /* V308 - navbar SQUADRA: stesse icone monocromatiche delle intestazioni */
     [class*="st-key-nav_"] button p {
+        font-size:14px !important;
+        line-height:1.2 !important;
+        font-weight:500 !important;
         display:flex !important;
         align-items:center !important;
         justify-content:center !important;
@@ -37284,9 +37295,9 @@ def render_navigazione_e_pagina():
     }
     [class*="st-key-nav_"] button p::before {
         content:"";
-        width:16px;
-        height:16px;
-        flex:0 0 16px;
+        width:17px;
+        height:17px;
+        flex:0 0 17px;
         background:#0a3157;
         -webkit-mask-repeat:no-repeat;
         -webkit-mask-position:center;
