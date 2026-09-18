@@ -36927,6 +36927,12 @@ def render_controlli_top_admin_banditore_v154():
         table, th, td {
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
         }
+        /* Mantiene funzionanti le icone interne Streamlit anche con Century Gothic. */
+        [data-testid="stIconMaterial"] {
+            font-family:"Material Symbols Rounded","Material Symbols Outlined","Material Icons" !important;
+            font-feature-settings:"liga" !important;
+            -webkit-font-feature-settings:"liga" !important;
+        }
         </style>
         """, unsafe_allow_html=True)
 
@@ -36979,9 +36985,27 @@ def render_controlli_top_admin_banditore_v154():
             font-weight:900 !important;
             box-sizing:border-box !important;
         }
-        div[class*="st-key-ml154_top_menu_wrap"] details > summary * {
+        /* V327 - Century Gothic SOLO sul testo MENU.
+           Non sovrascrivere il font Material Symbols della freccia Streamlit. */
+        div[class*="st-key-ml154_top_menu_wrap"] details > summary p,
+        div[class*="st-key-ml154_top_menu_wrap"] details > summary span:not([data-testid="stIconMaterial"]) {
             color:#ffc21c !important;
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+            font-weight:900 !important;
+        }
+        div[class*="st-key-ml154_top_menu_wrap"] details > summary [data-testid="stIconMaterial"] {
+            font-family:"Material Symbols Rounded","Material Symbols Outlined","Material Icons" !important;
+            color:#ffc21c !important;
+            font-weight:normal !important;
+            font-style:normal !important;
+            letter-spacing:normal !important;
+            text-transform:none !important;
+            white-space:nowrap !important;
+            word-wrap:normal !important;
+            direction:ltr !important;
+            -webkit-font-feature-settings:"liga" !important;
+            -webkit-font-smoothing:antialiased !important;
+            font-feature-settings:"liga" !important;
         }
         div[class*="st-key-ml154_top_menu_wrap"] details[open] {
             padding-bottom:8px !important;
