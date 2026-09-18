@@ -37872,8 +37872,26 @@ def render_navigazione_e_pagina():
         _rosa_refresh_league_id = st.session_state.get("ml_league_id")
         _rosa_refresh_team_id = st.session_state.get("ml_team_id")
 
+        st.markdown("""
+        <style>
+        [class*="st-key-v152_refresh_rosa_"] button {
+            height:40px !important;
+            min-height:40px !important;
+            max-height:40px !important;
+            padding:0 14px !important;
+            border-radius:8px !important;
+        }
+        [class*="st-key-v152_refresh_rosa_"] button p {
+            margin:0 !important;
+            font-size:14px !important;
+            line-height:1.2 !important;
+            font-weight:700 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         if st.button(
-            "⟳ AGGIORNA",
+            "🔄 AGGIORNA ROSA",
             use_container_width=True,
             key=(
                 "v152_refresh_rosa_"
