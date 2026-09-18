@@ -37285,9 +37285,9 @@ def render_navigazione_e_pagina():
 
     if MODALITA_ACCESSO_ATTIVA == "ADMIN":
         PAGINE = [
-            ("", "GESTIONE LEGA"),
+            ("⚙", "GESTIONE LEGA"),
             ("", "LISTONE"),
-            ("", "EXPORT ROSE LEGA"),
+            ("⇩", "EXPORT ROSE LEGA"),
         ]
     elif MODALITA_ACCESSO_ATTIVA == "BANDITORE":
         PAGINE = [
@@ -39210,34 +39210,17 @@ if MODALITA_ACCESSO_ATTIVA in ("ADMIN", "BANDITORE"):
     """, unsafe_allow_html=True)
 
 
-# V332 - ADMIN: icone navigazione monocromatiche blu.
+# V333 - ADMIN: GESTIONE LEGA ed EXPORT usano icone reali nel testo
+# del pulsante, evitando selettori CSS dipendenti dal DOM Streamlit.
+
+# V333 - icone/testo reali dei pulsanti ADMIN in blu monocromatico.
 if MODALITA_ACCESSO_ATTIVA == "ADMIN":
     st.markdown("""
     <style>
-    [class*="st-key-nav_GESTIONE_LEGA"] button p::before,
-    [class*="st-key-nav_EXPORT_ROSE_LEGA"] button p::before {
-        content:"" !important;
-        width:17px !important;
-        height:17px !important;
-        flex:0 0 17px !important;
-        display:inline-block !important;
-        background:#0a3157 !important;
-        -webkit-mask-repeat:no-repeat !important;
-        -webkit-mask-position:center !important;
-        -webkit-mask-size:contain !important;
-        mask-repeat:no-repeat !important;
-        mask-position:center !important;
-        mask-size:contain !important;
+    [class*="st-key-nav_GESTIONE_LEGA"] button p,
+    [class*="st-key-nav_EXPORT_ROSE_LEGA"] button p {
+        color:#0a3157 !important;
     }
-    [class*="st-key-nav_GESTIONE_LEGA"] button p::before {
-        -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm8.5 4a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.5 1a8 8 0 0 0-1.8-1L15.7 3h-4l-.4 3a8 8 0 0 0-1.8 1L7 6 5 9.4 7 11a7 7 0 0 0 0 2l-2 1.6L7 18l2.5-1a8 8 0 0 0 1.8 1l.4 3h4l.4-3a8 8 0 0 0 1.8-1l2.5 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z'/%3E%3C/svg%3E") !important;
-        mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm8.5 4a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.5 1a8 8 0 0 0-1.8-1L15.7 3h-4l-.4 3a8 8 0 0 0-1.8 1L7 6 5 9.4 7 11a7 7 0 0 0 0 2l-2 1.6L7 18l2.5-1a8 8 0 0 0 1.8 1l.4 3h4l.4-3a8 8 0 0 0 1.8-1l2.5 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z'/%3E%3C/svg%3E") !important;
-    }
-    [class*="st-key-nav_EXPORT_ROSE_LEGA"] button p::before {
-        -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M12 3v12m-5-5 5 5 5-5M5 21h14'/%3E%3C/svg%3E") !important;
-        mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M12 3v12m-5-5 5 5 5-5M5 21h14'/%3E%3C/svg%3E") !important;
-    }
-    /* LISTONE already has the shared monochrome list icon rule. */
     </style>
     """, unsafe_allow_html=True)
 
