@@ -38399,6 +38399,29 @@ def render_navigazione_e_pagina():
 
     elif sezione == "FORMAZIONI TIPO":
 
+        # V316 - AGGIORNA DAL WEB coerente con i pulsanti secondari della navbar.
+        st.markdown("""
+        <style>
+        [class*="st-key-pf_update"] button,
+        [class*="st-key-pf_update"] button[data-testid="stBaseButton-primary"] {
+            background:#ffffff !important;
+            color:#0f172a !important;
+            border:1px solid #cbd5e1 !important;
+            box-shadow:none !important;
+        }
+        [class*="st-key-pf_update"] button p {
+            color:#0f172a !important;
+            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+            font-size:14px !important;
+            font-weight:500 !important;
+        }
+        /* Il primo carattere ◎ è monocromatico e viene colorato blu dal testo. */
+        [class*="st-key-pf_update"] button p::first-letter {
+            color:#0a3157 !important;
+            font-weight:900 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
         dati = (
             carica_probabili_web()
@@ -38415,7 +38438,7 @@ def render_navigazione_e_pagina():
         with a:
 
             if st.button(
-                "🌐 AGGIORNA DAL WEB",
+                "◎ AGGIORNA DAL WEB",
                 type="primary",
                 use_container_width=True,
                 key="pf_update"
