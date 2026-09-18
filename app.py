@@ -34989,46 +34989,9 @@ def render_banditore_asta():
         st.error(st.session_state.pop("auctioneer_error"))
 
 
-    # V343 - toolbar BANDITORE compatta e affiancata.
-    st.markdown("""
-    <style>
-    [class*="st-key-v153_undo_auction_open_"] button,
-    [class*="st-key-v134_refresh_banditore"] button {
-        height:34px !important;
-        min-height:34px !important;
-        max-height:34px !important;
-        padding:0 12px !important;
-        border-radius:7px !important;
-    }
-    [class*="st-key-v153_undo_auction_open_"] button p,
-    [class*="st-key-v134_refresh_banditore"] button p {
-        margin:0 !important;
-        color:#0a3157 !important;
-        font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
-        font-size:14px !important;
-        line-height:1.2 !important;
-        font-weight:400 !important;
-        letter-spacing:0 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    _v343_undo_col, _v343_refresh_col = st.columns(2, gap="small")
-
-    with _v343_undo_col:
-        if st.button(
-            "↶ UNDO",
-            use_container_width=True,
-            key=f"v153_undo_auction_open_{league_id}",
-        ):
-            dialog_undo_asta_v153(league_id)
-
-    with _v343_refresh_col:
-        st.button(
-            "⟳ AGGIORNA OFFERTE",
-            use_container_width=True,
-            key="v134_refresh_banditore",
-        )
+    # V345 - toolbar superiore rimossa:
+    # nessun UNDO in GESTIONE ASTA; AGGIORNA OFFERTE viene mostrato
+    # solo con lotto aperto, tra scheda giocatore e ULTIME OFFERTE.
 
     # V269 - titolo sotto NAVBAR + UNDO + AGGIORNA OFFERTE.
     # Identità già sincronizzata nel parent: nessuna query DB aggiuntiva.
@@ -35082,6 +35045,35 @@ def render_banditore_asta():
     if live is not None:
         # V244 - la struttura di Gestione Asta NON viene più ripetuta ogni secondo.
         render_card_giocatore_live_v140(live)
+
+        # V345 - AGGIORNA OFFERTE tra il nome/scheda giocatore e ULTIME OFFERTE.
+        # Stesso stile compatto della navigazione; icona monocromatica blu.
+        st.markdown("""
+        <style>
+        [class*="st-key-v345_refresh_banditore"] button {
+            height:34px !important;
+            min-height:34px !important;
+            max-height:34px !important;
+            padding:0 12px !important;
+            border-radius:7px !important;
+        }
+        [class*="st-key-v345_refresh_banditore"] button p {
+            margin:0 !important;
+            color:#0a3157 !important;
+            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+            font-size:14px !important;
+            line-height:1.2 !important;
+            font-weight:400 !important;
+            letter-spacing:0 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        st.button(
+            "⟳ AGGIORNA OFFERTE",
+            use_container_width=True,
+            key="v345_refresh_banditore",
+        )
+
         render_banditore_lotto_live_v244(league_id, live["lot_id"])
         return
 
