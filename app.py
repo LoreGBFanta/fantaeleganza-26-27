@@ -26021,12 +26021,8 @@ st.markdown(
 if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
     with st.sidebar:
 
-        st.caption(
-            "Accesso: "
-            + str(st.session_state.get("ml_modalita_accesso") or "SQUADRA")
-        )
         if st.button(
-            "⇄ CAMBIA LIVELLO ACCESSO",
+            "⇄ CAMBIA LIVELLO UTENTE",
             type="primary",
             use_container_width=True,
             key="ml136_switch_access"
@@ -26051,11 +26047,147 @@ if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
             st.rerun()
 
 
+        # V339 - MENU subito sotto CAMBIA LIVELLO UTENTE.
+        with st.expander(
+            "☰  MENU",
+            expanded=False
+        ):
 
-        if not PROFILO_LEGACY_SUPPORTATO:
-            st.caption(
-                "🔒 Area operativa isolata · sidebar sincronizzata con la tua squadra"
-            )
+            menu_r1c1, menu_r1c2 = st.columns(2)
+
+            with menu_r1c1:
+
+                if st.button(
+                    "↪  Esci",
+                    use_container_width=True,
+                    key="btn_logout_profilo"
+                ):
+
+                    for chiave_sessione in list(
+                        st.session_state.keys()
+                    ):
+
+                        if chiave_sessione in {
+                            "profilo_attivo",
+                            "profilo_login_select"
+                        }:
+                            continue
+
+                        if (
+                            chiave_sessione.startswith("_df_")
+                            or chiave_sessione.startswith("_ultime_")
+                            or chiave_sessione.startswith("_costi_")
+                            or chiave_sessione.startswith("budget_")
+                            or chiave_sessione.startswith("backup_")
+                            or chiave_sessione.startswith("pdf_")
+                        ):
+
+                            st.session_state.pop(
+                                chiave_sessione,
+                                None
+                            )
+
+                    azzera_contesto_multilega()
+
+                    st.session_state.pop(
+                        "profilo_attivo",
+                        None
+                    )
+
+                    st.session_state.pop(
+                        "auth_user_id",
+                        None
+                    )
+
+                    st.session_state.pop(
+                        "auth_ok",
+                        None
+                    )
+
+                    st.session_state.pop(
+                        "profilo_login_select",
+                        None
+                    )
+
+                    st.rerun()
+
+            with menu_r1c2:
+
+                if USA_DATABASE_CLOUD:
+
+                    if st.button(
+                        "☁  Backup",
+                        use_container_width=True,
+                        key="btn_backup_cloud"
+                    ):
+
+                        gestisci_backup_cloud()
+
+                elif DB_PATH.exists():
+
+                    if st.button(
+                        "☁  Backup",
+                        use_container_width=True,
+                        key="btn_backup_locale"
+                    ):
+                        gestisci_backup_cloud()
+
+            menu_r2c1, menu_r2c2 = st.columns(2)
+
+            with menu_r2c1:
+
+                if st.button(
+                    "⟳  Aggiorna",
+                    use_container_width=True,
+                    key="btn_aggiorna_app"
+                ):
+
+                    invalida_cache_dati()
+                    st.rerun()
+
+            with menu_r2c2:
+
+                if st.button(
+                    "▤  Regole",
+                    use_container_width=True,
+                    key="btn_regole"
+                ):
+
+                    mostra_regole()
+
+            menu_r3c1, menu_r3c2 = st.columns(2)
+
+            with menu_r3c1:
+
+                if st.button(
+                    "📷  Snapshot",
+                    use_container_width=True,
+                    key="btn_snapshot"
+                ):
+
+                    gestisci_snapshot()
+
+            with menu_r3c2:
+
+                nuovo_dark = st.toggle(
+                    "☾  Modalità scura",
+                    value=(
+                        st.session_state.dark_mode
+                    ),
+                    key="toggle_dark"
+                )
+
+                if (
+                    nuovo_dark
+                    != st.session_state.dark_mode
+                ):
+
+                    st.session_state.dark_mode = (
+                        nuovo_dark
+                    )
+
+                    st.rerun()
+
 
         _sidebar_mode = str(
             st.session_state.get("ml_modalita_accesso") or "SQUADRA"
@@ -26235,145 +26367,6 @@ if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
             )
 
 
-        with st.expander(
-            "☰  MENU",
-            expanded=False
-        ):
-
-            menu_r1c1, menu_r1c2 = st.columns(2)
-
-            with menu_r1c1:
-
-                if st.button(
-                    "↪  Esci",
-                    use_container_width=True,
-                    key="btn_logout_profilo"
-                ):
-
-                    for chiave_sessione in list(
-                        st.session_state.keys()
-                    ):
-
-                        if chiave_sessione in {
-                            "profilo_attivo",
-                            "profilo_login_select"
-                        }:
-                            continue
-
-                        if (
-                            chiave_sessione.startswith("_df_")
-                            or chiave_sessione.startswith("_ultime_")
-                            or chiave_sessione.startswith("_costi_")
-                            or chiave_sessione.startswith("budget_")
-                            or chiave_sessione.startswith("backup_")
-                            or chiave_sessione.startswith("pdf_")
-                        ):
-
-                            st.session_state.pop(
-                                chiave_sessione,
-                                None
-                            )
-
-                    azzera_contesto_multilega()
-
-                    st.session_state.pop(
-                        "profilo_attivo",
-                        None
-                    )
-
-                    st.session_state.pop(
-                        "auth_user_id",
-                        None
-                    )
-
-                    st.session_state.pop(
-                        "auth_ok",
-                        None
-                    )
-
-                    st.session_state.pop(
-                        "profilo_login_select",
-                        None
-                    )
-
-                    st.rerun()
-
-            with menu_r1c2:
-
-                if USA_DATABASE_CLOUD:
-
-                    if st.button(
-                        "☁  Backup",
-                        use_container_width=True,
-                        key="btn_backup_cloud"
-                    ):
-
-                        gestisci_backup_cloud()
-
-                elif DB_PATH.exists():
-
-                    if st.button(
-                        "☁  Backup",
-                        use_container_width=True,
-                        key="btn_backup_locale"
-                    ):
-                        gestisci_backup_cloud()
-
-            menu_r2c1, menu_r2c2 = st.columns(2)
-
-            with menu_r2c1:
-
-                if st.button(
-                    "⟳  Aggiorna",
-                    use_container_width=True,
-                    key="btn_aggiorna_app"
-                ):
-
-                    invalida_cache_dati()
-                    st.rerun()
-
-            with menu_r2c2:
-
-                if st.button(
-                    "▤  Regole",
-                    use_container_width=True,
-                    key="btn_regole"
-                ):
-
-                    mostra_regole()
-
-            menu_r3c1, menu_r3c2 = st.columns(2)
-
-            with menu_r3c1:
-
-                if st.button(
-                    "📷  Snapshot",
-                    use_container_width=True,
-                    key="btn_snapshot"
-                ):
-
-                    gestisci_snapshot()
-
-            with menu_r3c2:
-
-                nuovo_dark = st.toggle(
-                    "☾  Modalità scura",
-                    value=(
-                        st.session_state.dark_mode
-                    ),
-                    key="toggle_dark"
-                )
-
-                if (
-                    nuovo_dark
-                    != st.session_state.dark_mode
-                ):
-
-                    st.session_state.dark_mode = (
-                        nuovo_dark
-                    )
-
-                    st.rerun()
 
 
         st.markdown(
@@ -39323,6 +39316,38 @@ if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
     [data-testid="stSidebar"] details > summary p,
     [data-testid="stSidebar"] details > summary span:not([data-testid="stIconMaterial"]) {
         font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# ============================================================
+# V339 - SQUADRA: ordine sidebar e controllo accesso compatto
+# CAMBIA LIVELLO UTENTE -> MENU -> PROFILO
+# ============================================================
+if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
+    st.markdown("""
+    <style>
+    section[data-testid="stSidebar"] div[class*="st-key-ml136_switch_access"] button {
+        min-height:28px !important;
+        height:28px !important;
+        padding:0 10px !important;
+        border-radius:8px !important;
+        font-size:12px !important;
+        margin:0 !important;
+    }
+    section[data-testid="stSidebar"] div[class*="st-key-ml136_switch_access"] button p {
+        font-size:12px !important;
+        line-height:1 !important;
+        margin:0 !important;
+    }
+    section[data-testid="stSidebar"] div[class*="st-key-ml136_switch_access"] {
+        margin:0 0 5px 0 !important;
+        padding:0 !important;
+    }
+    section[data-testid="stSidebar"] details {
+        margin-top:0 !important;
+        margin-bottom:7px !important;
     }
     </style>
     """, unsafe_allow_html=True)
