@@ -34460,7 +34460,11 @@ def callback_chiudi_assegna_v133(
 # ============================================================
 # Baseline PRE CARD = V346.
 FC27_EA_ID_BY_NAME_V347 = {
+    # EA SPORTS FC 27 - ID ufficiali verificati.
+    "DANILHO DOEKHI": 232658,
+    "DOEKHI": 232658,  # alias del Listone FantaEleganza
     "LORENZO PELLEGRINI": 228251,
+    "PELLEGRINI": 228251,
 }
 
 def _normalizza_nome_fc27_v347(nome):
@@ -34494,7 +34498,8 @@ def render_card_giocatore_live_v140(live):
         _player_inner = (
             '<div class="v348-fc-card-wrap">'
             f'<img class="v348-fc-card" src="{html.escape(_card_url, quote=True)}" '
-            f'alt="Card FC27 {nome}" loading="eager" decoding="async">'
+            f'alt="Card FC27 {nome}" loading="eager" decoding="async" '
+            'onerror="this.parentElement.style.display=\'none\'">'
             '</div>'
             '<div class="v348-player-copy">'
             '<div class="fe-proj-label">GIOCATORE</div>'
