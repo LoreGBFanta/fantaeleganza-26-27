@@ -37411,6 +37411,26 @@ def render_navigazione_e_pagina():
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='M4 21c.8-5 3.5-7 8-7s7.2 2 8 7'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='M4 21c.8-5 3.5-7 8-7s7.2 2 8 7'/%3E%3C/svg%3E");
     }
+    /* V317 - fix BANDITORE: neutralizza le pseudo-icone del menu SQUADRA */
+    [class*="st-key-nav_GESTIONE_ASTA"] button p::before,
+    [class*="st-key-nav_STORICO_ASTA"] button p::before {
+        content:none !important;
+        display:none !important;
+        width:0 !important;
+        height:0 !important;
+        flex:0 0 0 !important;
+        background:transparent !important;
+        -webkit-mask:none !important;
+        mask:none !important;
+    }
+    [class*="st-key-nav_GESTIONE_ASTA"] button p,
+    [class*="st-key-nav_STORICO_ASTA"] button p {
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        gap:7px !important;
+        white-space:nowrap !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
