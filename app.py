@@ -36936,22 +36936,23 @@ def render_controlli_top_admin_banditore_v154():
             font-weight: 850 !important;
         }
 
-        /* MENU in alto, prima della navbar. */
-        div[class*="st-key-ml154_top_menu_wrap"] details {
+        /* V320 - MENU in alto: pulsante popover, senza details/summary. */
+        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button {
+            width: 100% !important;
+            min-height: 44px !important;
+            height: 44px !important;
+            padding: 0 14px !important;
             border: 2px solid #ffc21c !important;
             border-radius: 11px !important;
             background: transparent !important;
+            color: #ffc21c !important;
+            font-weight: 900 !important;
+            box-shadow: none !important;
             margin-top: 8px !important;
             margin-bottom: 4px !important;
         }
-        div[class*="st-key-ml154_top_menu_wrap"] details > summary {
-            min-height: 44px !important;
-            padding: 0 14px !important;
+        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button * {
             color: #ffc21c !important;
-            font-weight: 900 !important;
-        }
-        div[class*="st-key-ml154_top_menu_wrap"] details > summary:hover {
-            color: #ffd35a !important;
         }
         </style>
         """,
@@ -36981,8 +36982,10 @@ def render_controlli_top_admin_banditore_v154():
 
         st.rerun()
 
+    # V320 - MENU top ADMIN/BANDITORE: popover nativo.
+    # Evita completamente details/summary, origine della sovrapposizione grafica.
     with st.container(key="ml154_top_menu_wrap"):
-        with st.expander("☰  MENU", expanded=False):
+        with st.popover("☰  MENU", use_container_width=True):
             menu_r1c1, menu_r1c2 = st.columns(2)
 
             with menu_r1c1:
