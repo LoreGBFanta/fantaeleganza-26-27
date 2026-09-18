@@ -39322,32 +39322,46 @@ if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
 
 
 # ============================================================
-# V339 - SQUADRA: ordine sidebar e controllo accesso compatto
-# CAMBIA LIVELLO UTENTE -> MENU -> PROFILO
+# V340 - SQUADRA: geometria uniforme controlli superiori
+# margine alto -> CAMBIA LIVELLO UTENTE -> MENU -> PROFILO
 # ============================================================
 if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
     st.markdown("""
     <style>
+    /* Stacca il primo controllo dal vertice superiore della sidebar. */
+    section[data-testid="stSidebar"] div[class*="st-key-ml136_switch_access"] {
+        margin:14px 0 8px 0 !important;
+        padding:0 !important;
+    }
+
+    /* Stessa altezza della barra MENU. */
     section[data-testid="stSidebar"] div[class*="st-key-ml136_switch_access"] button {
-        min-height:28px !important;
-        height:28px !important;
-        padding:0 10px !important;
-        border-radius:8px !important;
-        font-size:12px !important;
+        min-height:48px !important;
+        height:48px !important;
+        padding:0 14px !important;
+        border-radius:10px !important;
         margin:0 !important;
     }
     section[data-testid="stSidebar"] div[class*="st-key-ml136_switch_access"] button p {
         font-size:12px !important;
-        line-height:1 !important;
+        line-height:1.2 !important;
         margin:0 !important;
     }
-    section[data-testid="stSidebar"] div[class*="st-key-ml136_switch_access"] {
-        margin:0 0 5px 0 !important;
-        padding:0 !important;
-    }
+
+    /* MENU: stessa geometria verticale e 8px di distanza dal profilo. */
     section[data-testid="stSidebar"] details {
         margin-top:0 !important;
-        margin-bottom:7px !important;
+        margin-bottom:8px !important;
+    }
+    section[data-testid="stSidebar"] details > summary {
+        min-height:48px !important;
+        height:48px !important;
+        box-sizing:border-box !important;
+    }
+
+    /* Neutralizza eventuali margini Streamlit fra i tre blocchi superiori. */
+    section[data-testid="stSidebar"] div[class*="st-key-ml136_switch_access"] + div {
+        margin-top:0 !important;
     }
     </style>
     """, unsafe_allow_html=True)
