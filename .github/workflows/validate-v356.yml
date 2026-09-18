@@ -1,0 +1,19 @@
+name: Validate V356 role icons
+on:
+  push:
+    branches: [ feature/v356-role-icons ]
+    paths: [ "tools/apply_v356.py" ]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python tools/apply_v356.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py
+          git commit -m "V356 icone ruolo nella Card Banditore"
+          git push
