@@ -15756,13 +15756,13 @@ def render_admin_multilega():
         return
 
     st.subheader(
-        "⚙️ Gestione lega"
+        "⚙ Gestione lega"
     )
 
     tab_nuova, tab_esistenti = st.tabs(
         [
-            "ℹ️ Creazione lega",
-            "🏆 Le mie leghe"
+            "ⓘ Creazione lega",
+            "♜ Le mie leghe"
         ]
     )
 
@@ -39219,6 +39219,18 @@ if MODALITA_ACCESSO_ATTIVA == "ADMIN":
     <style>
     [class*="st-key-nav_GESTIONE_LEGA"] button p,
     [class*="st-key-nav_EXPORT_ROSE_LEGA"] button p {
+        color:#0a3157 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# V334 - ADMIN Gestione lega: icone descrittive monocromatiche blu.
+if MODALITA_ACCESSO_ATTIVA == "ADMIN":
+    st.markdown("""
+    <style>
+    [data-testid="stMain"] h1,
+    [data-testid="stMain"] [data-baseweb="tab"] p {
         color:#0a3157 !important;
     }
     </style>
