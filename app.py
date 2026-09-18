@@ -28301,84 +28301,259 @@ def render_storico_asta_v147():
 
 
 
-def apri_lotto_banditore(league_id, player_id):
-    """V125 - apertura lotto ottimizzata per DB remoto."""
-    league_id=int(league_id); player_id=int(player_id)
-    user_id=int(st.session_state.get("auth_user_id") or 0)
-    conn=_portal_raw_connection(); cur=conn.cursor()
+def assicura_fastpath_asta_v293(league_id):
+    """
+    V293 - installazione una tantum dei trigger server-side per OPEN/ASSIGN.
+    Il costo di setup viene pagato al caricamento della console Banditore,
+    non al click di apertura/chiusura.
+    """
+    league_id=int(league_id)
+    guard=f"_v293_fastpath_ready_{league_id}"
+    if st.session_state.get(guard):
+        return
+
+    # Garantisce le tabelle usate dai trigger prima della loro creazione.
+    assicura_schema_storico_asta_v147(league_id)
+    assicura_schema_movimenti_rosa_v149(league_id)
+
+    conn=_portal_raw_connection()
+    cur=conn.cursor()
     try:
         cur.execute("""
-            SELECT
-                EXISTS(
-                    SELECT 1 FROM league_members
-                    WHERE league_id=? AND user_id=? AND is_active=1
-                      AND (is_auctioneer=1 OR is_admin=1)
-                ),
-                (
-                    SELECT UPPER(COALESCE(stato,''))
-                    FROM league_players
-                    WHERE league_id=? AND player_id=?
-                    LIMIT 1
-                ),
-                (
-                    SELECT COUNT(*)
-                    FROM auction_sessions s
-                    JOIN auction_lots l ON l.id=s.current_lot_id
-                    WHERE s.league_id=?
-                      AND UPPER(COALESCE(l.stato,'')) IN ('OPEN','CLOSING')
-                )
-        """,(league_id,user_id,league_id,player_id,league_id))
-        chk=cur.fetchone() or (0,None,0)
-        if not bool(chk[0]):
-            raise PermissionError("Operazione riservata a Banditore o Admin.")
-        if chk[1] is None:
-            raise ValueError("Giocatore non presente nel listone della lega.")
-        if str(chk[1]).upper()!="DISPONIBILE":
-            raise ValueError("Il giocatore non è disponibile.")
-        if int(chk[2] or 0)>0:
-            raise ValueError(
-                "Esiste già un lotto attivo. Devi completarlo prima di aprirne un altro."
-            )
+            CREATE TRIGGER IF NOT EXISTS trg_v293_lot_open
+            AFTER INSERT ON auction_lots
+            WHEN UPPER(COALESCE(NEW.stato,''))='OPEN'
+            BEGIN
+                DELETE FROM auction_history_exclusions
+                WHERE league_id=NEW.league_id AND player_id=NEW.player_id;
 
+                INSERT INTO auction_called_players (
+                    league_id,player_id,fonte,lot_id,
+                    called_by_user_id,called_at,updated_at,active
+                )
+                VALUES (
+                    NEW.league_id,NEW.player_id,'LOT',NEW.id,
+                    NEW.opened_by_user_id,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,1
+                )
+                ON CONFLICT(league_id,player_id)
+                DO UPDATE SET
+                    fonte='LOT',
+                    lot_id=excluded.lot_id,
+                    called_by_user_id=excluded.called_by_user_id,
+                    active=1,
+                    called_at=CURRENT_TIMESTAMP,
+                    updated_at=CURRENT_TIMESTAMP;
+
+                INSERT INTO auction_sessions (
+                    league_id,stato,current_lot_id,started_by_user_id,
+                    started_at,updated_at
+                )
+                VALUES (
+                    NEW.league_id,'RUNNING',NEW.id,NEW.opened_by_user_id,
+                    CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+                )
+                ON CONFLICT(league_id) DO UPDATE SET
+                    stato='RUNNING',
+                    current_lot_id=excluded.current_lot_id,
+                    started_by_user_id=excluded.started_by_user_id,
+                    started_at=COALESCE(auction_sessions.started_at,CURRENT_TIMESTAMP),
+                    updated_at=CURRENT_TIMESTAMP;
+
+                INSERT INTO audit_log (
+                    league_id,user_id,azione,entita,entita_id,dettagli_json,created_at
+                )
+                VALUES (
+                    NEW.league_id,NEW.opened_by_user_id,'LOT_OPENED',
+                    'AUCTION_LOT',CAST(NEW.id AS TEXT),
+                    '{"player_id":'||CAST(NEW.player_id AS TEXT)||'}',
+                    CURRENT_TIMESTAMP
+                );
+            END
+        """)
+
+        cur.execute("""
+            CREATE TRIGGER IF NOT EXISTS trg_v293_lot_assigned
+            AFTER UPDATE OF stato ON auction_lots
+            WHEN UPPER(COALESCE(OLD.stato,''))='OPEN'
+             AND UPPER(COALESCE(NEW.stato,''))='ASSIGNED'
+            BEGIN
+                INSERT INTO league_players (
+                    league_id,player_id,stato,
+                    assigned_team_id,prezzo_assegnazione,updated_at
+                )
+                VALUES (
+                    NEW.league_id,NEW.player_id,'ASSEGNATO',
+                    NEW.assigned_team_id,NEW.final_price,CURRENT_TIMESTAMP
+                )
+                ON CONFLICT(league_id,player_id)
+                DO UPDATE SET
+                    stato='ASSEGNATO',
+                    assigned_team_id=excluded.assigned_team_id,
+                    prezzo_assegnazione=excluded.prezzo_assegnazione,
+                    updated_at=CURRENT_TIMESTAMP;
+
+                INSERT INTO rosters (
+                    league_id,team_id,player_id,prezzo_acquisto,
+                    fonte,assigned_at,updated_at
+                )
+                VALUES (
+                    NEW.league_id,NEW.assigned_team_id,NEW.player_id,NEW.final_price,
+                    'AUCTION_FINAL',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+                )
+                ON CONFLICT(league_id,team_id,player_id)
+                DO UPDATE SET
+                    prezzo_acquisto=excluded.prezzo_acquisto,
+                    fonte='AUCTION_FINAL',
+                    updated_at=CURRENT_TIMESTAMP;
+
+                INSERT INTO team_budgets (
+                    league_id,team_id,budget_impostato,
+                    valore_acquisti,spesa_effettiva,updated_at
+                )
+                SELECT
+                    NEW.league_id,
+                    NEW.assigned_team_id,
+                    COALESCE(tb.budget_impostato,r.budget_iniziale,500),
+                    x.valore,
+                    CASE
+                        WHEN x.valore <= COALESCE(r.soglia_budget,r.budget_iniziale,500)
+                        THEN x.valore
+                        ELSE COALESCE(r.soglia_budget,r.budget_iniziale,500)
+                             +(x.valore-COALESCE(r.soglia_budget,r.budget_iniziale,500))
+                              *COALESCE(r.moltiplicatore_oltre_soglia,1)
+                    END,
+                    CURRENT_TIMESTAMP
+                FROM league_rules r
+                LEFT JOIN team_budgets tb
+                  ON tb.league_id=r.league_id
+                 AND tb.team_id=NEW.assigned_team_id
+                CROSS JOIN (
+                    SELECT
+                        COALESCE((
+                            SELECT SUM(COALESCE(prezzo_assegnazione,0))
+                            FROM league_players
+                            WHERE league_id=NEW.league_id
+                              AND stato='ASSEGNATO'
+                              AND assigned_team_id=NEW.assigned_team_id
+                        ),0)
+                        +
+                        COALESCE((
+                            SELECT SUM(COALESCE(costo,0))
+                            FROM auction_release_costs
+                            WHERE league_id=NEW.league_id
+                              AND team_id=NEW.assigned_team_id
+                              AND active=1
+                        ),0) AS valore
+                ) x
+                WHERE r.league_id=NEW.league_id
+                ON CONFLICT(league_id,team_id)
+                DO UPDATE SET
+                    valore_acquisti=excluded.valore_acquisti,
+                    spesa_effettiva=excluded.spesa_effettiva,
+                    updated_at=CURRENT_TIMESTAMP;
+
+                INSERT INTO auction_assignment_history (
+                    league_id,player_id,team_id,prezzo,stato,
+                    assigned_by_user_id,assigned_at
+                )
+                VALUES (
+                    NEW.league_id,NEW.player_id,NEW.assigned_team_id,
+                    NEW.final_price,'ACTIVE',NEW.closing_by_user_id,CURRENT_TIMESTAMP
+                );
+
+                UPDATE auction_sessions
+                SET current_lot_id=NULL,
+                    stato='READY',
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE league_id=NEW.league_id AND current_lot_id=NEW.id;
+
+                INSERT INTO audit_log (
+                    league_id,user_id,team_id,azione,
+                    entita,entita_id,dettagli_json,created_at
+                )
+                VALUES (
+                    NEW.league_id,NEW.closing_by_user_id,NEW.assigned_team_id,
+                    'PLAYER_ASSIGNED','PLAYER',CAST(NEW.player_id AS TEXT),
+                    '{"prezzo":'||CAST(NEW.final_price AS TEXT)
+                    ||',"lot_id":'||CAST(NEW.id AS TEXT)
+                    ||',"modalita":"FAST_CLOSE_V293"}',
+                    CURRENT_TIMESTAMP
+                );
+            END
+        """)
+        conn.commit()
+        st.session_state[guard]=True
+    finally:
+        _portal_close(conn)
+
+
+def apri_lotto_banditore(league_id, player_id):
+    """V293 - apertura lotto: 1 statement remoto + commit sul percorso OK."""
+    league_id=int(league_id); player_id=int(player_id)
+    user_id=int(st.session_state.get("auth_user_id") or 0)
+    assicura_fastpath_asta_v293(league_id)
+
+    conn=_portal_raw_connection(); cur=conn.cursor()
+    try:
         cur.execute("""
             INSERT INTO auction_lots (
                 league_id,player_id,stato,opened_by_user_id,opened_at,
                 current_bid,current_team_id,bid_count,version,
                 bid_deadline_ts,auto_assign_claimed
             )
-            VALUES (?,?,'OPEN',?,CURRENT_TIMESTAMP,NULL,NULL,0,0,NULL,0)
+            SELECT ?,?,'OPEN',?,CURRENT_TIMESTAMP,NULL,NULL,0,0,NULL,0
+            WHERE EXISTS (
+                SELECT 1 FROM league_members
+                WHERE league_id=? AND user_id=? AND is_active=1
+                  AND (is_auctioneer=1 OR is_admin=1)
+            )
+              AND EXISTS (
+                SELECT 1 FROM league_players
+                WHERE league_id=? AND player_id=? AND stato='DISPONIBILE'
+            )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM auction_sessions s
+                JOIN auction_lots l ON l.id=s.current_lot_id
+                WHERE s.league_id=?
+                  AND UPPER(COALESCE(l.stato,'')) IN ('OPEN','CLOSING')
+            )
             RETURNING id
-        """,(league_id,player_id,user_id))
+        """,(
+            league_id,player_id,user_id,
+            league_id,user_id,
+            league_id,player_id,
+            league_id
+        ))
         row=cur.fetchone()
         if not row:
+            # Diagnostica solo sul percorso di errore: non rallenta l'apertura normale.
+            cur.execute("""
+                SELECT
+                    EXISTS(SELECT 1 FROM league_members
+                           WHERE league_id=? AND user_id=? AND is_active=1
+                             AND (is_auctioneer=1 OR is_admin=1)),
+                    (SELECT UPPER(COALESCE(stato,'')) FROM league_players
+                     WHERE league_id=? AND player_id=? LIMIT 1),
+                    EXISTS(
+                        SELECT 1 FROM auction_sessions s
+                        JOIN auction_lots l ON l.id=s.current_lot_id
+                        WHERE s.league_id=?
+                          AND UPPER(COALESCE(l.stato,'')) IN ('OPEN','CLOSING')
+                    )
+            """,(league_id,user_id,league_id,player_id,league_id))
+            chk=cur.fetchone() or (0,None,0)
+            if not bool(chk[0]):
+                raise PermissionError("Operazione riservata a Banditore o Admin.")
+            if chk[1] is None:
+                raise ValueError("Giocatore non presente nel listone della lega.")
+            if str(chk[1]).upper()!="DISPONIBILE":
+                raise ValueError("Il giocatore non è disponibile.")
+            if bool(chk[2]):
+                raise ValueError("Esiste già un lotto attivo. Devi completarlo prima di aprirne un altro.")
             raise RuntimeError("Impossibile creare il lotto.")
+
         lot_id=int(row[0])
-
-        registra_giocatore_chiamato_v147(
-            cur, league_id, player_id, "LOT", lot_id
-        )
-
-        cur.execute("""
-            INSERT INTO auction_sessions (
-                league_id,stato,current_lot_id,started_by_user_id,
-                started_at,updated_at
-            )
-            VALUES (?,'RUNNING',?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-            ON CONFLICT(league_id) DO UPDATE SET
-                stato='RUNNING',
-                current_lot_id=excluded.current_lot_id,
-                started_by_user_id=excluded.started_by_user_id,
-                started_at=COALESCE(auction_sessions.started_at,CURRENT_TIMESTAMP),
-                updated_at=CURRENT_TIMESTAMP
-        """,(league_id,lot_id,user_id))
-
-        cur.execute("""
-            INSERT INTO audit_log (
-                league_id,user_id,azione,entita,entita_id,dettagli_json,created_at
-            )
-            VALUES (?,?,'LOT_OPENED','AUCTION_LOT',?,?,CURRENT_TIMESTAMP)
-        """,(league_id,user_id,str(lot_id),
-             json.dumps({"player_id":player_id},ensure_ascii=False)))
         conn.commit()
         return lot_id
     except Exception:
@@ -28387,7 +28562,6 @@ def apri_lotto_banditore(league_id, player_id):
         raise
     finally:
         _portal_close(conn)
-
 
 
 
@@ -34051,38 +34225,26 @@ def callback_prossimo_giocatore_v135(
 
 
 
-def assegna_lotto_migliore_v148(league_id, lot_id):
+def assegna_lotto_migliore_v148(league_id, lot_id, nome_team_hint=""):
     """
-    V148 FAST CLOSE.
-
-    L'offerta conclusiva è già stata validata server-side al momento
-    dell'inserimento. Alla conferma del Banditore eseguiamo solo:
-      - claim atomico OPEN -> CLOSING;
-      - assegnazione centrale league_players;
-      - projection rosters + team_budgets;
-      - storico;
-      - chiusura lotto/sessione;
-      - audit.
-
-    Nessuna rilettura di rosa/portieri/budget: evita round-trip Turso
-    duplicati nella fase più sensibile dell'asta.
+    V293 ULTRA FAST CLOSE.
+    Un solo UPDATE...RETURNING remoto sul percorso OK; tutte le proiezioni
+    autorevoli sono eseguite atomicamente dal trigger server-side V293.
     """
-    league_id = int(league_id)
-    lot_id = int(lot_id)
-    user_id = int(st.session_state.get("auth_user_id") or 0)
+    league_id=int(league_id); lot_id=int(lot_id)
+    user_id=int(st.session_state.get("auth_user_id") or 0)
+    assicura_fastpath_asta_v293(league_id)
 
-    assicura_schema_movimenti_rosa_v149(league_id)
-
-    conn = _portal_raw_connection()
-    cur = conn.cursor()
-
+    conn=_portal_raw_connection(); cur=conn.cursor()
     try:
-        # 1) Claim atomico + recupero vincitore/prezzo in una sola query.
         cur.execute("""
             UPDATE auction_lots
-            SET stato='CLOSING',
+            SET stato='ASSIGNED',
+                assigned_team_id=current_team_id,
+                final_price=current_bid,
                 closing_by_user_id=?,
                 closing_at=CURRENT_TIMESTAMP,
+                closed_at=CURRENT_TIMESTAMP,
                 version=COALESCE(version,0)+1
             WHERE id=?
               AND league_id=?
@@ -34090,210 +34252,38 @@ def assegna_lotto_migliore_v148(league_id, lot_id):
               AND current_team_id IS NOT NULL
               AND current_bid IS NOT NULL
               AND EXISTS (
-                  SELECT 1
-                  FROM league_members lm
+                  SELECT 1 FROM league_members lm
                   WHERE lm.league_id=?
                     AND lm.user_id=?
                     AND lm.is_active=1
                     AND (lm.is_auctioneer=1 OR lm.is_admin=1)
               )
-            RETURNING player_id,current_team_id,current_bid
-        """, (
-            user_id,
-            lot_id,
-            league_id,
-            league_id,
-            user_id
-        ))
-        row = cur.fetchone()
-
+              AND EXISTS (
+                  SELECT 1 FROM teams t
+                  WHERE t.league_id=?
+                    AND t.id=auction_lots.current_team_id
+                    AND t.is_active=1
+              )
+            RETURNING player_id,assigned_team_id,final_price
+        """,(user_id,lot_id,league_id,league_id,user_id,league_id))
+        row=cur.fetchone()
         if not row:
             raise ValueError(
                 "Il lotto non è più aperto oppure non esiste "
                 "un'offerta conclusiva valida."
             )
-
-        player_id = int(row[0])
-        team_id = int(row[1])
-        prezzo = float(row[2])
-
-        # 2) Nome squadra per feedback/audit.
-        cur.execute("""
-            SELECT nome
-            FROM teams
-            WHERE league_id=? AND id=? AND is_active=1
-            LIMIT 1
-        """, (league_id,team_id))
-        rt = cur.fetchone()
-        if not rt:
-            raise ValueError("Squadra vincitrice non valida.")
-        nome_team = str(rt[0] or "")
-
-        # 3) Stato autorevole.
-        cur.execute("""
-            INSERT INTO league_players (
-                league_id,player_id,stato,
-                assigned_team_id,prezzo_assegnazione,updated_at
-            )
-            VALUES (?,?,'ASSEGNATO',?,?,CURRENT_TIMESTAMP)
-            ON CONFLICT(league_id,player_id)
-            DO UPDATE SET
-                stato='ASSEGNATO',
-                assigned_team_id=excluded.assigned_team_id,
-                prezzo_assegnazione=excluded.prezzo_assegnazione,
-                updated_at=CURRENT_TIMESTAMP
-        """, (
-            league_id,player_id,team_id,prezzo
-        ))
-
-        # 4) Projection rosa normalizzata.
-        cur.execute("""
-            INSERT INTO rosters (
-                league_id,team_id,player_id,prezzo_acquisto,
-                fonte,assigned_at,updated_at
-            )
-            VALUES (?,?,?,?,'AUCTION_FINAL',
-                    CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-            ON CONFLICT(league_id,team_id,player_id)
-            DO UPDATE SET
-                prezzo_acquisto=excluded.prezzo_acquisto,
-                fonte='AUCTION_FINAL',
-                updated_at=CURRENT_TIMESTAMP
-        """, (
-            league_id,team_id,player_id,prezzo
-        ))
-
-        # 5) Budget ricalcolato direttamente nel DB senza query Python.
-        cur.execute("""
-            INSERT INTO team_budgets (
-                league_id,team_id,budget_impostato,
-                valore_acquisti,spesa_effettiva,updated_at
-            )
-            SELECT
-                ?,
-                ?,
-                COALESCE(tb.budget_impostato,r.budget_iniziale,500),
-                x.valore,
-                CASE
-                    WHEN x.valore <= COALESCE(
-                        r.soglia_budget,r.budget_iniziale,500
-                    )
-                    THEN x.valore
-                    ELSE
-                        COALESCE(r.soglia_budget,r.budget_iniziale,500)
-                        +
-                        (
-                            x.valore
-                            - COALESCE(
-                                r.soglia_budget,r.budget_iniziale,500
-                            )
-                        )
-                        * COALESCE(r.moltiplicatore_oltre_soglia,1)
-                END,
-                CURRENT_TIMESTAMP
-            FROM league_rules r
-            LEFT JOIN team_budgets tb
-              ON tb.league_id=r.league_id
-             AND tb.team_id=?
-            CROSS JOIN (
-                SELECT
-                    COALESCE((
-                        SELECT SUM(COALESCE(prezzo_assegnazione,0))
-                        FROM league_players
-                        WHERE league_id=?
-                          AND stato='ASSEGNATO'
-                          AND assigned_team_id=?
-                    ),0)
-                    +
-                    COALESCE((
-                        SELECT SUM(COALESCE(costo,0))
-                        FROM auction_release_costs
-                        WHERE league_id=?
-                          AND team_id=?
-                          AND active=1
-                    ),0)
-                    AS valore
-            ) x
-            WHERE r.league_id=?
-            ON CONFLICT(league_id,team_id)
-            DO UPDATE SET
-                valore_acquisti=excluded.valore_acquisti,
-                spesa_effettiva=excluded.spesa_effettiva,
-                updated_at=CURRENT_TIMESTAMP
-        """, (
-            league_id,team_id,team_id,
-            league_id,team_id,
-            league_id,team_id,
-            league_id
-        ))
-
-        # 6) Storico assegnazione.
-        cur.execute("""
-            INSERT INTO auction_assignment_history (
-                league_id,player_id,team_id,prezzo,stato,
-                assigned_by_user_id,assigned_at
-            )
-            VALUES (?,?,?,?,'ACTIVE',?,CURRENT_TIMESTAMP)
-        """, (
-            league_id,player_id,team_id,prezzo,user_id
-        ))
-
-        # 7) Chiude il lotto.
-        cur.execute("""
-            UPDATE auction_lots
-            SET stato='ASSIGNED',
-                assigned_team_id=?,
-                final_price=?,
-                closed_at=CURRENT_TIMESTAMP
-            WHERE id=? AND league_id=? AND stato='CLOSING'
-        """, (
-            team_id,prezzo,lot_id,league_id
-        ))
-
-        # 8) Libera subito la sessione asta.
-        cur.execute("""
-            UPDATE auction_sessions
-            SET current_lot_id=NULL,
-                stato='READY',
-                updated_at=CURRENT_TIMESTAMP
-            WHERE league_id=? AND current_lot_id=?
-        """, (
-            league_id,lot_id
-        ))
-
-        # 9) Audit essenziale.
-        cur.execute("""
-            INSERT INTO audit_log (
-                league_id,user_id,team_id,azione,
-                entita,entita_id,dettagli_json,created_at
-            )
-            VALUES (?,?,?,'PLAYER_ASSIGNED','PLAYER',?,?,CURRENT_TIMESTAMP)
-        """, (
-            league_id,user_id,team_id,str(player_id),
-            json.dumps({
-                "prezzo": prezzo,
-                "team": nome_team,
-                "lot_id": lot_id,
-                "modalita": "FAST_CLOSE_V148"
-            }, ensure_ascii=False)
-        ))
-
         conn.commit()
-
+        team_id=int(row[1])
         return {
-            "player_id": player_id,
-            "team_id": team_id,
-            "team": nome_team,
-            "prezzo": prezzo,
+            "player_id":int(row[0]),
+            "team_id":team_id,
+            "team":str(nome_team_hint or f"Squadra {team_id}"),
+            "prezzo":float(row[2]),
         }
-
     except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
+        try: conn.rollback()
+        except Exception: pass
         raise
-
     finally:
         _portal_close(conn)
 
@@ -34302,12 +34292,14 @@ def assegna_lotto_migliore_v148(league_id, lot_id):
 def callback_chiudi_assegna_v133(
     league_id,
     lot_id,
-    nome
+    nome,
+    nome_team_hint=""
 ):
     try:
         esito = assegna_lotto_migliore_v148(
             int(league_id),
-            int(lot_id)
+            int(lot_id),
+            nome_team_hint
         )
 
         # Nessun full rerun e nessuna invalidazione globale:
@@ -34856,7 +34848,10 @@ def render_banditore_lotto_live_v244(league_id, lot_id):
                 use_container_width=True,
                 key=f"v244_close_assign_{lot_id}",
                 on_click=callback_chiudi_assegna_v133,
-                args=(league_id,lot_id,live["nome"])
+                args=(
+                    league_id,lot_id,live["nome"],
+                    live.get("current_team_name") or ""
+                )
             )
     else:
         st.warning("Chiusura del lotto in corso.")
@@ -36542,6 +36537,8 @@ def render_bidding_inline_asta_v126():
     V291 - chiusura automatica SQUADRA via bus RAM; zero polling DB SQUADRA.
     """
     league_id = st.session_state.get("ml_league_id")
+    if league_id is not None:
+        assicura_fastpath_asta_v293(int(league_id))
     team_id = st.session_state.get("ml_team_id")
 
     if league_id is None or team_id is None:
