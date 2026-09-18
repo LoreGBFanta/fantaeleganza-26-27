@@ -34512,7 +34512,7 @@ def _foto_giocatore_v351(nome):
 
 
 def render_card_giocatore_live_v140(live):
-    """V351 - testata live con archivio fotografico LOCALE."""
+    """V352 - testata live foto locale; HTML senza indentazione per evitare code-block Markdown."""
     _nome_raw = str(live.get("nome") or "—")
     nome = html.escape(_nome_raw)
     squadra = html.escape(str(live.get("squadra") or "—"))
@@ -34523,74 +34523,43 @@ def render_card_giocatore_live_v140(live):
     ) or "—")
 
     _photo_src = _foto_giocatore_v351(_nome_raw)
-
     if _photo_src:
-        _main_class = "fe-proj-main v351-with-photo"
+        _main_class = "fe-proj-main v352-with-photo"
         _photo_html = (
-            '<div class="v351-player-photo-box">'
-            f'<img class="v351-player-photo" src="{_photo_src}" '
-            f'alt="{nome}" decoding="async">'
+            '<div class="v352-player-photo-box">'
+            f'<img class="v352-player-photo" src="{_photo_src}" alt="{nome}" decoding="async">'
             '</div>'
         )
     else:
         _main_class = "fe-proj-main"
         _photo_html = ""
 
-    st.markdown(
-        f"""
-        <style>
-        .fe-proj-main.v351-with-photo {{
-            flex-direction:row !important;
-            align-items:center !important;
-            gap:18px !important;
-            padding-right:8px;
-        }}
-        .v351-player-photo-box {{
-            flex:0 0 116px;
-            width:116px;
-            height:116px;
-            border-radius:14px;
-            overflow:hidden;
-            background:#eef2f6;
-            border:2px solid rgba(255,255,255,.22);
-        }}
-        .v351-player-photo {{
-            width:100%;
-            height:100%;
-            display:block;
-            object-fit:cover;
-            object-position:center 18%;
-        }}
-        .v351-player-copy {{
-            flex:1 1 auto;
-            min-width:0;
-        }}
-        @media(max-width:700px) {{
-            .fe-proj-main.v351-with-photo {{gap:11px !important;}}
-            .v351-player-photo-box {{
-                flex-basis:86px;
-                width:86px;
-                height:86px;
-                border-radius:11px;
-            }}
-        }}
-        </style>
-        <div class="fe-proj-player">
-          <div class="fe-proj-row">
-            <div class="{_main_class}">
-              {_photo_html}
-              <div class="v351-player-copy">
-                <div class="fe-proj-label">GIOCATORE</div>
-                <div class="fe-proj-name">{nome}</div>
-              </div>
-            </div>
-            <div class="fe-proj-box"><span>SQUADRA</span><strong>{squadra}</strong></div>
-            <div class="fe-proj-box"><span>RUOLO</span><strong>{ruolo}</strong></div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    # IMPORTANTE: nessuno spazio iniziale nelle righe HTML.
+    # Streamlit/Markdown interpreta 4 spazi iniziali come blocco di codice.
+    _css = """<style>
+.fe-proj-main.v352-with-photo{flex-direction:row!important;align-items:center!important;gap:18px!important;padding-right:8px}
+.v352-player-photo-box{flex:0 0 116px;width:116px;height:116px;border-radius:14px;overflow:hidden;background:#eef2f6;border:2px solid rgba(255,255,255,.22)}
+.v352-player-photo{width:100%;height:100%;display:block;object-fit:cover;object-position:center 18%}
+.v352-player-copy{flex:1 1 auto;min-width:0}
+@media(max-width:700px){.fe-proj-main.v352-with-photo{gap:11px!important}.v352-player-photo-box{flex-basis:86px;width:86px;height:86px;border-radius:11px}}
+</style>"""
+
+    _html = (
+        '<div class="fe-proj-player">'
+        '<div class="fe-proj-row">'
+        f'<div class="{_main_class}">'
+        f'{_photo_html}'
+        '<div class="v352-player-copy">'
+        '<div class="fe-proj-label">GIOCATORE</div>'
+        f'<div class="fe-proj-name">{nome}</div>'
+        '</div>'
+        '</div>'
+        f'<div class="fe-proj-box"><span>SQUADRA</span><strong>{squadra}</strong></div>'
+        f'<div class="fe-proj-box"><span>RUOLO</span><strong>{ruolo}</strong></div>'
+        '</div>'
+        '</div>'
     )
+    st.markdown(_css + _html, unsafe_allow_html=True)
 def render_ultime_offerte_proiezione_v165(live):
     """Ultime 3 offerte in formato grande, senza dataframe/toolbar Streamlit."""
     rows = []
