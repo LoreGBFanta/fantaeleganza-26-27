@@ -25956,6 +25956,15 @@ st.markdown(
 
 /* V301 - contenuto principale vicino al bordo superiore */
 /* V302 - elimina anche lo spazio superiore riservato da Streamlit */
+/* V303 - traslazione fisica verso l'alto dell'intero contenuto principale */
+[data-testid="stMainBlockContainer"] {
+    position: relative !important;
+    top: -34px !important;
+}
+[data-testid="stAppViewContainer"] .main .block-container,
+[data-testid="stMain"] .block-container {
+    transform: translateY(-34px) !important;
+}
 [data-testid="stHeader"] {
     height: 0 !important;
     min-height: 0 !important;
