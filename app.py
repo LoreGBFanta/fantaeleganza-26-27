@@ -36204,9 +36204,11 @@ def render_popup_browser_v295(label,key,titolo,corpo_html):
     components.html(
         f"""
         <button id="b_{safe_key}" style="
-          width:100%;height:42px;border:1px solid #d7dee8;border-radius:8px;
-          background:white;color:#071a2f;font-weight:800;cursor:pointer;
-          font-family:inherit">{html.escape(str(label))}</button>
+          width:100%;height:40px;border:1px solid #d7dee8;border-radius:8px;
+          background:white;color:#071a2f;font-weight:700;cursor:pointer;
+          font-family:Arial,sans-serif;font-size:14px;line-height:1.2;
+          display:flex;align-items:center;justify-content:center;
+          padding:0 12px;box-sizing:border-box">{html.escape(str(label))}</button>
         <script>
         (()=>{{
           const btn=document.getElementById('b_{safe_key}');
@@ -36390,7 +36392,7 @@ def render_card_giocatore_squadra_v171(live):
                 "Fonte: Fantacalcio.it · Indisponibili Serie A</div>"
             )
             render_popup_browser_v295(
-                "❌ DETTAGLIO INFORTUNIO E TEMPI DI RECUPERO",
+                "❌ DETTAGLI INFORTUNIO",
                 f"v295_infortunio_{player_id}",
                 "Dettaglio infortunio",
                 _body_inf
@@ -36696,6 +36698,19 @@ def render_bidding_inline_asta_v126():
         st.error(st.session_state.pop("team_bid_error"))
 
     st.markdown("### 📡 ASTA LIVE")
+
+    st.markdown("""
+    <style>
+    [class*="st-key-v134_refresh_team_asta"] button {
+        height:40px !important; min-height:40px !important; max-height:40px !important;
+        padding:0 14px !important; border-radius:8px !important;
+    }
+    [class*="st-key-v134_refresh_team_asta"] button p {
+        margin:0 !important; font-size:14px !important;
+        line-height:1.2 !important; font-weight:700 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     st.button(
         "🔄 AGGIORNA OFFERTE",
