@@ -36930,17 +36930,6 @@ def render_controlli_top_admin_banditore_v154():
         </style>
         """, unsafe_allow_html=True)
 
-    # V323 - stessa tipografia dei controlli superiori anche in BANDITORE.
-    if MODALITA_ACCESSO_ATTIVA == "BANDITORE":
-        st.markdown("""
-        <style>
-        div[class*="st-key-ml154_switch_access_top"],
-        div[class*="st-key-ml322_top_menu_toggle"] {
-            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
     # La sidebar non deve essere visibile, nemmeno come colonna/collapser vuoto.
     st.markdown(
         """
@@ -36965,38 +36954,37 @@ def render_controlli_top_admin_banditore_v154():
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
         }
 
-        /* V322 - barra MENU oro; il trigger non usa expand_more. */
-        div[class*="st-key-ml322_top_menu_toggle"] {
+        /* V324 - MENU IDENTICO tra ADMIN e BANDITORE: barra oro full-width. */
+        div[class*="st-key-ml154_top_menu_wrap"] {
+            width:100% !important;
+        }
+        div[class*="st-key-ml154_top_menu_wrap"] details {
+            width:100% !important;
             border:2px solid #ffc21c !important;
             border-radius:11px !important;
-            min-height:44px !important;
+            background:transparent !important;
             margin-top:8px !important;
             margin-bottom:4px !important;
+            box-sizing:border-box !important;
+        }
+        div[class*="st-key-ml154_top_menu_wrap"] details > summary {
+            width:100% !important;
+            min-height:44px !important;
+            height:44px !important;
             padding:0 14px !important;
             display:flex !important;
             align-items:center !important;
-            justify-content:center !important;
-            background:transparent !important;
-        }
-        div[class*="st-key-ml322_top_menu_toggle"] label {
-            width:100% !important;
-            display:flex !important;
-            align-items:center !important;
-            justify-content:center !important;
-            color:#ffc21c !important;
-            font-weight:900 !important;
-            cursor:pointer !important;
-        }
-        div[class*="st-key-ml322_top_menu_toggle"] label p {
             color:#ffc21c !important;
             font-weight:900 !important;
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+            box-sizing:border-box !important;
         }
-        div[class*="st-key-ml322_top_menu_toggle"] * {
+        div[class*="st-key-ml154_top_menu_wrap"] details > summary * {
+            color:#ffc21c !important;
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
         }
-        div[class*="st-key-ml322_top_menu_toggle"] [data-baseweb="checkbox"] > div:first-child {
-            display:none !important;
+        div[class*="st-key-ml154_top_menu_wrap"] details[open] {
+            padding-bottom:8px !important;
         }
         </style>
         """,
@@ -37026,14 +37014,10 @@ def render_controlli_top_admin_banditore_v154():
 
         st.rerun()
 
-    # V322 - MENU top: niente expander/popover/material icon.
-    _menu_aperto_v322 = st.toggle(
-        "☰  MENU",
-        value=False,
-        key="ml322_top_menu_toggle",
-    )
-    if _menu_aperto_v322:
-        with st.container(key="ml154_top_menu_wrap"):
+    # V324 - ADMIN e BANDITORE usano lo STESSO menu full-width.
+    # Ripristina la struttura grafica corretta visibile nel livello ADMIN.
+    with st.container(key="ml154_top_menu_wrap"):
+        with st.expander("☰  MENU", expanded=False):
             menu_r1c1, menu_r1c2 = st.columns(2)
 
             with menu_r1c1:
