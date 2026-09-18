@@ -1990,7 +1990,6 @@ def render_profilo_utente():
     profilo=carica_profilo_utente()
     if not profilo:
         st.error("Profilo utente non trovato."); return
-    st.subheader("👤 Profilo")
     st.caption("Gestisci i dati del profilo, l'immagine e la password.")
     c1,c2=st.columns([1.1,3.9])
     with c1:
@@ -36788,7 +36787,6 @@ def render_bidding_inline_asta_v126():
         st.warning("Impossibile leggere l'asta live: " + str(errore))
         return
 
-    st.markdown("### 📡 ASTA LIVE")
 
     st.markdown("""
     <style>
@@ -37146,6 +37144,24 @@ def stile_tooltip_hover_banditore_v168():
 
 
 
+def render_intestazione_squadra_v306(sezione):
+    """V306 - intestazione uniforme per tutte le sezioni SQUADRA."""
+    icone = {
+        "DASHBOARD": "🏠", "LISTONE": "☷", "ASTA": "🔨", "ROSA": "👕",
+        "MODULI": "▣", "FORMAZIONI TIPO": "⚽",
+        "VENDUTI AD AVVERSARI": "🔴", "PROFILO": "👤",
+    }
+    nome = str(sezione or "").upper()
+    icona = icone.get(nome, "▣")
+    st.markdown(
+        '<div class="v306-section-title">'
+        '<span class="v306-section-icon">' + html.escape(icona) + '</span>'
+        '<span class="v306-section-text">' + html.escape(nome) + '</span>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
 def render_navigazione_e_pagina():
     # V268 - ADMIN e BANDITORE: CAMBIA LIVELLO ACCESSO + MENU
     # vengono renderizzati entrambi in alto, prima della navbar.
@@ -37209,6 +37225,23 @@ def render_navigazione_e_pagina():
             st.session_state["_v297_nav_fast_once"] = True
 
 
+    st.markdown("""
+    <style>
+    .v306-section-title {
+        display:flex; align-items:center; gap:12px;
+        margin:22px 0 24px 6px; padding:0; line-height:1;
+    }
+    .v306-section-icon {
+        display:inline-flex; align-items:center; justify-content:center;
+        width:30px; min-width:30px; font-size:26px; line-height:30px;
+    }
+    .v306-section-text {
+        font-family:Arial,sans-serif; font-size:26px; line-height:30px;
+        font-weight:800; color:#0f172a; letter-spacing:0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.markdown(
         '<div class="nav-title">Navigazione</div>',
         unsafe_allow_html=True
@@ -37234,6 +37267,10 @@ def render_navigazione_e_pagina():
 
     sezione = st.session_state.pagina
     _page_perf_start = time.perf_counter()
+
+    # V306 - stessa intestazione per tutte le sezioni del livello SQUADRA.
+    if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
+        render_intestazione_squadra_v306(sezione)
 
 
     # ============================================================
@@ -37366,9 +37403,6 @@ def render_navigazione_e_pagina():
 
     elif sezione == "DASHBOARD":
 
-        st.subheader(
-            "📊 Dashboard"
-        )
 
         snapshot_disponibili = (
             elenco_snapshot(PROFILO_ATTIVO)
@@ -37693,7 +37727,6 @@ def render_navigazione_e_pagina():
 
     elif sezione == "LISTONE":
 
-        st.subheader("☷ Listone giocatori")
         st.caption(
             "Listone ufficiale della lega · sola consultazione. "
             "Il caricamento e gli aggiornamenti sono gestiti dall'Admin."
@@ -37824,7 +37857,6 @@ def render_navigazione_e_pagina():
 
     elif sezione == "VENDUTI AD AVVERSARI":
 
-        st.subheader("🔴 Venduti ad avversari")
 
         league_id = (
             st.session_state.get("ml_league_id")
@@ -37865,9 +37897,6 @@ def render_navigazione_e_pagina():
 
     elif sezione == "ROSA":
 
-        st.subheader(
-            "👕 La mia rosa"
-        )
 
         _rosa_refresh_league_id = st.session_state.get("ml_league_id")
         _rosa_refresh_team_id = st.session_state.get("ml_team_id")
@@ -38164,9 +38193,6 @@ def render_navigazione_e_pagina():
 
     elif sezione == "FORMAZIONI TIPO":
 
-        st.subheader(
-            "⚽ Formazioni tipo Serie A 2026/27"
-        )
 
         dati = (
             carica_probabili_web()
