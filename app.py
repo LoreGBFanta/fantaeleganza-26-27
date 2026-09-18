@@ -37165,7 +37165,7 @@ def render_intestazione_squadra_v307(sezione):
         'aria-hidden="true" focusable="false">' + path + '</svg>'
     )
     st.markdown(
-        '<div class="v306-section-title">'
+        '<div class="v306-section-title v309-section-' + html.escape(nome.replace(" ", "-")) + '">'
         '<span class="v306-section-icon">' + icona + '</span>'
         '<span class="v306-section-text">' + html.escape(nome) + '</span>'
         '</div>',
@@ -37261,6 +37261,16 @@ def render_navigazione_e_pagina():
         fill:#0a3157;
         stroke:#0a3157;
     }
+    .v309-section-FORMAZIONI-TIPO .v307-section-svg {
+        stroke:#0a3157 !important;
+    }
+    .v309-section-VENDUTI-AD-AVVERSARI .v307-section-svg {
+        stroke:#0a3157 !important;
+    }
+    .v309-section-VENDUTI-AD-AVVERSARI .v307-section-svg circle {
+        fill:#0a3157 !important;
+        stroke:#0a3157 !important;
+    }
     .v306-section-text {
         font-family:Arial,sans-serif; font-size:26px; line-height:30px;
         font-weight:800; color:#0f172a; letter-spacing:0;
@@ -37312,6 +37322,11 @@ def render_navigazione_e_pagina():
     [class*="st-key-nav_VENDUTI_AD_AVVERSARI"] button p::before {
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black'/%3E%3C/svg%3E");
+    }
+    /* V309 - icone richieste esplicitamente blu */
+    [class*="st-key-nav_FORMAZIONI_TIPO"] button p::before,
+    [class*="st-key-nav_VENDUTI_AD_AVVERSARI"] button p::before {
+        background:#0a3157 !important;
     }
     [class*="st-key-nav_PROFILO"] button p::before {
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='M4 21c.8-5 3.5-7 8-7s7.2 2 8 7'/%3E%3C/svg%3E");
