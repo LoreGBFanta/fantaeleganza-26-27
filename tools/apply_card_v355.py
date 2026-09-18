@@ -64,3 +64,5 @@ py_compile.compile(str(p),doraise=True)
 print("V355 OK: ast.parse + py_compile")
 
 # trigger V355
+
+# trigger after validator
