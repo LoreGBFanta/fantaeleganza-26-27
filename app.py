@@ -36932,17 +36932,36 @@ def render_controlli_top_admin_banditore_v154():
             display: none !important;
         }
 
-        /* V328 - layout BANDITORE applicato identico anche ad ADMIN. */
+        /* V329 - SCREENSHOT 1: modello grafico unico ADMIN/BANDITORE. */
+        div[class*="st-key-ml154_switch_access_top"] {
+            width:100% !important;
+        }
         div[class*="st-key-ml154_switch_access_top"] button {
             width:100% !important;
             min-height:54px !important;
             height:54px !important;
+            padding:0 14px !important;
+            border:0 !important;
             border-radius:10px !important;
-            font-weight:850 !important;
+            background:#ff4b4b !important;
+            color:#111827 !important;
+            box-shadow:none !important;
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+            font-size:14px !important;
+            font-weight:500 !important;
+        }
+        div[class*="st-key-ml154_switch_access_top"] button:hover,
+        div[class*="st-key-ml154_switch_access_top"] button:focus,
+        div[class*="st-key-ml154_switch_access_top"] button:active {
+            background:#ff4b4b !important;
+            color:#111827 !important;
+            border:0 !important;
         }
         div[class*="st-key-ml154_switch_access_top"] button p {
+            color:#111827 !important;
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+            font-size:14px !important;
+            font-weight:500 !important;
         }
 
         /* V326 - MENU ADMIN/BANDITORE: stessa identica barra expander oro. */
@@ -36951,7 +36970,7 @@ def render_controlli_top_admin_banditore_v154():
         }
         div[class*="st-key-ml154_top_menu_wrap"] details {
             width:100% !important;
-            border:2px solid #ffc21c !important;
+            border:2px solid #ffb000 !important;
             border-radius:11px !important;
             background:transparent !important;
             margin-top:8px !important;
@@ -36960,12 +36979,13 @@ def render_controlli_top_admin_banditore_v154():
         }
         div[class*="st-key-ml154_top_menu_wrap"] details > summary {
             width:100% !important;
-            min-height:44px !important;
-            height:44px !important;
-            padding:0 14px !important;
+            min-height:48px !important;
+            height:48px !important;
+            padding:0 16px !important;
             display:flex !important;
             align-items:center !important;
-            color:#ffc21c !important;
+            justify-content:flex-start !important;
+            color:#ffb000 !important;
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
             font-weight:900 !important;
             box-sizing:border-box !important;
@@ -36974,13 +36994,14 @@ def render_controlli_top_admin_banditore_v154():
            Non sovrascrivere il font Material Symbols della freccia Streamlit. */
         div[class*="st-key-ml154_top_menu_wrap"] details > summary p,
         div[class*="st-key-ml154_top_menu_wrap"] details > summary span:not([data-testid="stIconMaterial"]) {
-            color:#ffc21c !important;
+            color:#ffb000 !important;
             font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
-            font-weight:900 !important;
+            font-weight:700 !important;
+            font-size:14px !important;
         }
         div[class*="st-key-ml154_top_menu_wrap"] details > summary [data-testid="stIconMaterial"] {
             font-family:"Material Symbols Rounded","Material Symbols Outlined","Material Icons" !important;
-            color:#ffc21c !important;
+            color:#ffb000 !important;
             font-weight:normal !important;
             font-style:normal !important;
             letter-spacing:normal !important;
