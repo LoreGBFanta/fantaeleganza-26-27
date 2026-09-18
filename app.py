@@ -35003,9 +35003,12 @@ def render_banditore_asta():
     [class*="st-key-v153_undo_auction_open_"] button p,
     [class*="st-key-v134_refresh_banditore"] button p {
         margin:0 !important;
-        font-size:13px !important;
-        line-height:1.1 !important;
-        font-weight:700 !important;
+        color:#0a3157 !important;
+        font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+        font-size:14px !important;
+        line-height:1.2 !important;
+        font-weight:400 !important;
+        letter-spacing:0 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -35014,7 +35017,7 @@ def render_banditore_asta():
 
     with _v343_undo_col:
         if st.button(
-            "↩️ UNDO",
+            "↶ UNDO",
             use_container_width=True,
             key=f"v153_undo_auction_open_{league_id}",
         ):
@@ -35022,7 +35025,7 @@ def render_banditore_asta():
 
     with _v343_refresh_col:
         st.button(
-            "🔄 AGGIORNA OFFERTE",
+            "⟳ AGGIORNA OFFERTE",
             use_container_width=True,
             key="v134_refresh_banditore",
         )
