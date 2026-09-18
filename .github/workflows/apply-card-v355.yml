@@ -1,0 +1,22 @@
+name: Apply Card V355
+on:
+  push:
+    branches: [ feature/card-v355-static-photo ]
+    paths:
+      - "tools/apply_card_v355.py"
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch and validate app.py
+        run: python tools/apply_card_v355.py
+      - name: Commit app.py
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py
+          git commit -m "V355 Card Banditore con foto statica"
+          git push
