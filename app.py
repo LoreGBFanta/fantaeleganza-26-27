@@ -37235,8 +37235,8 @@ def render_navigazione_e_pagina():
         ]
     elif MODALITA_ACCESSO_ATTIVA == "BANDITORE":
         PAGINE = [
-            ("🔨", "GESTIONE ASTA"),
-            ("📜", "STORICO ASTA"),
+            ("⚒", "GESTIONE ASTA"),
+            ("▤", "STORICO ASTA"),
         ]
     else:
         PAGINE = [
@@ -37318,7 +37318,7 @@ def render_navigazione_e_pagina():
         justify-content:center !important;
         gap:7px !important;
     }
-    [class*="st-key-nav_"] button p::before {
+    [class*="st-key-nav_DASHBOARD"] button p::before {
         content:"";
         width:17px;
         height:17px;
@@ -37330,24 +37330,66 @@ def render_navigazione_e_pagina():
         mask-repeat:no-repeat;
         mask-position:center;
         mask-size:contain;
-    }
-    [class*="st-key-nav_DASHBOARD"] button p::before {
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M3 11.5 12 4l9 7.5M5.5 10.5V20h13v-9.5M9.5 20v-6h5v6'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M3 11.5 12 4l9 7.5M5.5 10.5V20h13v-9.5M9.5 20v-6h5v6'/%3E%3C/svg%3E");
     }
     [class*="st-key-nav_LISTONE"] button p::before {
+        content:"";
+        width:17px;
+        height:17px;
+        flex:0 0 17px;
+        background:#0a3157;
+        -webkit-mask-repeat:no-repeat;
+        -webkit-mask-position:center;
+        -webkit-mask-size:contain;
+        mask-repeat:no-repeat;
+        mask-position:center;
+        mask-size:contain;
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='M8 6h13M8 12h13M8 18h13'/%3E%3Ccircle cx='3.5' cy='6' r='1'/%3E%3Ccircle cx='3.5' cy='12' r='1'/%3E%3Ccircle cx='3.5' cy='18' r='1'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='M8 6h13M8 12h13M8 18h13'/%3E%3Ccircle cx='3.5' cy='6' r='1'/%3E%3Ccircle cx='3.5' cy='12' r='1'/%3E%3Ccircle cx='3.5' cy='18' r='1'/%3E%3C/svg%3E");
     }
     [class*="st-key-nav_ASTA"] button p::before {
+        content:"";
+        width:17px;
+        height:17px;
+        flex:0 0 17px;
+        background:#0a3157;
+        -webkit-mask-repeat:no-repeat;
+        -webkit-mask-position:center;
+        -webkit-mask-size:contain;
+        mask-repeat:no-repeat;
+        mask-position:center;
+        mask-size:contain;
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='m14 4 6 6M12 6l6 6M4 20l9-9M3 21l3-1-2-2-1 3Zm8-16 4-4 6 6-4 4'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='m14 4 6 6M12 6l6 6M4 20l9-9M3 21l3-1-2-2-1 3Zm8-16 4-4 6 6-4 4'/%3E%3C/svg%3E");
     }
     [class*="st-key-nav_ROSA"] button p::before {
+        content:"";
+        width:17px;
+        height:17px;
+        flex:0 0 17px;
+        background:#0a3157;
+        -webkit-mask-repeat:no-repeat;
+        -webkit-mask-position:center;
+        -webkit-mask-size:contain;
+        mask-repeat:no-repeat;
+        mask-position:center;
+        mask-size:contain;
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linejoin='round' d='M8 4 4 6 2 11l4 2v8h12v-8l4-2-2-5-4-2-2 3h-4L8 4Z'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linejoin='round' d='M8 4 4 6 2 11l4 2v8h12v-8l4-2-2-5-4-2-2 3h-4L8 4Z'/%3E%3C/svg%3E");
     }
     [class*="st-key-nav_MODULI"] button p::before {
+        content:"";
+        width:17px;
+        height:17px;
+        flex:0 0 17px;
+        background:#0a3157;
+        -webkit-mask-repeat:no-repeat;
+        -webkit-mask-position:center;
+        -webkit-mask-size:contain;
+        mask-repeat:no-repeat;
+        mask-position:center;
+        mask-size:contain;
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='4' width='20' height='16' rx='1.5' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath fill='none' stroke='black' stroke-width='2' d='M12 4v16M2 8h3v8H2M22 8h-3v8h3'/%3E%3Ccircle cx='12' cy='12' r='2.5' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='4' width='20' height='16' rx='1.5' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath fill='none' stroke='black' stroke-width='2' d='M12 4v16M2 8h3v8H2M22 8h-3v8h3'/%3E%3Ccircle cx='12' cy='12' r='2.5' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E");
     }
@@ -37358,6 +37400,13 @@ def render_navigazione_e_pagina():
     [class*="st-key-nav_ROSE_AVVERSARI"] button p::before {
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='black'/%3E%3C/svg%3E");
+    }
+    /* V319 - BANDITORE: icone reali monocromatiche, nessun pseudo-elemento */
+    [class*="st-key-nav_GESTIONE_ASTA"] button,
+    [class*="st-key-nav_STORICO_ASTA"] button,
+    [class*="st-key-nav_GESTIONE_ASTA"] button p,
+    [class*="st-key-nav_STORICO_ASTA"] button p {
+        color:#0a3157 !important;
     }
     /* V315 - i due simboli sono nel testo reale del bottone.
        Nasconde il vecchio pseudo-elemento quadrato sulle posizioni 6 e 7. */
@@ -37408,6 +37457,17 @@ def render_navigazione_e_pagina():
         font-weight:900 !important;
     }
     [class*="st-key-nav_PROFILO"] button p::before {
+        content:"";
+        width:17px;
+        height:17px;
+        flex:0 0 17px;
+        background:#0a3157;
+        -webkit-mask-repeat:no-repeat;
+        -webkit-mask-position:center;
+        -webkit-mask-size:contain;
+        mask-repeat:no-repeat;
+        mask-position:center;
+        mask-size:contain;
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='M4 21c.8-5 3.5-7 8-7s7.2 2 8 7'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='M4 21c.8-5 3.5-7 8-7s7.2 2 8 7'/%3E%3C/svg%3E");
     }
