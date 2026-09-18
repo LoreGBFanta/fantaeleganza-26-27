@@ -39108,3 +39108,129 @@ st.session_state["_ml38_last_full_run_seconds"] = round(
 )
 
 render_navigazione_e_pagina()
+
+
+# ============================================================
+# V330 - FINAL LAYOUT OVERRIDE
+# Screenshot 2026-09-18 14:31 is the visual reference.
+# This CSS is deliberately emitted LAST, after every ADMIN/BANDITORE page,
+# so no section-specific stylesheet can alter the two shared top bars.
+# ============================================================
+if MODALITA_ACCESSO_ATTIVA in ("ADMIN", "BANDITORE"):
+    st.markdown("""
+    <style>
+    /* CAMBIA LIVELLO ACCESSO - identical in ADMIN and BANDITORE */
+    div[class*="st-key-ml154_switch_access_top"] {
+        width:100% !important;
+        margin:0 !important;
+        padding:0 !important;
+    }
+    div[class*="st-key-ml154_switch_access_top"] button,
+    div[class*="st-key-ml154_switch_access_top"] button:hover,
+    div[class*="st-key-ml154_switch_access_top"] button:focus,
+    div[class*="st-key-ml154_switch_access_top"] button:active {
+        width:100% !important;
+        min-height:54px !important;
+        height:54px !important;
+        margin:0 !important;
+        padding:0 14px !important;
+        border:0 !important;
+        border-radius:10px !important;
+        background:#ff4b4b !important;
+        color:#111827 !important;
+        box-shadow:none !important;
+    }
+    div[class*="st-key-ml154_switch_access_top"] button p {
+        margin:0 !important;
+        padding:0 !important;
+        color:#111827 !important;
+        font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+        font-size:14px !important;
+        line-height:1.2 !important;
+        font-weight:500 !important;
+        letter-spacing:0 !important;
+    }
+
+    /* MENU - identical in ADMIN and BANDITORE */
+    div[class*="st-key-ml154_top_menu_wrap"] {
+        width:100% !important;
+        margin:8px 0 4px 0 !important;
+        padding:0 !important;
+    }
+    div[class*="st-key-ml154_top_menu_wrap"] details {
+        width:100% !important;
+        margin:0 !important;
+        padding:0 !important;
+        border:2px solid #ffb000 !important;
+        border-radius:11px !important;
+        background:transparent !important;
+        box-shadow:none !important;
+        box-sizing:border-box !important;
+    }
+    div[class*="st-key-ml154_top_menu_wrap"] details > summary {
+        width:100% !important;
+        min-height:48px !important;
+        height:48px !important;
+        margin:0 !important;
+        padding:0 16px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:flex-start !important;
+        gap:8px !important;
+        box-sizing:border-box !important;
+        color:#ffb000 !important;
+        background:transparent !important;
+        font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+        font-size:14px !important;
+        line-height:1.2 !important;
+        font-weight:700 !important;
+        letter-spacing:0 !important;
+    }
+    div[class*="st-key-ml154_top_menu_wrap"] details > summary p,
+    div[class*="st-key-ml154_top_menu_wrap"] details > summary span:not([data-testid="stIconMaterial"]) {
+        margin:0 !important;
+        padding:0 !important;
+        color:#ffb000 !important;
+        font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+        font-size:14px !important;
+        line-height:1.2 !important;
+        font-weight:700 !important;
+        letter-spacing:0 !important;
+    }
+    div[class*="st-key-ml154_top_menu_wrap"] details > summary [data-testid="stIconMaterial"] {
+        font-family:"Material Symbols Rounded","Material Symbols Outlined","Material Icons" !important;
+        color:#ffb000 !important;
+        font-size:18px !important;
+        font-weight:normal !important;
+        font-style:normal !important;
+        letter-spacing:normal !important;
+        text-transform:none !important;
+        white-space:nowrap !important;
+        direction:ltr !important;
+        font-feature-settings:"liga" !important;
+        -webkit-font-feature-settings:"liga" !important;
+        -webkit-font-smoothing:antialiased !important;
+    }
+    div[class*="st-key-ml154_top_menu_wrap"] details[open] {
+        padding-bottom:8px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# V330 - ADMIN typography: force Century Gothic AFTER all ADMIN page CSS.
+# Streamlit Material icons are explicitly excluded/restored.
+if MODALITA_ACCESSO_ATTIVA == "ADMIN":
+    st.markdown("""
+    <style>
+    [data-testid="stAppViewContainer"] :not([data-testid="stIconMaterial"]),
+    [data-testid="stMain"] :not([data-testid="stIconMaterial"]) {
+        font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+    }
+    [data-testid="stIconMaterial"] {
+        font-family:"Material Symbols Rounded","Material Symbols Outlined","Material Icons" !important;
+        font-feature-settings:"liga" !important;
+        -webkit-font-feature-settings:"liga" !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
