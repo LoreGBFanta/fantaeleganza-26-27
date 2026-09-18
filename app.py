@@ -28098,7 +28098,23 @@ def render_storico_asta_v147():
     assicura_schema_storico_asta_v147(league_id)
 
 
-    _storico_ctrl1, _storico_ctrl2, _storico_ctrl3 = st.columns(3)
+    # V346 - STORICO ASTA: AGGIORNA | UNDO | RESET SPESE | RESET ASSEGNAZIONI.
+    # UNDO apre direttamente le ultime 10 operazioni, senza tasto "Ultime operazioni".
+    st.markdown("""
+    <style>
+    [class*="st-key-v152_refresh_storico_asta_"] button p,
+    [class*="st-key-v346_undo_storico_asta_"] button p,
+    [class*="st-key-v154_reset_expenses_history_open_"] button p,
+    [class*="st-key-v179_reset_assignments_history_open_"] button p {
+        color:#0a3157 !important;
+        font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+        font-weight:400 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    _storico_ctrl1, _storico_ctrl2, _storico_ctrl3, _storico_ctrl4 = st.columns(4)
+
     with _storico_ctrl1:
         if st.button(
             "⟳ AGGIORNA",
@@ -28111,19 +28127,25 @@ def render_storico_asta_v147():
 
     with _storico_ctrl2:
         if st.button(
-            "♻️ RESET SPESE",
+            "↶ UNDO",
             use_container_width=True,
-            key=f"v154_reset_expenses_history_open_{league_id}",
-            
+            key=f"v346_undo_storico_asta_{league_id}"
         ):
-            dialog_reset_spese_asta_v153(league_id)
+            dialog_undo_asta_v153(league_id)
 
     with _storico_ctrl3:
         if st.button(
-            "⚠️ RESET ASSEGNAZIONI",
+            "↺ RESET SPESE",
+            use_container_width=True,
+            key=f"v154_reset_expenses_history_open_{league_id}",
+        ):
+            dialog_reset_spese_asta_v153(league_id)
+
+    with _storico_ctrl4:
+        if st.button(
+            "△ RESET ASSEGNAZIONI",
             use_container_width=True,
             key=f"v179_reset_assignments_history_open_{league_id}",
-            
         ):
             dialog_reset_assegnazioni_v179(league_id)
 
