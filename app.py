@@ -34456,32 +34456,63 @@ def callback_chiudi_assegna_v133(
 
 
 # ============================================================
-# V350 - ARCHIVIO FOTO GIOCATORI (BASELINE PRE-CARD V346)
+# V351 - ARCHIVIO FOTO LOCALE GIOCATORI
+# Baseline PRE CARD = V346
 # ============================================================
-# Archivio statico: nessuna ricerca web, API o query DB durante l'asta.
-# Le URL vengono verificate e aggiunte fuori dal percorso critico dell'asta.
-# Preferenza: fonti riutilizzabili/licenze chiare (es. Wikimedia Commons).
-PLAYER_PHOTO_ARCHIVE_V350 = {
-    # Nome Listone -> URL immagine stabile
-    "DOEKHI": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Danilho_Doekhi.jpg?width=360",
-    "DANILHO DOEKHI": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Danilho_Doekhi.jpg?width=360",
-    "DANILHO RAIMUND DOEKHI": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Danilho_Doekhi.jpg?width=360",
+# Le immagini risiedono nel repository in:
+#   assets/players/<nome_file>
+# e vengono lette una sola volta per processo grazie a st.cache_data.
+# Nessun hotlink, API, ricerca web, polling o query Turso durante l'asta.
+
+PLAYER_PHOTO_FILES_V351 = {
+    "DOEKHI": "doekhi.webp",
+    "DANILHO DOEKHI": "doekhi.webp",
+    "DANILHO RAIMUND DOEKHI": "doekhi.webp",
+    "DANILHO RAIMUNDO DOEKHI": "doekhi.webp",
 }
 
-def _normalizza_nome_foto_v350(nome):
+def _normalizza_nome_foto_v351(nome):
     import unicodedata
     _s = str(nome or "").strip().upper()
-    _s = "".join(c for c in unicodedata.normalize("NFKD", _s)
-                 if not unicodedata.combining(c))
+    _s = "".join(
+        c for c in unicodedata.normalize("NFKD", _s)
+        if not unicodedata.combining(c)
+    )
     _s = re.sub(r"[^A-Z0-9]+", " ", _s)
     return re.sub(r"\s+", " ", _s).strip()
 
-def _foto_giocatore_v350(nome):
-    return PLAYER_PHOTO_ARCHIVE_V350.get(_normalizza_nome_foto_v350(nome), "")
+@st.cache_data(show_spinner=False)
+def _foto_locale_data_uri_v351(nome_file):
+    """Legge l'asset locale una volta e restituisce una data URI browser-safe."""
+    import base64
+    import mimetypes
+    from pathlib import Path
+
+    _safe_name = Path(str(nome_file or "")).name
+    if not _safe_name:
+        return ""
+
+    _base_dir = Path(__file__).resolve().parent
+    _path = _base_dir / "assets" / "players" / _safe_name
+    if not _path.is_file():
+        return ""
+
+    try:
+        _raw = _path.read_bytes()
+        if not _raw:
+            return ""
+        _mime = mimetypes.guess_type(_path.name)[0] or "image/webp"
+        return "data:" + _mime + ";base64," + base64.b64encode(_raw).decode("ascii")
+    except Exception:
+        return ""
+
+def _foto_giocatore_v351(nome):
+    _file = PLAYER_PHOTO_FILES_V351.get(_normalizza_nome_foto_v351(nome), "")
+    return _foto_locale_data_uri_v351(_file) if _file else ""
 
 
 def render_card_giocatore_live_v140(live):
-    """V350 - testata live con foto giocatore da archivio statico."""
+    """V351 - testata live con archivio fotografico LOCALE."""
     _nome_raw = str(live.get("nome") or "—")
     nome = html.escape(_nome_raw)
     squadra = html.escape(str(live.get("squadra") or "—"))
@@ -34491,14 +34522,14 @@ def render_card_giocatore_live_v140(live):
         else live.get("ruolo_mantra")
     ) or "—")
 
-    _photo_url = _foto_giocatore_v350(_nome_raw)
-    if _photo_url:
-        _main_class = "fe-proj-main v350-with-photo"
+    _photo_src = _foto_giocatore_v351(_nome_raw)
+
+    if _photo_src:
+        _main_class = "fe-proj-main v351-with-photo"
         _photo_html = (
-            '<div class="v350-player-photo-box">'
-            f'<img class="v350-player-photo" src="{html.escape(_photo_url, quote=True)}" '
-            f'alt="{nome}" loading="eager" decoding="async" '
-            'onerror="this.parentElement.style.display=\'none\'">'
+            '<div class="v351-player-photo-box">'
+            f'<img class="v351-player-photo" src="{_photo_src}" '
+            f'alt="{nome}" decoding="async">'
             '</div>'
         )
     else:
@@ -34508,13 +34539,13 @@ def render_card_giocatore_live_v140(live):
     st.markdown(
         f"""
         <style>
-        .fe-proj-main.v350-with-photo {{
+        .fe-proj-main.v351-with-photo {{
             flex-direction:row !important;
             align-items:center !important;
             gap:18px !important;
             padding-right:8px;
         }}
-        .v350-player-photo-box {{
+        .v351-player-photo-box {{
             flex:0 0 116px;
             width:116px;
             height:116px;
@@ -34523,21 +34554,24 @@ def render_card_giocatore_live_v140(live):
             background:#eef2f6;
             border:2px solid rgba(255,255,255,.22);
         }}
-        .v350-player-photo {{
+        .v351-player-photo {{
             width:100%;
             height:100%;
             display:block;
             object-fit:cover;
-            object-position:center 20%;
+            object-position:center 18%;
         }}
-        .v350-player-copy {{
+        .v351-player-copy {{
             flex:1 1 auto;
             min-width:0;
         }}
         @media(max-width:700px) {{
-            .fe-proj-main.v350-with-photo {{gap:11px !important;}}
-            .v350-player-photo-box {{
-                flex-basis:86px; width:86px; height:86px; border-radius:11px;
+            .fe-proj-main.v351-with-photo {{gap:11px !important;}}
+            .v351-player-photo-box {{
+                flex-basis:86px;
+                width:86px;
+                height:86px;
+                border-radius:11px;
             }}
         }}
         </style>
@@ -34545,7 +34579,7 @@ def render_card_giocatore_live_v140(live):
           <div class="fe-proj-row">
             <div class="{_main_class}">
               {_photo_html}
-              <div class="v350-player-copy">
+              <div class="v351-player-copy">
                 <div class="fe-proj-label">GIOCATORE</div>
                 <div class="fe-proj-name">{nome}</div>
               </div>
