@@ -20,7 +20,7 @@ jobs:
       - name: Download verified reusable photos
         shell: python
         run: |
-          import csv, pathlib, urllib.request, urllib.parse
+          import csv, pathlib, urllib.request, urllib.parse, json
           manifest = pathlib.Path("static/players/manifest.csv")
           outdir = pathlib.Path("static/players")
           allowed = ("CC0", "CC BY", "CC-BY", "PUBLIC DOMAIN")
