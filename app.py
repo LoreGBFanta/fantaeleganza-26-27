@@ -26233,7 +26233,7 @@ if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
             'font-weight:900;white-space:nowrap;overflow:hidden;'
             'text-overflow:ellipsis;max-width:100%;">'
             + html.escape(_v300_squadra) + '</div>'
-            '<div style="color:#fff;font-size:clamp(12px,4vw,16px);'
+            '<div style="color:#ffc21c;font-size:clamp(12px,4vw,16px);'
             'font-weight:800;margin-top:5px;white-space:nowrap;overflow:hidden;'
             'text-overflow:ellipsis;max-width:100%;">'
             + html.escape(_v300_lega) + '</div>'
