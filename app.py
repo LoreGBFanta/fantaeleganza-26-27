@@ -196,6 +196,31 @@ div[data-testid="stMainBlockContainer"] div[data-testid="stHorizontalBlock"] {
 }
 
 
+/* V311 - tipografia globale uniforme */
+html, body,
+[data-testid="stAppViewContainer"],
+[data-testid="stSidebar"],
+[data-testid="stMain"],
+.stApp,
+button, input, textarea, select,
+p, span, div, label,
+h1, h2, h3, h4, h5, h6,
+table, th, td,
+.stButton button,
+.stDownloadButton button {
+    font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+}
+
+/* Anche i componenti HTML custom sviluppati nelle versioni precedenti */
+.v306-section-text,
+.nav-title,
+[class*="st-key-nav_"] button p,
+[class*="st-key-v287_"] button p,
+[class*="st-key-v152_refresh_rosa_"] button p,
+[class*="st-key-v134_refresh_team_asta"] button p {
+    font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+}
+
 /* V68 - percentuale IQR accanto al titolo */
 .iqr-gauge-title .iqr-title-percent {
     color: #ffc21c !important;
@@ -36295,7 +36320,7 @@ def render_popup_browser_v295(label,key,titolo,corpo_html):
         <button id="b_{safe_key}" style="
           width:100%;height:40px;border:1px solid #d7dee8;border-radius:8px;
           background:white;color:#071a2f;font-weight:700;cursor:pointer;
-          font-family:Arial,sans-serif;font-size:14px;line-height:1.2;
+          font-size:14px;line-height:1.2;
           display:flex;align-items:center;justify-content:center;
           padding:0 12px;box-sizing:border-box">{html.escape(str(label))}</button>
         <script>
@@ -37272,7 +37297,7 @@ def render_navigazione_e_pagina():
         stroke:#0a3157 !important;
     }
     .v306-section-text {
-        font-family:Arial,sans-serif; font-size:26px; line-height:30px;
+         font-size:26px; line-height:30px;
         font-weight:800; color:#0f172a; letter-spacing:0;
     }
     /* V310 - navbar SQUADRA leggermente più alta e più leggibile */
