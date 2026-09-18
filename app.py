@@ -36917,6 +36917,19 @@ def render_controlli_top_admin_banditore_v154():
     if MODALITA_ACCESSO_ATTIVA not in ("ADMIN", "BANDITORE"):
         return
 
+    # V322 - ADMIN: Century Gothic forzato su tutto il livello.
+    if MODALITA_ACCESSO_ATTIVA == "ADMIN":
+        st.markdown("""
+        <style>
+        html, body, .stApp, [data-testid="stAppViewContainer"],
+        [data-testid="stMain"], button, input, textarea, select,
+        p, span, div, label, h1, h2, h3, h4, h5, h6,
+        table, th, td {
+            font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
     # La sidebar non deve essere visibile, nemmeno come colonna/collapser vuoto.
     st.markdown(
         """
@@ -36936,43 +36949,34 @@ def render_controlli_top_admin_banditore_v154():
             font-weight: 850 !important;
         }
 
-        /* V320 - MENU in alto: pulsante popover, senza details/summary. */
-        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button {
-            width: 100% !important;
-            min-height: 44px !important;
-            height: 44px !important;
-            padding: 0 14px !important;
-            border: 2px solid #ffc21c !important;
-            border-radius: 11px !important;
-            background: transparent !important;
-            color: #ffc21c !important;
-            font-weight: 900 !important;
-            box-shadow: none !important;
-            margin-top: 8px !important;
-            margin-bottom: 4px !important;
+        /* V322 - barra MENU oro; il trigger non usa expand_more. */
+        div[class*="st-key-ml322_top_menu_toggle"] {
+            border:2px solid #ffc21c !important;
+            border-radius:11px !important;
+            min-height:44px !important;
+            margin-top:8px !important;
+            margin-bottom:4px !important;
+            padding:0 14px !important;
+            display:flex !important;
+            align-items:center !important;
+            justify-content:center !important;
+            background:transparent !important;
         }
-        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button * {
-            color: #ffc21c !important;
-        }
-        /* V321 - MENU sempre oro e senza testo interno expand_more. */
-        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button {
+        div[class*="st-key-ml322_top_menu_toggle"] label {
+            width:100% !important;
+            display:flex !important;
+            align-items:center !important;
+            justify-content:center !important;
             color:#ffc21c !important;
-            border-color:#ffc21c !important;
+            font-weight:900 !important;
+            cursor:pointer !important;
         }
-        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button
-        [data-testid="stIconMaterial"],
-        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button
-        span.material-symbols-rounded,
-        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button
-        span.material-icons,
-        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button
-        svg {
+        div[class*="st-key-ml322_top_menu_toggle"] label p {
+            color:#ffc21c !important;
+            font-weight:900 !important;
+        }
+        div[class*="st-key-ml322_top_menu_toggle"] [data-baseweb="checkbox"] > div:first-child {
             display:none !important;
-            visibility:hidden !important;
-            width:0 !important;
-            min-width:0 !important;
-            height:0 !important;
-            overflow:hidden !important;
         }
         </style>
         """,
@@ -37002,10 +37006,14 @@ def render_controlli_top_admin_banditore_v154():
 
         st.rerun()
 
-    # V320 - MENU top ADMIN/BANDITORE: popover nativo.
-    # Evita completamente details/summary, origine della sovrapposizione grafica.
-    with st.container(key="ml154_top_menu_wrap"):
-        with st.popover("☰  MENU", use_container_width=True):
+    # V322 - MENU top: niente expander/popover/material icon.
+    _menu_aperto_v322 = st.toggle(
+        "☰  MENU",
+        value=False,
+        key="ml322_top_menu_toggle",
+    )
+    if _menu_aperto_v322:
+        with st.container(key="ml154_top_menu_wrap"):
             menu_r1c1, menu_r1c2 = st.columns(2)
 
             with menu_r1c1:
@@ -37094,15 +37102,14 @@ def render_controlli_top_admin_banditore_v154():
                     st.session_state.dark_mode = nuovo_dark_top
                     st.rerun()
 
-        # V157 - nel livello BANDITORE non mostriamo la dicitura/versione.
-        if st.session_state.get("ml_modalita_accesso") == "ADMIN":
-            st.markdown(
-                '<div style="color:#5f8db5;font-size:11px;padding:4px 3px 2px 3px;letter-spacing:.2px;">'
-                'MULTILEGA 5.6.3'
-                '</div>',
-                unsafe_allow_html=True,
-            )
-
+    # V157 - nel livello BANDITORE non mostriamo la dicitura/versione.
+    if st.session_state.get("ml_modalita_accesso") == "ADMIN":
+        st.markdown(
+            '<div style="color:#5f8db5;font-size:11px;padding:4px 3px 2px 3px;letter-spacing:.2px;">'
+            'MULTILEGA 5.6.3'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
 @st.fragment(
     run_every=(
