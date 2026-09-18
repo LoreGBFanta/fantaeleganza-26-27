@@ -34512,9 +34512,8 @@ def _foto_giocatore_v351(nome):
 
 
 def render_card_giocatore_live_v140(live):
-    """V352 - testata live foto locale; HTML senza indentazione per evitare code-block Markdown."""
-    _nome_raw = str(live.get("nome") or "—")
-    nome = html.escape(_nome_raw)
+    """V355 - card Banditore con foto statica per player_id, zero I/O Python runtime."""
+    nome = html.escape(str(live.get("nome") or "—"))
     squadra = html.escape(str(live.get("squadra") or "—"))
     _modo_lega = str(st.session_state.get("ml_modalita") or "MANTRA").upper()
     ruolo = html.escape(str(
@@ -34522,44 +34521,47 @@ def render_card_giocatore_live_v140(live):
         else live.get("ruolo_mantra")
     ) or "—")
 
-    _photo_src = _foto_giocatore_v351(_nome_raw)
-    if _photo_src:
-        _main_class = "fe-proj-main v352-with-photo"
-        _photo_html = (
-            '<div class="v352-player-photo-box">'
-            f'<img class="v352-player-photo" src="{_photo_src}" alt="{nome}" decoding="async">'
-            '</div>'
-        )
-    else:
-        _main_class = "fe-proj-main"
-        _photo_html = ""
+    _pid = live.get("player_id") or live.get("id") or live.get("Id")
+    try:
+        _pid = str(int(float(_pid)))
+    except Exception:
+        _pid = ""
 
-    # IMPORTANTE: nessuno spazio iniziale nelle righe HTML.
-    # Streamlit/Markdown interpreta 4 spazi iniziali come blocco di codice.
-    _css = """<style>
-.fe-proj-main.v352-with-photo{flex-direction:row!important;align-items:center!important;gap:18px!important;padding-right:8px}
-.v352-player-photo-box{flex:0 0 116px;width:116px;height:116px;border-radius:14px;overflow:hidden;background:#eef2f6;border:2px solid rgba(255,255,255,.22)}
-.v352-player-photo{width:100%;height:100%;display:block;object-fit:cover;object-position:center 18%}
-.v352-player-copy{flex:1 1 auto;min-width:0}
-@media(max-width:700px){.fe-proj-main.v352-with-photo{gap:11px!important}.v352-player-photo-box{flex-basis:86px;width:86px;height:86px;border-radius:11px}}
-</style>"""
-
-    _html = (
-        '<div class="fe-proj-player">'
-        '<div class="fe-proj-row">'
-        f'<div class="{_main_class}">'
-        f'{_photo_html}'
-        '<div class="v352-player-copy">'
-        '<div class="fe-proj-label">GIOCATORE</div>'
-        f'<div class="fe-proj-name">{nome}</div>'
-        '</div>'
-        '</div>'
-        f'<div class="fe-proj-box"><span>SQUADRA</span><strong>{squadra}</strong></div>'
-        f'<div class="fe-proj-box"><span>RUOLO</span><strong>{ruolo}</strong></div>'
-        '</div>'
-        '</div>'
+    _foto = (
+        f'<div class="fe-v355-photo">'
+        f'<img src="app/static/players/{html.escape(_pid)}.jpg" '
+        f'alt="{nome}" loading="eager" decoding="async" '
+        f'onerror="this.parentElement.style.display=\'none\';'
+        f'this.closest(\'.fe-v355-card\').classList.add(\'fe-v355-no-photo\');">'
+        f'</div>'
+        if _pid else ""
     )
-    st.markdown(_css + _html, unsafe_allow_html=True)
+
+    _css = """
+    <style>
+    .fe-v355-card{display:grid;grid-template-columns:116px minmax(0,1fr);gap:14px;align-items:stretch}
+    .fe-v355-card.fe-v355-no-photo{grid-template-columns:minmax(0,1fr)}
+    .fe-v355-photo{width:116px;height:116px;border-radius:12px;overflow:hidden;background:#101820}
+    .fe-v355-photo img{width:100%;height:100%;display:block;object-fit:cover;object-position:center top}
+    .fe-v355-card .fe-proj-player{margin:0!important;height:100%;box-sizing:border-box}
+    @media(max-width:700px){
+      .fe-v355-card{grid-template-columns:82px minmax(0,1fr);gap:9px}
+      .fe-v355-photo{width:82px;height:96px}
+    }
+    </style>
+    """
+    _card = (
+        '<div class="fe-v355-card">'
+        + _foto
+        + '<div class="fe-proj-player"><div class="fe-proj-row">'
+        + '<div class="fe-proj-main"><div class="fe-proj-label">GIOCATORE</div>'
+        + f'<div class="fe-proj-name">{nome}</div></div>'
+        + f'<div class="fe-proj-box"><span>SQUADRA</span><strong>{squadra}</strong></div>'
+        + f'<div class="fe-proj-box"><span>RUOLO</span><strong>{ruolo}</strong></div>'
+        + '</div></div></div>'
+    )
+    st.markdown(_css + _card, unsafe_allow_html=True)
+
 def render_ultime_offerte_proiezione_v165(live):
     """Ultime 3 offerte in formato grande, senza dataframe/toolbar Streamlit."""
     rows = []
