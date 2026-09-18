@@ -39296,3 +39296,33 @@ if MODALITA_ACCESSO_ATTIVA == "ADMIN":
     }
     </style>
     """, unsafe_allow_html=True)
+
+
+# ============================================================
+# V338 - SQUADRA: fix MENU sidebar
+# Century Gothic resta sul testo; le icone interne Streamlit mantengono
+# Material Symbols, evitando arrow_right / expand_more come testo.
+# ============================================================
+if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] details > summary [data-testid="stIconMaterial"] {
+        font-family:"Material Symbols Rounded","Material Symbols Outlined","Material Icons" !important;
+        font-weight:normal !important;
+        font-style:normal !important;
+        letter-spacing:normal !important;
+        text-transform:none !important;
+        white-space:nowrap !important;
+        word-wrap:normal !important;
+        direction:ltr !important;
+        font-feature-settings:"liga" !important;
+        -webkit-font-feature-settings:"liga" !important;
+        -webkit-font-smoothing:antialiased !important;
+    }
+
+    [data-testid="stSidebar"] details > summary p,
+    [data-testid="stSidebar"] details > summary span:not([data-testid="stIconMaterial"]) {
+        font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
