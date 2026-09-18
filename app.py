@@ -36355,8 +36355,64 @@ def callback_delta_offerta_v287(delta_key,delta):
     st.session_state[str(delta_key)] = float(delta)
 
 
+def attiva_incremento_immediato_dom_v290(lot_id,team_id,incremento,minimo,massimo):
+    """V290 - +/- browser-side senza rerun Streamlit."""
+    _minus_cls=f"st-key-v287_minus_{int(lot_id)}_{int(team_id)}"
+    _plus_cls=f"st-key-v287_plus_{int(lot_id)}_{int(team_id)}"
+    _text_cls=f"st-key-v287_custom_{int(lot_id)}_{int(team_id)}"
+    components.html(
+        f"""
+        <script>
+        (() => {{
+          const MINUS={_minus_cls!r}, PLUS={_plus_cls!r}, TEXT={_text_cls!r};
+          const STEP={float(incremento)!r}, MIN={float(minimo)!r}, MAX={float(massimo)!r};
+          function num(v) {{
+            const n=parseFloat(String(v ?? '').trim().replace(',', '.'));
+            return Number.isFinite(n) ? n : MIN;
+          }}
+          function fmt(n) {{
+            return Number.isInteger(n) ? String(n) : String(Math.round(n*100)/100);
+          }}
+          function setTextarea(ta,value) {{
+            const setter=Object.getOwnPropertyDescriptor(
+              window.parent.HTMLTextAreaElement.prototype,'value'
+            ).set;
+            setter.call(ta,value);
+            ta.dispatchEvent(new window.parent.Event('input',{{bubbles:true}}));
+          }}
+          function bind(cls,delta,mark) {{
+            let doc;
+            try {{ doc=window.parent.document; }} catch(e) {{ return; }}
+            const root=doc.querySelector('.'+cls), textRoot=doc.querySelector('.'+TEXT);
+            if (!root || !textRoot) return;
+            const btn=root.querySelector('button'), ta=textRoot.querySelector('textarea');
+            if (!btn || !ta || btn.dataset[mark]==='1') return;
+            btn.dataset[mark]='1';
+            btn.addEventListener('click',(ev) => {{
+              ev.preventDefault();
+              ev.stopPropagation();
+              ev.stopImmediatePropagation();
+              const next=Math.max(MIN,Math.min(MAX,num(ta.value)+delta));
+              setTextarea(ta,fmt(next));
+              ta.focus({{preventScroll:true}});
+            }},{{capture:true}});
+          }}
+          function apply() {{
+            bind(MINUS,-STEP,'v290Minus');
+            bind(PLUS, STEP,'v290Plus');
+          }}
+          apply();
+          setTimeout(apply,0); setTimeout(apply,50);
+          setTimeout(apply,150); setTimeout(apply,400);
+        }})();
+        </script>
+        """,height=0,width=0,
+    )
+
+
+
 def render_maschera_offerta_squadra_v287(league_id,team_id,stato):
-    """V287 - campo grande, +/- locali robusti, INVIA autorevole; zero polling SQUADRA."""
+    """V290 - +/- browser-side senza rerun; INVIA autorevole; zero polling SQUADRA."""
     team=stato.get("team")
     if team is None:
         return
@@ -36407,6 +36463,10 @@ def render_maschera_offerta_squadra_v287(league_id,team_id,stato):
                       on_click=callback_delta_offerta_v287,args=(delta_key,incremento),
                       use_container_width=True)
 
+        attiva_incremento_immediato_dom_v290(
+            stato["lot_id"],team_id,incremento,minimo,massimo
+        )
+
         st.button("💰   INVIA OFFERTA   →",use_container_width=True,type="primary",
                   key=f"v287_send_{stato['lot_id']}_{team_id}",
                   on_click=callback_bid_personalizzato_v130,
@@ -36425,7 +36485,7 @@ def render_bidding_inline_asta_v126():
     """
     V250 - ASTA SQUADRA: maschera sempre visibile durante il lotto OPEN.
     Se la squadra è leader viene disabilitato esclusivamente INVIA OFFERTA.
-    V287 - fast path: nessun polling automatico SQUADRA durante IDLE o OPEN.
+    V289 - fast path: +/- immediati nel browser; zero polling SQUADRA.
     """
     league_id = st.session_state.get("ml_league_id")
     team_id = st.session_state.get("ml_team_id")
