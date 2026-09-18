@@ -33105,6 +33105,19 @@ def leggi_evento_asta_v291(league_id):
 
 
 @st.fragment(run_every="1s")
+def watcher_apertura_squadra_v292(league_id,last_seq=0):
+    """V292 - ATTESA→OPEN via bus RAM condiviso; zero query periodiche."""
+    evento=leggi_evento_asta_v291(league_id)
+    if (
+        isinstance(evento,dict)
+        and str(evento.get("stato") or "").upper()=="OPEN"
+        and int(evento.get("seq") or 0)>int(last_seq or 0)
+    ):
+        st.session_state[f"_v292_seen_open_{int(league_id)}"]=int(evento["seq"])
+        st.rerun(scope="app")
+
+
+@st.fragment(run_every="1s")
 def watcher_chiusura_squadra_v291(league_id,lot_id):
     """
     V291 - watcher solo RAM: nessuna query e nessuna connessione Turso.
@@ -33134,6 +33147,8 @@ def callback_apri_lotto_v133(league_id, player_id, nome, squadra_reale='', ruolo
             "squadra": str(squadra_reale or ""),
             "ruolo_mantra": str(ruolo_mantra or ""),
         }
+        # V292 - comunica il nuovo lotto OPEN a tutte le SQUADRE.
+        pubblica_evento_asta_v291(league_id,_v276_lot_id,"OPEN")
         invalida_cache_banditore_v156(league_id)
         st.session_state["auctioneer_msg"] = (
             f"Asta aperta su {nome}."
@@ -36565,8 +36580,12 @@ def render_bidding_inline_asta_v126():
             "⏳ Nessun giocatore è attualmente all'asta. "
             "Attendi l'apertura del lotto da parte del Banditore."
         )
-        # V281 - nessun polling Streamlit in background nella pagina SQUADRA:
-        # evita code di eventi che possono ritardare i click anche di decine di secondi.
+        # V292 - ATTESA: controllo solo RAM. All'evento OPEN esegue un unico
+        # rerun che legge il lotto appena aperto e mostra il giocatore.
+        watcher_apertura_squadra_v292(
+            league_id,
+            st.session_state.get(f"_v292_seen_open_{league_id}",0)
+        )
         return
 
     # V171 - card specifica per la SQUADRA: stesso linguaggio grafico del
