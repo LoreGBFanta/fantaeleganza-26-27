@@ -37411,26 +37411,6 @@ def render_navigazione_e_pagina():
         -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='M4 21c.8-5 3.5-7 8-7s7.2 2 8 7'/%3E%3C/svg%3E");
         mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='M4 21c.8-5 3.5-7 8-7s7.2 2 8 7'/%3E%3C/svg%3E");
     }
-    /* V317 - fix BANDITORE: neutralizza le pseudo-icone del menu SQUADRA */
-    [class*="st-key-nav_GESTIONE_ASTA"] button p::before,
-    [class*="st-key-nav_STORICO_ASTA"] button p::before {
-        content:none !important;
-        display:none !important;
-        width:0 !important;
-        height:0 !important;
-        flex:0 0 0 !important;
-        background:transparent !important;
-        -webkit-mask:none !important;
-        mask:none !important;
-    }
-    [class*="st-key-nav_GESTIONE_ASTA"] button p,
-    [class*="st-key-nav_STORICO_ASTA"] button p {
-        display:flex !important;
-        align-items:center !important;
-        justify-content:center !important;
-        gap:7px !important;
-        white-space:nowrap !important;
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -37445,11 +37425,15 @@ def render_navigazione_e_pagina():
         with col:
             # V315 - per FORMAZIONI TIPO e ROSE AVVERSARI l'icona è
             # parte reale dell'etichetta: nessuna dipendenza da pseudo-elementi CSS.
-            _nav_label = (
-                f"{icona}  {pagina_nav}"
-                if pagina_nav in ("FORMAZIONI TIPO", "ROSE AVVERSARI") and icona
-                else pagina_nav
-            )
+            # V318 - etichetta reale del pulsante:
+            # ADMIN/BANDITORE usano sempre la propria icona; SQUADRA mantiene
+            # le icone CSS, salvo i due simboli reali introdotti in V315.
+            if MODALITA_ACCESSO_ATTIVA in ("ADMIN", "BANDITORE") and icona:
+                _nav_label = f"{icona}  {pagina_nav}"
+            elif pagina_nav in ("FORMAZIONI TIPO", "ROSE AVVERSARI") and icona:
+                _nav_label = f"{icona}  {pagina_nav}"
+            else:
+                _nav_label = pagina_nav
             st.button(
                 _nav_label,
                 use_container_width=True,
