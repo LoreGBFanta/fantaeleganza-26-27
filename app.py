@@ -37144,22 +37144,34 @@ def stile_tooltip_hover_banditore_v168():
 
 
 
-def render_intestazione_squadra_v306(sezione):
-    """V306 - intestazione uniforme per tutte le sezioni SQUADRA."""
-    icone = {
-        "DASHBOARD": "🏠", "LISTONE": "☷", "ASTA": "🔨", "ROSA": "👕",
-        "MODULI": "▣", "FORMAZIONI TIPO": "⚽",
-        "VENDUTI AD AVVERSARI": "🔴", "PROFILO": "👤",
-    }
+def render_intestazione_squadra_v307(sezione):
+    """V307 - intestazioni SQUADRA con icone SVG monocromatiche blu scuro."""
     nome = str(sezione or "").upper()
-    icona = icone.get(nome, "▣")
+    paths = {
+        "DASHBOARD": '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-6h5v6"/>',
+        "LISTONE": '<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/>',
+        "ASTA": '<path d="m14 4 6 6M12 6l6 6M4 20l9-9M3 21l3-1-2-2-1 3Z"/><path d="m11 5 4-4 6 6-4 4"/>',
+        "ROSA": '<path d="M8 4 4 6 2 11l4 2v8h12v-8l4-2-2-5-4-2-2 3h-4L8 4Z"/>',
+        # V307 - piccolo campo da calcio
+        "MODULI": '<rect x="2" y="4" width="20" height="16" rx="1.5"/><path d="M12 4v16"/><circle cx="12" cy="12" r="2.5"/><path d="M2 8h3v8H2M22 8h-3v8h3"/>',
+        # V307 - V di spunta
+        "FORMAZIONI TIPO": '<path d="m4 12 5 5L20 6"/>',
+        "VENDUTI AD AVVERSARI": '<circle cx="12" cy="12" r="8" fill="#0a3157"/>',
+        "PROFILO": '<circle cx="12" cy="8" r="4"/><path d="M4 21c.8-5 3.5-7 8-7s7.2 2 8 7"/>',
+    }
+    path = paths.get(nome, '<rect x="4" y="4" width="16" height="16" rx="2"/>')
+    icona = (
+        '<svg class="v307-section-svg" viewBox="0 0 24 24" '
+        'aria-hidden="true" focusable="false">' + path + '</svg>'
+    )
     st.markdown(
         '<div class="v306-section-title">'
-        '<span class="v306-section-icon">' + html.escape(icona) + '</span>'
+        '<span class="v306-section-icon">' + icona + '</span>'
         '<span class="v306-section-text">' + html.escape(nome) + '</span>'
         '</div>',
         unsafe_allow_html=True
     )
+
 
 
 def render_navigazione_e_pagina():
@@ -37235,6 +37247,20 @@ def render_navigazione_e_pagina():
         display:inline-flex; align-items:center; justify-content:center;
         width:30px; min-width:30px; font-size:26px; line-height:30px;
     }
+    .v307-section-svg {
+        width:26px;
+        height:26px;
+        display:block;
+        fill:none;
+        stroke:#0a3157;
+        stroke-width:2;
+        stroke-linecap:round;
+        stroke-linejoin:round;
+    }
+    .v306-section-title .v306-section-icon svg circle:not([r="1"]):only-child {
+        fill:#0a3157;
+        stroke:#0a3157;
+    }
     .v306-section-text {
         font-family:Arial,sans-serif; font-size:26px; line-height:30px;
         font-weight:800; color:#0f172a; letter-spacing:0;
@@ -37270,7 +37296,7 @@ def render_navigazione_e_pagina():
 
     # V306 - stessa intestazione per tutte le sezioni del livello SQUADRA.
     if MODALITA_ACCESSO_ATTIVA == "SQUADRA":
-        render_intestazione_squadra_v306(sezione)
+        render_intestazione_squadra_v307(sezione)
 
 
     # ============================================================
