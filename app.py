@@ -36954,6 +36954,26 @@ def render_controlli_top_admin_banditore_v154():
         div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button * {
             color: #ffc21c !important;
         }
+        /* V321 - MENU sempre oro e senza testo interno expand_more. */
+        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button {
+            color:#ffc21c !important;
+            border-color:#ffc21c !important;
+        }
+        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button
+        [data-testid="stIconMaterial"],
+        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button
+        span.material-symbols-rounded,
+        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button
+        span.material-icons,
+        div[class*="st-key-ml154_top_menu_wrap"] div[data-testid="stPopover"] > button
+        svg {
+            display:none !important;
+            visibility:hidden !important;
+            width:0 !important;
+            min-width:0 !important;
+            height:0 !important;
+            overflow:hidden !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
