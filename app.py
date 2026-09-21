@@ -2939,7 +2939,7 @@ def inizializza_workspace_team_multilega():
                     ultimo_aggiornamento
                 )
                 SELECT
-                    id,
+                    player_id,
                     ruolo_classico,
                     ruolo_mantra,
                     nome,
