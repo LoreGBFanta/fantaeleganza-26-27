@@ -29558,23 +29558,21 @@ def calcola_vincoli_offerta_team_multilega_v239_fast(
             COALESCE(r.budget_illimitato,0),
             COALESCE(r.fair_play_finanziario,0),
             COALESCE(tb.budget_impostato,r.budget_iniziale,500),
-            (SELECT COUNT(*) FROM league_players x
-             WHERE x.league_id=? AND x.stato='ASSEGNATO'
-               AND x.assigned_team_id=?),
-            (SELECT COALESCE(SUM(COALESCE(x.prezzo_assegnazione,0)),0)
-             FROM league_players x
-             WHERE x.league_id=? AND x.stato='ASSEGNATO'
-               AND x.assigned_team_id=?),
-            (SELECT COUNT(*)
+            -- V359: una sola scansione della rosa anziche' tre sottoquery.
+            -- Restituisce gli stessi tre aggregati nella stessa posizione logica.
+            (SELECT json_array(
+                 COUNT(*),
+                 COALESCE(SUM(COALESCE(x.prezzo_assegnazione,0)),0),
+                 COALESCE(SUM(CASE WHEN
+                     UPPER(COALESCE(xc.ruolo_classico,''))='P'
+                     OR UPPER(COALESCE(xc.ruolo_mantra,'')) IN ('P','POR')
+                     THEN 1 ELSE 0 END),0)
+             )
              FROM league_players x
              LEFT JOIN league_player_catalog xc
                ON xc.league_id=x.league_id AND xc.player_id=x.player_id
              WHERE x.league_id=? AND x.stato='ASSEGNATO'
-               AND x.assigned_team_id=?
-               AND (
-                    UPPER(COALESCE(xc.ruolo_classico,''))='P'
-                    OR UPPER(COALESCE(xc.ruolo_mantra,'')) IN ('P','POR')
-               ))
+               AND x.assigned_team_id=?)
         FROM auction_sessions s
         JOIN auction_lots l
           ON l.league_id=s.league_id AND l.id=s.current_lot_id
@@ -29589,8 +29587,6 @@ def calcola_vincoli_offerta_team_multilega_v239_fast(
         LIMIT 1
     """, (
         league_id,user_id,team_id,
-        league_id,team_id,
-        league_id,team_id,
         league_id,team_id,
         team_id,league_id,lot_id
     ))
@@ -29624,8 +29620,12 @@ def calcola_vincoli_offerta_team_multilega_v239_fast(
     budget_illimitato=bool(int(row[19] or 0))
     fair_play_finanziario=bool(int(row[20] or 0))
     budget=float(row[21] if row[21] is not None else budget_default)
-    numero_rosa=int(row[22] or 0); valore_acquisti=float(row[23] or 0)
-    portieri_attuali=int(row[24] or 0)
+    # V359: decodifica dei tre aggregati della rosa restituiti da una sola
+    # sottoquery. Non cambia alcuna regola di budget/portieri/rosa.
+    _rosa_aggregati = json.loads(row[22])
+    numero_rosa=int(_rosa_aggregati[0] or 0)
+    valore_acquisti=float(_rosa_aggregati[1] or 0)
+    portieri_attuali=int(_rosa_aggregati[2] or 0)
     minimo=1.0 if best_before<=0 else round(best_before+incremento,2)
 
     if numero_rosa>=max_giocatori:
@@ -29839,6 +29839,8 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
         """, (league_id, lot_id, team_id, user_id, amount))
 
+        _v359_bids_ms = (time.perf_counter() - _v353_before_history) * 1000
+        _v359_before_audit = time.perf_counter()
         cur.execute("""
             INSERT INTO audit_log (
                 league_id,user_id,team_id,azione,entita,entita_id,
@@ -29861,8 +29863,17 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
         ))
 
         _v353_before_commit = time.perf_counter()
+        _v359_audit_ms = (_v353_before_commit - _v359_before_audit) * 1000
         conn.commit()
+        _v359_commit_ms = (time.perf_counter() - _v353_before_commit) * 1000
         _v353_total_ms = (time.perf_counter() - _v353_t0) * 1000
+        print(
+            "[V359 PERF BID DETAIL] validation={:.0f}ms cas={:.0f}ms "
+            "bids={:.0f}ms audit={:.0f}ms commit={:.0f}ms total={:.0f}ms".format(
+                _v353_validation_ms, _v353_cas_ms, _v359_bids_ms,
+                _v359_audit_ms, _v359_commit_ms, _v353_total_ms,
+            ), flush=True,
+        )
         print(
             "[V353 PERF BID] schema={:.0f}ms conn={:.0f}ms "
             "validazione={:.0f}ms CAS={:.0f}ms storico_audit={:.0f}ms "
