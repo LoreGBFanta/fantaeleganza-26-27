@@ -36335,6 +36335,7 @@ def callback_bid_rapido_v130(league_id, lot_id, team_id, amount):
             "team_id": int(team_id),
             "amount": float(amount),
             "version": int(esito.get("version", 0)),
+            "version_before": int(esito.get("version", 0)) - 1,
             "incremento": float(esito.get("incremento", 1) or 1),
         }
         st.session_state[
@@ -36947,53 +36948,79 @@ def render_maschera_offerta_live_v355(league_id, team_id, stato_iniziale):
     team_id = int(team_id)
     lot_id = int(stato_iniziale["lot_id"])
     guard = f"_v355_mask_initialized_{league_id}_{team_id}_{lot_id}"
+    cache_key = f"_v357_authoritative_state_{league_id}_{team_id}_{lot_id}"
     if not st.session_state.get(guard):
         st.session_state[guard] = True
         stato = stato_iniziale
+        st.session_state[cache_key] = stato
     else:
-        # V356: la conferma del CAS e gia autorevole e committata.
-        # Proiettiamo soltanto il prezzo e il leader nel fragment locale
-        # se la versione del parent coincide ESATTAMENTE con quella pre-CAS.
-        # In ogni altro caso, inclusi errori o offerte concorrenti gia viste,
-        # rimane la lettura autorevole Turso della V355.
-        _v356_t0 = time.perf_counter()
+        # V357: il parent puo' essere gia' stato ricalcolato oppure puo'
+        # contenere la versione del lotto precedente a un altro rilancio.
+        # Il fast path e' ammesso solo su uno stato locale che coincide
+        # esattamente con la versione PRE-CAS realmente validata dal DB.
+        _v357_t0 = time.perf_counter()
         committed = st.session_state.pop("_v356_committed_bid", None)
-        use_committed = (
-            isinstance(committed, dict)
-            and int(committed.get("league_id", -1)) == league_id
-            and int(committed.get("lot_id", -1)) == lot_id
-            and int(committed.get("team_id", -1)) == team_id
-            and int(committed.get("version", 0)) == int(stato_iniziale.get("version", -1)) + 1
-            and str(stato_iniziale.get("stato") or "").upper() == "OPEN"
-            and isinstance(stato_iniziale.get("team"), dict)
-        )
-        if use_committed:
-            stato = dict(stato_iniziale)
+        cached = st.session_state.get(cache_key)
+        base = None
+        reason = "no_committed_result"
+        if isinstance(committed, dict):
+            if (int(committed.get("league_id", -1)) != league_id
+                or int(committed.get("lot_id", -1)) != lot_id
+                or int(committed.get("team_id", -1)) != team_id):
+                reason = "identity_mismatch"
+            elif int(committed.get("version", 0)) != int(committed.get("version_before", -2)) + 1:
+                reason = "cas_version_mismatch"
+            elif (int(stato_iniziale.get("version", -1)) >= int(committed["version"])):
+                # Il parent ha gia' uno snapshot uguale o piu' recente:
+                # non proiettare sopra di esso uno stato potenzialmente vecchio.
+                reason = "parent_already_current"
+            else:
+                for candidate in (cached, stato_iniziale):
+                    if (isinstance(candidate, dict)
+                        and int(candidate.get("lot_id", -1)) == lot_id
+                        and str(candidate.get("stato") or "").upper() == "OPEN"
+                        and isinstance(candidate.get("team"), dict)
+                        and int(candidate.get("version", -1)) == int(committed["version_before"])):
+                        base = candidate
+                        break
+                if base is None:
+                    reason = "no_matching_pre_cas_snapshot"
+        if base is not None:
+            stato = dict(base)
             stato["current_bid"] = float(committed["amount"])
             stato["current_team_id"] = team_id
             stato["version"] = int(committed["version"])
-            stato["bid_count"] = int(stato.get("bid_count") or 0) + 1
-            team = dict(stato_iniziale["team"])
+            stato["bid_count"] = int(base.get("bid_count") or 0) + 1
+            team = dict(base["team"])
             team["can_bid"] = False
             team["motivo"] = "Sei già il miglior offerente."
             team["offerta_minima"] = round(
                 float(committed["amount"]) + float(committed["incremento"]), 2
             )
             stato["team"] = team
-            print("[V356 PERF POST BID] source=committed_CAS "
-                  f"elapsed={(time.perf_counter()-_v356_t0)*1000:.0f}ms", flush=True)
+            # Coerenza anche per eventuali consumatori della proiezione.
+            offerte = [dict(o) for o in base.get("offerte", [])]
+            for o in offerte:
+                o["Migliore"] = "🏆" if int(o.get("team_id") or 0) == team_id else ""
+                if int(o.get("team_id") or 0) == team_id:
+                    o["Offerta"] = float(committed["amount"])
+                    stato["current_team"] = str(o.get("Squadra") or "")
+            stato["offerte"] = offerte
+            st.session_state[cache_key] = stato
+            print("[V357 PERF POST BID] source=committed_CAS "
+                  f"elapsed={(time.perf_counter()-_v357_t0)*1000:.0f}ms", flush=True)
         else:
             try:
                 stato = snapshot_lotto_live_v132(league_id, team_id)
             except Exception as errore:
                 st.warning("Impossibile leggere l'asta live: " + str(errore))
                 return
-            print("[V356 PERF POST BID] source=authoritative_snapshot "
-                  f"elapsed={(time.perf_counter()-_v356_t0)*1000:.0f}ms", flush=True)
+            print("[V357 PERF POST BID] source=authoritative_snapshot "
+                  f"reason={reason} elapsed={(time.perf_counter()-_v357_t0)*1000:.0f}ms", flush=True)
             if stato is None or int(stato["lot_id"]) != lot_id:
-                # Cambio/chiusura lotto: serve un full-run per card e watcher.
                 st.rerun(scope="app")
                 return
+            st.session_state[cache_key] = stato
     render_maschera_offerta_squadra_v287(league_id, team_id, stato)
     pending = st.session_state.get("_v354_bid_pending_perf")
     if isinstance(pending, dict):
