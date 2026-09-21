@@ -36926,6 +36926,44 @@ def render_maschera_offerta_squadra_v287(league_id,team_id,stato):
         <div class="v212-fin-copy"><div class="v212-fin-label">Offerta massima</div>
         <div class="v212-fin-value">{massimo:g}</div></div></div></div>""",unsafe_allow_html=True)
 
+# V355 - isolare i soli widget dell'offerta dal full-run dell'applicazione.
+# Il primo disegno riusa lo snapshot autorevole gia letto dal parent;
+# ogni successivo click nel fragment rilegge il lotto da Turso.
+# I watcher OPEN/CLOSE restano FUORI dal fragment, invariati.
+@st.fragment
+def render_maschera_offerta_live_v355(league_id, team_id, stato_iniziale):
+    league_id = int(league_id)
+    team_id = int(team_id)
+    lot_id = int(stato_iniziale["lot_id"])
+    guard = f"_v355_mask_initialized_{league_id}_{team_id}_{lot_id}"
+    if not st.session_state.get(guard):
+        st.session_state[guard] = True
+        stato = stato_iniziale
+    else:
+        # Nessuna lettura aggiuntiva al caricamento iniziale; sul click
+        # si rilegge lo stato reale, senza ricostruire navbar e workspace.
+        try:
+            stato = snapshot_lotto_live_v132(league_id, team_id)
+        except Exception as errore:
+            st.warning("Impossibile leggere l'asta live: " + str(errore))
+            return
+        if stato is None or int(stato["lot_id"]) != lot_id:
+            # Cambio/chiusura lotto: solo in questo caso serve un full-run
+            # per aggiornare anche la card e il watcher di attesa.
+            st.rerun(scope="app")
+            return
+    render_maschera_offerta_squadra_v287(league_id, team_id, stato)
+    pending = st.session_state.get("_v354_bid_pending_perf")
+    if isinstance(pending, dict):
+        elapsed_ms = (time.perf_counter() - pending["start"]) * 1000
+        print(
+            "[V355 PERF OFFER FRAGMENT] callback={:.0f}ms total_server={:.0f}ms ".format(
+                pending.get("callback_ms", 0), elapsed_ms
+            ), flush=True,
+        )
+        st.session_state["_v354_bid_pending_perf"] = None
+
+
 def render_bidding_inline_asta_v126():
     """
     V250 - ASTA SQUADRA: maschera sempre visibile durante il lotto OPEN.
@@ -37001,7 +37039,7 @@ def render_bidding_inline_asta_v126():
 
     # V266: asset/CSS statici fuori dal fragment; i click ritrasmettono solo i controlli.
     render_stile_maschera_offerta_v266()
-    render_maschera_offerta_squadra_v287(league_id,team_id,stato)
+    render_maschera_offerta_live_v355(league_id,team_id,stato)
 
     # V291 - sincronizzazione chiusura solo in RAM: zero query periodiche SQUADRA.
     watcher_chiusura_squadra_v291(league_id,stato["lot_id"])
