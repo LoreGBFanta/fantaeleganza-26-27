@@ -33479,6 +33479,7 @@ def watcher_chiusura_squadra_v291(league_id,lot_id):
 
 
 def callback_apri_lotto_v133(league_id, player_id, nome, squadra_reale='', ruolo_mantra=''):
+    _v349_t0=time.perf_counter()
     try:
         _v276_lot_id = apri_lotto_banditore(
             int(league_id),
@@ -33492,6 +33493,10 @@ def callback_apri_lotto_v133(league_id, player_id, nome, squadra_reale='', ruolo
             "squadra": str(squadra_reale or ""),
             "ruolo_mantra": str(ruolo_mantra or ""),
         }
+        # V349: lo snapshot vuoto è già autorevole al ritorno dell'INSERT.
+        # Il primo rendering del fragment evita una SELECT Turso ridondante;
+        # dal tick successivo si torna alla lettura live V282 (offerte incluse).
+        st.session_state[f"_v349_first_live_{int(league_id)}"] = int(_v276_lot_id)
         # V292 - comunica il nuovo lotto OPEN a tutte le SQUADRE.
         pubblica_evento_asta_v291(league_id,_v276_lot_id,"OPEN")
         invalida_cache_banditore_v156(league_id)
@@ -33499,6 +33504,7 @@ def callback_apri_lotto_v133(league_id, player_id, nome, squadra_reale='', ruolo
             f"Asta aperta su {nome}."
         )
         st.session_state.pop("auctioneer_error", None)
+        print(f"[V349 PERF] APRI commit+callback {1000*(time.perf_counter()-_v349_t0):.0f} ms",flush=True)
     except Exception as errore:
         st.session_state["auctioneer_error"] = str(errore)
 
@@ -34466,6 +34472,7 @@ def callback_chiudi_assegna_v133(
     nome,
     nome_team_hint=""
 ):
+    _v349_t0=time.perf_counter()
     try:
         esito = assegna_lotto_migliore_v148(
             int(league_id),
@@ -34487,6 +34494,7 @@ def callback_chiudi_assegna_v133(
         pubblica_evento_asta_v291(league_id,lot_id,"ASSIGNED")
         st.session_state.pop("auctioneer_error", None)
 
+        print(f"[V349 PERF] ASSEGNA commit+callback {1000*(time.perf_counter()-_v349_t0):.0f} ms",flush=True)
         # V270 - transizione LIVE -> IDLE: ricostruisce Gestione Asta e i controlli di navigazione.
         st.rerun(scope="app")
 
@@ -34990,6 +34998,24 @@ def render_banditore_lotto_live_v244(league_id, lot_id):
     league_id=int(league_id)
     lot_id=int(lot_id)
 
+    # V349 - solo al primo disegno del lotto appena aperto: la transizione
+    # V276 ha già fornito lo snapshot iniziale. Non ricontattare Turso prima
+    # di mostrare la card. Il tick automatico successivo legge lo stato reale.
+    _first_key=f"_v349_first_live_{league_id}"
+    _first_lot=st.session_state.pop(_first_key,None)
+    if _first_lot is not None and int(_first_lot)==lot_id:
+        st.markdown(
+            '<div class="fe-proj-bids-title">ULTIME OFFERTE</div>'
+            '<div style="padding:14px 16px;background:#f4f7fa;'
+            'border-radius:10px;color:#64748b;font-weight:700">'
+            'In attesa delle offerte…</div>',
+            unsafe_allow_html=True,
+        )
+        # Nessun pulsante di chiusura finché non arriva il primo snapshot
+        # autorevole: impedisce un comando basato su un dato potenzialmente
+        # superato da un'offerta inviata da un'altra sessione.
+        return
+
     try:
         live=snapshot_banditore_live_v133(league_id)
     except Exception as errore:
@@ -35145,7 +35171,9 @@ def render_banditore_asta():
         snap=_nav_snapshot
     else:
         try:
+            _v349_idle_t0=time.perf_counter()
             snap = snapshot_banditore_idle_v156(league_id)
+            print(f"[V349 PERF] IDLE snapshot {1000*(time.perf_counter()-_v349_idle_t0):.0f} ms",flush=True)
         except Exception as errore:
             st.error("Impossibile preparare il prossimo lotto: " + str(errore))
             return
