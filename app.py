@@ -17090,10 +17090,10 @@ def carica_listone_centrale_lega(league_id, forza=False):
 
 
 def sincronizza_listone_lega_nel_workspace(league_id, team_id):
-    """
-    Copia/aggiorna il catalogo centrale della lega nel workspace locale del team.
-    Non sovrascrive gli stati MIO/prezzi della rosa; quelli vengono riallineati
-    separatamente da rosters.
+    """V352: sincronizzazione SQL set-based, senza un UPSERT remoto per giocatore.
+
+    Preserva stato/prezzo_acquisto dei giocatori esistenti; aggiunge solo i nuovi
+    come DISPONIBILE. La tabella workspace rimane quella già creata dall'app.
     """
     league_id = int(league_id)
     team_id = int(team_id)
@@ -17109,46 +17109,39 @@ def sincronizza_listone_lega_nel_workspace(league_id, team_id):
         if not cur.fetchone():
             return False
 
-        cur.execute("""
+        # Un unico comando lato database al posto di ~534 round-trip per team.
+        # Il WHERE finale rende non ambigua la clausola ON CONFLICT in SQLite.
+        cur.execute(f"""
+            INSERT INTO {tab} (
+                id,ruolo_classico,ruolo_mantra,nome,squadra,
+                quotazione_attuale,quotazione_iniziale,differenza,
+                quotazione_attuale_mantra,quotazione_iniziale_mantra,
+                differenza_mantra,fvm,fvm_mantra,stato,
+                prezzo_acquisto,ultimo_aggiornamento
+            )
             SELECT
                 player_id,ruolo_classico,ruolo_mantra,nome,squadra,
                 quotazione_attuale,quotazione_iniziale,differenza,
                 quotazione_attuale_mantra,quotazione_iniziale_mantra,
-                differenza_mantra,fvm,fvm_mantra
+                differenza_mantra,fvm,fvm_mantra,'DISPONIBILE',
+                NULL,CURRENT_TIMESTAMP
             FROM league_player_catalog
             WHERE league_id=?
+            ON CONFLICT(id) DO UPDATE SET
+                ruolo_classico=excluded.ruolo_classico,
+                ruolo_mantra=excluded.ruolo_mantra,
+                nome=excluded.nome,
+                squadra=excluded.squadra,
+                quotazione_attuale=excluded.quotazione_attuale,
+                quotazione_iniziale=excluded.quotazione_iniziale,
+                differenza=excluded.differenza,
+                quotazione_attuale_mantra=excluded.quotazione_attuale_mantra,
+                quotazione_iniziale_mantra=excluded.quotazione_iniziale_mantra,
+                differenza_mantra=excluded.differenza_mantra,
+                fvm=excluded.fvm,
+                fvm_mantra=excluded.fvm_mantra,
+                ultimo_aggiornamento=CURRENT_TIMESTAMP
         """, (league_id,))
-        righe = cur.fetchall() or []
-
-        for r in righe:
-            cur.execute(
-                f"""
-                INSERT INTO {tab} (
-                    id,ruolo_classico,ruolo_mantra,nome,squadra,
-                    quotazione_attuale,quotazione_iniziale,differenza,
-                    quotazione_attuale_mantra,quotazione_iniziale_mantra,
-                    differenza_mantra,fvm,fvm_mantra,stato,
-                    prezzo_acquisto,ultimo_aggiornamento
-                )
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'DISPONIBILE',NULL,CURRENT_TIMESTAMP)
-                ON CONFLICT(id) DO UPDATE SET
-                    ruolo_classico=excluded.ruolo_classico,
-                    ruolo_mantra=excluded.ruolo_mantra,
-                    nome=excluded.nome,
-                    squadra=excluded.squadra,
-                    quotazione_attuale=excluded.quotazione_attuale,
-                    quotazione_iniziale=excluded.quotazione_iniziale,
-                    differenza=excluded.differenza,
-                    quotazione_attuale_mantra=excluded.quotazione_attuale_mantra,
-                    quotazione_iniziale_mantra=excluded.quotazione_iniziale_mantra,
-                    differenza_mantra=excluded.differenza_mantra,
-                    fvm=excluded.fvm,
-                    fvm_mantra=excluded.fvm_mantra,
-                    ultimo_aggiornamento=CURRENT_TIMESTAMP
-                """,
-                tuple(r)
-            )
-
         conn.commit()
         return True
     finally:
