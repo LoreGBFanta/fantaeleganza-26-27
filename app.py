@@ -29745,13 +29745,16 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
     team_id = int(team_id)
     amount = round(float(amount), 2)
 
+    _v353_t0 = time.perf_counter()
     assicura_schema_timer_v129(league_id)
+    _v353_schema_ms = (time.perf_counter() - _v353_t0) * 1000
     user_id = int(st.session_state.get("auth_user_id") or 0)
 
     # V181 - una sola connessione remota per validazione + scrittura del bid.
     # Evita un secondo handshake/checkout DB a ogni click di offerta.
     conn = _portal_raw_connection()
     cur = conn.cursor()
+    _v353_conn_ms = (time.perf_counter() - _v353_t0) * 1000 - _v353_schema_ms
 
     try:
         # V239 - una sola lettura DB per TUTTI i vincoli del bid.
@@ -29759,6 +29762,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
         info = calcola_vincoli_offerta_team_multilega_v239_fast(
             league_id, lot_id, team_id, user_id, conn
         )
+        _v353_validation_ms = (time.perf_counter() - _v353_t0) * 1000 - _v353_schema_ms - _v353_conn_ms
         if not info.get("can_bid", False):
             raise ValueError(info.get("motivo") or "Non puoi effettuare questa offerta.")
         if amount + 1e-9 < float(info["minimo"]):
@@ -29779,6 +29783,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
         current_bid=float(info["best_before"] or 0)
         version=int(info["version"])
 
+        _v353_before_cas = time.perf_counter()
         # CAS: aggiorna solo se la versione letta è ancora quella corrente.
         cur.execute("""
             UPDATE auction_lots
@@ -29810,6 +29815,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             amount
         ))
         check = cur.fetchone()
+        _v353_cas_ms = (time.perf_counter() - _v353_before_cas) * 1000
 
         if (
             not check
@@ -29824,6 +29830,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
                 "un'offerta uguale o superiore. Inserisci un importo più alto e riprova."
             )
 
+        _v353_before_history = time.perf_counter()
         # Solo dopo aver vinto il CAS viene registrato lo storico del bid.
         cur.execute("""
             INSERT INTO bids (
@@ -29853,7 +29860,19 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             }, ensure_ascii=False)
         ))
 
+        _v353_before_commit = time.perf_counter()
         conn.commit()
+        _v353_total_ms = (time.perf_counter() - _v353_t0) * 1000
+        print(
+            "[V353 PERF BID] schema={:.0f}ms conn={:.0f}ms "
+            "validazione={:.0f}ms CAS={:.0f}ms storico_audit={:.0f}ms "
+            "commit={:.0f}ms totale={:.0f}ms".format(
+                _v353_schema_ms, _v353_conn_ms, _v353_validation_ms,
+                _v353_cas_ms, ( _v353_before_commit - _v353_before_history ) * 1000,
+                ( time.perf_counter() - _v353_before_commit ) * 1000,
+                _v353_total_ms,
+            ), flush=True,
+        )
 
         return {
             **info,
@@ -36918,10 +36937,14 @@ def render_bidding_inline_asta_v126():
     t0 = time.perf_counter()
 
     try:
+        _v353_snapshot_t0 = time.perf_counter()
         stato = snapshot_lotto_live_v132(
             league_id,
             team_id
         )
+        _v353_snapshot_ms = (time.perf_counter() - _v353_snapshot_t0) * 1000
+        if _v353_snapshot_ms >= 250:
+            print(f"[V353 PERF ASTA] snapshot={_v353_snapshot_ms:.0f}ms", flush=True)
     except Exception as errore:
         st.warning("Impossibile leggere l'asta live: " + str(errore))
         return
