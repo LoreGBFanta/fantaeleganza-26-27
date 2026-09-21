@@ -36329,7 +36329,10 @@ def callback_bid_rapido_v130(league_id, lot_id, team_id, amount):
         # V356: il CAS ha gia confermato e committato lo stato autorevole.
         # Consegna l'esito al fragment per evitare una seconda lettura Turso
         # SOLO quando lo snapshot locale e la versione CAS coincidono.
-        st.session_state["_v356_committed_bid"] = {
+        # V358: consegna per lotto/squadra, senza un unico slot globale
+        # che un refresh non collegato puo' consumare accidentalmente.
+        _v358_event_key = f"_v358_bid_event_{int(league_id)}_{int(team_id)}_{int(lot_id)}"
+        st.session_state[_v358_event_key] = {
             "league_id": int(league_id),
             "lot_id": int(lot_id),
             "team_id": int(team_id),
@@ -36351,6 +36354,9 @@ def callback_bid_rapido_v130(league_id, lot_id, team_id, amount):
             "ts": time.time(),
         }
     except Exception as errore:
+        st.session_state.pop(
+            f"_v358_bid_event_{int(league_id)}_{int(team_id)}_{int(lot_id)}", None
+        )
         _salva_esito_bid_v130(False, str(errore))
     finally:
         _v354_cb_ms = (time.perf_counter() - _v354_cb_t0) * 1000
@@ -36949,17 +36955,26 @@ def render_maschera_offerta_live_v355(league_id, team_id, stato_iniziale):
     lot_id = int(stato_iniziale["lot_id"])
     guard = f"_v355_mask_initialized_{league_id}_{team_id}_{lot_id}"
     cache_key = f"_v357_authoritative_state_{league_id}_{team_id}_{lot_id}"
+    event_key = f"_v358_bid_event_{league_id}_{team_id}_{lot_id}"
     if not st.session_state.get(guard):
         st.session_state[guard] = True
         stato = stato_iniziale
         st.session_state[cache_key] = stato
+        # Un eventuale callback avvenuto prima del primo disegno ha gia'
+        # uno snapshot del parent: non proiettare sopra uno stato nuovo.
+        _first_event = st.session_state.get(event_key)
+        if (isinstance(_first_event, dict)
+            and int(stato.get("version", -1)) >= int(_first_event.get("version", 0))):
+            st.session_state.pop(event_key, None)
+            print("[V358 PERF BID HANDOFF] source=parent_snapshot "
+                  f"version={int(stato.get('version', -1))}", flush=True)
     else:
         # V357: il parent puo' essere gia' stato ricalcolato oppure puo'
         # contenere la versione del lotto precedente a un altro rilancio.
         # Il fast path e' ammesso solo su uno stato locale che coincide
         # esattamente con la versione PRE-CAS realmente validata dal DB.
         _v357_t0 = time.perf_counter()
-        committed = st.session_state.pop("_v356_committed_bid", None)
+        committed = st.session_state.get(event_key)
         cached = st.session_state.get(cache_key)
         base = None
         reason = "no_committed_result"
@@ -36986,6 +37001,8 @@ def render_maschera_offerta_live_v355(league_id, team_id, stato_iniziale):
                 if base is None:
                     reason = "no_matching_pre_cas_snapshot"
         if base is not None:
+            # Consuma l'evento solo quando e' stato effettivamente usato.
+            st.session_state.pop(event_key, None)
             stato = dict(base)
             stato["current_bid"] = float(committed["amount"])
             stato["current_team_id"] = team_id
@@ -37007,7 +37024,7 @@ def render_maschera_offerta_live_v355(league_id, team_id, stato_iniziale):
                     stato["current_team"] = str(o.get("Squadra") or "")
             stato["offerte"] = offerte
             st.session_state[cache_key] = stato
-            print("[V357 PERF POST BID] source=committed_CAS "
+            print("[V358 PERF BID HANDOFF] source=committed_CAS "
                   f"elapsed={(time.perf_counter()-_v357_t0)*1000:.0f}ms", flush=True)
         else:
             try:
@@ -37015,8 +37032,18 @@ def render_maschera_offerta_live_v355(league_id, team_id, stato_iniziale):
             except Exception as errore:
                 st.warning("Impossibile leggere l'asta live: " + str(errore))
                 return
-            print("[V357 PERF POST BID] source=authoritative_snapshot "
-                  f"reason={reason} elapsed={(time.perf_counter()-_v357_t0)*1000:.0f}ms", flush=True)
+            if isinstance(committed, dict):
+                # Se il parent ha gia' letto una versione pari o piu' recente,
+                # il risultato del callback e' superato: niente replay futuro.
+                if reason == "parent_already_current":
+                    st.session_state.pop(event_key, None)
+                print("[V358 PERF BID HANDOFF] source=authoritative_snapshot "
+                      f"reason={reason} elapsed={(time.perf_counter()-_v357_t0)*1000:.0f}ms", flush=True)
+            else:
+                # Un rerun ordinario del fragment non e' un invio offerta:
+                # non etichettarlo come fallimento del percorso rapido.
+                print("[V358 PERF FRAGMENT REFRESH] source=authoritative_snapshot "
+                      f"elapsed={(time.perf_counter()-_v357_t0)*1000:.0f}ms", flush=True)
             if stato is None or int(stato["lot_id"]) != lot_id:
                 st.rerun(scope="app")
                 return
