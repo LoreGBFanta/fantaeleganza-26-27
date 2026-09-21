@@ -36310,6 +36310,11 @@ def callback_bid_rapido_v130(league_id, lot_id, team_id, amount):
     Callback robusto: viene eseguito prima del rerender Streamlit.
     In questo modo il click non viene perso dal refresh automatico.
     """
+    # V354 - misura l'intero callback, senza query o modifiche al motore.
+    _v354_cb_t0 = time.perf_counter()
+    st.session_state["_v354_bid_pending_perf"] = {
+        "lot_id": int(lot_id), "start": _v354_cb_t0,
+    }
     try:
         esito = inserisci_offerta_team_multilega(
             int(league_id),
@@ -36335,6 +36340,10 @@ def callback_bid_rapido_v130(league_id, lot_id, team_id, amount):
         }
     except Exception as errore:
         _salva_esito_bid_v130(False, str(errore))
+    finally:
+        _v354_cb_ms = (time.perf_counter() - _v354_cb_t0) * 1000
+        st.session_state["_v354_bid_pending_perf"]["callback_ms"] = _v354_cb_ms
+        print(f"[V354 PERF CALLBACK] callback={_v354_cb_ms:.0f}ms", flush=True)
 
 
 def callback_bid_personalizzato_v130(
@@ -36935,6 +36944,9 @@ def render_bidding_inline_asta_v126():
     league_id = int(league_id)
     team_id = int(team_id)
     t0 = time.perf_counter()
+    _v354_pending = st.session_state.get("_v354_bid_pending_perf")
+    if isinstance(_v354_pending, dict):
+        _v354_pending["asta_start_ms"] = (t0 - _v354_pending["start"]) * 1000
 
     try:
         _v353_snapshot_t0 = time.perf_counter()
@@ -36997,6 +37009,19 @@ def render_bidding_inline_asta_v126():
     # V291 - nessun watcher DB server-side concorrente:
     # preserva il fast path V266 dei pulsanti e di INVIA OFFERTA.
     elapsed = time.perf_counter() - t0
+    if isinstance(_v354_pending, dict):
+        _v354_total_ms = (time.perf_counter() - _v354_pending["start"]) * 1000
+        print(
+            "[V354 PERF OFFER FLOW] callback={:.0f}ms pre_asta={:.0f}ms "
+            "snapshot={:.0f}ms asta_render={:.0f}ms server_to_asta_end={:.0f}ms".format(
+                _v354_pending.get("callback_ms", 0),
+                max(0, _v354_pending.get("asta_start_ms", 0) - _v354_pending.get("callback_ms", 0)),
+                _v353_snapshot_ms,
+                max(0, elapsed * 1000 - _v353_snapshot_ms),
+                _v354_total_ms,
+            ), flush=True,
+        )
+        st.session_state["_v354_bid_pending_perf"] = None
     if "ADMIN" in RUOLI_ATTIVI and elapsed >= 0.75:
         st.caption(f"⏱ Live ASTA: {elapsed:.2f} s")
 
@@ -39236,6 +39261,9 @@ st.session_state["_ml38_last_full_run_seconds"] = round(
     float(_ml38_full_run_elapsed), 3
 )
 
+_v354_pre_page_ms = (time.perf_counter() - _ml38_full_run_start) * 1000
+if isinstance(st.session_state.get("_v354_bid_pending_perf"), dict):
+    print(f"[V354 PERF FULL RUN] pre_page={_v354_pre_page_ms:.0f}ms", flush=True)
 render_navigazione_e_pagina()
 
 
