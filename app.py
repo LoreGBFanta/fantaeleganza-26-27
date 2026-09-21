@@ -36326,6 +36326,17 @@ def callback_bid_rapido_v130(league_id, lot_id, team_id, amount):
             True,
             f"Offerta di {float(amount):g} crediti registrata."
         )
+        # V356: il CAS ha gia confermato e committato lo stato autorevole.
+        # Consegna l'esito al fragment per evitare una seconda lettura Turso
+        # SOLO quando lo snapshot locale e la versione CAS coincidono.
+        st.session_state["_v356_committed_bid"] = {
+            "league_id": int(league_id),
+            "lot_id": int(lot_id),
+            "team_id": int(team_id),
+            "amount": float(amount),
+            "version": int(esito.get("version", 0)),
+            "incremento": float(esito.get("incremento", 1) or 1),
+        }
         st.session_state[
             f"_v130_last_bid_{int(league_id)}_{int(team_id)}"
         ] = {
@@ -36940,18 +36951,49 @@ def render_maschera_offerta_live_v355(league_id, team_id, stato_iniziale):
         st.session_state[guard] = True
         stato = stato_iniziale
     else:
-        # Nessuna lettura aggiuntiva al caricamento iniziale; sul click
-        # si rilegge lo stato reale, senza ricostruire navbar e workspace.
-        try:
-            stato = snapshot_lotto_live_v132(league_id, team_id)
-        except Exception as errore:
-            st.warning("Impossibile leggere l'asta live: " + str(errore))
-            return
-        if stato is None or int(stato["lot_id"]) != lot_id:
-            # Cambio/chiusura lotto: solo in questo caso serve un full-run
-            # per aggiornare anche la card e il watcher di attesa.
-            st.rerun(scope="app")
-            return
+        # V356: la conferma del CAS e gia autorevole e committata.
+        # Proiettiamo soltanto il prezzo e il leader nel fragment locale
+        # se la versione del parent coincide ESATTAMENTE con quella pre-CAS.
+        # In ogni altro caso, inclusi errori o offerte concorrenti gia viste,
+        # rimane la lettura autorevole Turso della V355.
+        _v356_t0 = time.perf_counter()
+        committed = st.session_state.pop("_v356_committed_bid", None)
+        use_committed = (
+            isinstance(committed, dict)
+            and int(committed.get("league_id", -1)) == league_id
+            and int(committed.get("lot_id", -1)) == lot_id
+            and int(committed.get("team_id", -1)) == team_id
+            and int(committed.get("version", 0)) == int(stato_iniziale.get("version", -1)) + 1
+            and str(stato_iniziale.get("stato") or "").upper() == "OPEN"
+            and isinstance(stato_iniziale.get("team"), dict)
+        )
+        if use_committed:
+            stato = dict(stato_iniziale)
+            stato["current_bid"] = float(committed["amount"])
+            stato["current_team_id"] = team_id
+            stato["version"] = int(committed["version"])
+            stato["bid_count"] = int(stato.get("bid_count") or 0) + 1
+            team = dict(stato_iniziale["team"])
+            team["can_bid"] = False
+            team["motivo"] = "Sei già il miglior offerente."
+            team["offerta_minima"] = round(
+                float(committed["amount"]) + float(committed["incremento"]), 2
+            )
+            stato["team"] = team
+            print("[V356 PERF POST BID] source=committed_CAS "
+                  f"elapsed={(time.perf_counter()-_v356_t0)*1000:.0f}ms", flush=True)
+        else:
+            try:
+                stato = snapshot_lotto_live_v132(league_id, team_id)
+            except Exception as errore:
+                st.warning("Impossibile leggere l'asta live: " + str(errore))
+                return
+            print("[V356 PERF POST BID] source=authoritative_snapshot "
+                  f"elapsed={(time.perf_counter()-_v356_t0)*1000:.0f}ms", flush=True)
+            if stato is None or int(stato["lot_id"]) != lot_id:
+                # Cambio/chiusura lotto: serve un full-run per card e watcher.
+                st.rerun(scope="app")
+                return
     render_maschera_offerta_squadra_v287(league_id, team_id, stato)
     pending = st.session_state.get("_v354_bid_pending_perf")
     if isinstance(pending, dict):
