@@ -211,6 +211,21 @@ table, th, td,
     font-family:"Century Gothic","Avenir Next","Montserrat","Trebuchet MS",Arial,sans-serif !important;
 }
 
+/* V347 - login: ripristina il font dell'icona mostra/nascondi password.
+   La tipografia Century Gothic non deve trasformare la ligatura visibility
+   in testo. Limitato ai pulsanti interni dei campi password. */
+[data-testid="stTextInput"] button [data-testid="stIconMaterial"],
+[data-testid="stTextInput"] button span[class*="material-symbol"],
+[data-testid="stTextInput"] button span[class*="material-icon"],
+[data-testid="stTextInput"] button span {
+    font-family:"Material Symbols Rounded","Material Symbols Outlined","Material Icons" !important;
+    font-feature-settings:"liga" 1 !important;
+    -webkit-font-feature-settings:"liga" 1 !important;
+    font-weight:normal !important;
+    font-style:normal !important;
+    white-space:nowrap !important;
+}
+
 /* Anche i componenti HTML custom sviluppati nelle versioni precedenti */
 .v306-section-text,
 .nav-title,
