@@ -959,7 +959,14 @@ def crea_lega_da_portale(
             )
         )
 
+        nome_squadra = str(squadra.get("nome_squadra") or "").strip()
+
         if not username:
+            raise ValueError(
+                f"Manca lo username della Squadra {posizione}."
+            )
+
+        if not nome_squadra:
             raise ValueError(
                 f"Manca il nome della Squadra {posizione}."
             )
@@ -975,6 +982,9 @@ def crea_lega_da_portale(
             **squadra,
             "username":
                 username,
+
+            "nome_squadra":
+                nome_squadra,
 
             "password_hash":
                 password_hash_sicuro(
@@ -997,8 +1007,12 @@ def crea_lega_da_portale(
         )
     ):
         raise ValueError(
-            "I nomi squadra/username devono essere tutti diversi."
+            "Gli username devono essere tutti diversi."
         )
+
+    nomi_norm = [x["nome_squadra"].casefold() for x in squadre_valide]
+    if len(nomi_norm) != len(set(nomi_norm)):
+        raise ValueError("I nomi delle squadre devono essere tutti diversi nella lega.")
 
     if not any(
         bool(
@@ -1228,7 +1242,7 @@ def crea_lega_da_portale(
             """, (
                 league_id,
                 squadra[
-                    "username"
+                    "nome_squadra"
                 ],
                 user_id,
                 posizione
@@ -1307,6 +1321,9 @@ def crea_lega_da_portale(
                                     x[
                                         "username"
                                     ],
+
+                                "nome_squadra":
+                                    x["nome_squadra"],
 
                                 "admin":
                                     bool(
@@ -2212,7 +2229,7 @@ def render_portale_iniziale():
             ):
 
                 username = st.text_input(
-                    "Username / Nome squadra"
+                    "Username"
                 )
 
                 password = st.text_input(
@@ -2483,11 +2500,12 @@ def render_portale_iniziale():
             render_help_modificatori()
 
             st.markdown(
-                "#### 2 · Squadre, password e ruoli"
+                "#### 2 · Account, nomi squadra e ruoli"
             )
 
             st.caption(
-                "Il nome squadra sarà anche lo username per il primo accesso."
+                "Lo username serve esclusivamente per accedere; il nome squadra "
+                "è quello mostrato in asta, classifiche, rose e altre sezioni."
             )
 
             squadre = []
@@ -2502,24 +2520,17 @@ def render_portale_iniziale():
                     f"**Squadra {indice + 1}**"
                 )
 
-                q1, q2, q3, q4 = st.columns(
-                    [
-                        2.4,
-                        2.0,
-                        1.1,
-                        1.1
-                    ]
+                q1, q2, q3, q4, q5 = st.columns(
+                    [2.0, 2.0, 2.4, 1.1, 1.1]
                 )
 
                 with q1:
-
                     user_team = st.text_input(
-                        "Nome squadra / Username",
+                        "Username",
                         key=f"ml05_team_user_{indice}"
                     )
 
                 with q2:
-
                     pass_team = st.text_input(
                         "Password iniziale",
                         type="password",
@@ -2527,13 +2538,18 @@ def render_portale_iniziale():
                     )
 
                 with q3:
+                    nome_team = st.text_input(
+                        "Nome squadra",
+                        key=f"ml05_team_nome_{indice}"
+                    )
 
+                with q4:
                     banditore = st.checkbox(
                         "Banditore",
                         key=f"ml05_team_band_{indice}"
                     )
 
-                with q4:
+                with q5:
 
                     admin = st.checkbox(
                         "Admin",
@@ -2546,6 +2562,9 @@ def render_portale_iniziale():
                 squadre.append({
                     "username":
                         user_team,
+
+                    "nome_squadra":
+                        nome_team,
 
                     "password":
                         pass_team,
