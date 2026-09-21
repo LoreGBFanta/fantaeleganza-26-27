@@ -29732,6 +29732,68 @@ def verifica_offerta_team_multilega(
 
 
 
+def _v360_prepare_bid_audit_trigger():
+    """One-time per-session migration; fallback keeps the original bid path intact.
+
+    Audit remains in the SAME DB statement/transaction as the bids INSERT.
+    Legacy INSERTs into bids do not trigger audit (payload NULL).
+    """
+    key = "_v360_bid_audit_trigger_ready"
+    if key in st.session_state:
+        return bool(st.session_state[key])
+
+    conn = _portal_raw_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("PRAGMA table_info(bids)")
+        cols = {str(row[1]) for row in (cur.fetchall() or [])}
+        if "audit_payload_json" not in cols:
+            try:
+                cur.execute("ALTER TABLE bids ADD COLUMN audit_payload_json TEXT")
+                conn.commit()
+            except Exception:
+                # Concurrent first-session migration may have added the column.
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                cur.execute("PRAGMA table_info(bids)")
+                cols = {str(row[1]) for row in (cur.fetchall() or [])}
+                if "audit_payload_json" not in cols:
+                    raise
+        cur.execute("""
+            CREATE TRIGGER IF NOT EXISTS trg_v360_bid_audit
+            AFTER INSERT ON bids
+            WHEN NEW.audit_payload_json IS NOT NULL
+            BEGIN
+                INSERT INTO audit_log (
+                    league_id,user_id,team_id,azione,entita,entita_id,
+                    dettagli_json,created_at
+                ) VALUES (
+                    NEW.league_id,NEW.user_id,NEW.team_id,
+                    'BID_PLACED','AUCTION_LOT',CAST(NEW.lot_id AS TEXT),
+                    NEW.audit_payload_json,CURRENT_TIMESTAMP
+                );
+            END
+        """)
+        conn.commit()
+        st.session_state[key] = True
+        print("[V360 BID AUDIT] mode=single_insert_trigger", flush=True)
+        return True
+    except Exception as error:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        # No change to the legacy path if the migration cannot be enabled.
+        st.session_state[key] = False
+        print("[V360 BID AUDIT] mode=legacy reason={}".format(
+            type(error).__name__), flush=True)
+        return False
+    finally:
+        _portal_close(conn)
+
+
 def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
     """
     V113 - Bidding atomico con optimistic locking.
@@ -29749,6 +29811,7 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
     assicura_schema_timer_v129(league_id)
     _v353_schema_ms = (time.perf_counter() - _v353_t0) * 1000
     user_id = int(st.session_state.get("auth_user_id") or 0)
+    _v360_trigger_ready = _v360_prepare_bid_audit_trigger()
 
     # V181 - una sola connessione remota per validazione + scrittura del bid.
     # Evita un secondo handshake/checkout DB a ogni click di offerta.
@@ -29831,42 +29894,59 @@ def inserisci_offerta_team_multilega(league_id, lot_id, team_id, amount):
             )
 
         _v353_before_history = time.perf_counter()
-        # Solo dopo aver vinto il CAS viene registrato lo storico del bid.
-        cur.execute("""
-            INSERT INTO bids (
-                league_id,lot_id,team_id,user_id,amount,created_at
-            )
-            VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
-        """, (league_id, lot_id, team_id, user_id, amount))
+        # V360: JSON identico al percorso precedente; nessun campo audit perso.
+        _v360_audit_json = json.dumps({
+            "amount": amount,
+            "player_id": info["player_id"],
+            "previous_bid": current_bid,
+            "version_before": version,
+            "version_after": version + 1,
+            "riserva_minima": info["riserva_minima"],
+        }, ensure_ascii=False)
 
-        _v359_bids_ms = (time.perf_counter() - _v353_before_history) * 1000
-        _v359_before_audit = time.perf_counter()
-        cur.execute("""
-            INSERT INTO audit_log (
-                league_id,user_id,team_id,azione,entita,entita_id,
-                dettagli_json,created_at
-            )
-            VALUES (?,?,?,'BID_PLACED','AUCTION_LOT',?,?,CURRENT_TIMESTAMP)
-        """, (
-            league_id,
-            user_id,
-            team_id,
-            str(lot_id),
-            json.dumps({
-                "amount": amount,
-                "player_id": info["player_id"],
-                "previous_bid": current_bid,
-                "version_before": version,
-                "version_after": version + 1,
-                "riserva_minima": info["riserva_minima"],
-            }, ensure_ascii=False)
-        ))
+        if _v360_trigger_ready:
+            # Il trigger AFTER INSERT scrive audit_log atomicamente nello stesso
+            # statement: se l'audit fallisce, fallisce anche l'INSERT bids.
+            cur.execute("""
+                INSERT INTO bids (
+                    league_id,lot_id,team_id,user_id,amount,created_at,
+                    audit_payload_json
+                ) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP,?)
+            """, (league_id, lot_id, team_id, user_id, amount,
+                  _v360_audit_json))
+            _v359_bids_ms = (time.perf_counter() - _v353_before_history) * 1000
+            _v359_before_audit = time.perf_counter()
+        else:
+            # Fallback conservativo per DB che non supportano la migrazione.
+            cur.execute("""
+                INSERT INTO bids (
+                    league_id,lot_id,team_id,user_id,amount,created_at
+                ) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+            """, (league_id, lot_id, team_id, user_id, amount))
+            _v359_bids_ms = (time.perf_counter() - _v353_before_history) * 1000
+            _v359_before_audit = time.perf_counter()
+            cur.execute("""
+                INSERT INTO audit_log (
+                    league_id,user_id,team_id,azione,entita,entita_id,
+                    dettagli_json,created_at
+                ) VALUES (?,?,?,'BID_PLACED','AUCTION_LOT',?,?,CURRENT_TIMESTAMP)
+            """, (league_id, user_id, team_id, str(lot_id),
+                  _v360_audit_json))
 
         _v353_before_commit = time.perf_counter()
         _v359_audit_ms = (_v353_before_commit - _v359_before_audit) * 1000
         conn.commit()
         _v359_commit_ms = (time.perf_counter() - _v353_before_commit) * 1000
         _v353_total_ms = (time.perf_counter() - _v353_t0) * 1000
+        print(
+            "[V360 PERF BID WRITE] mode={} validation={:.0f}ms cas={:.0f}ms "
+            "bids_with_audit={:.0f}ms separate_audit={:.0f}ms "
+            "commit={:.0f}ms total={:.0f}ms".format(
+                "trigger" if _v360_trigger_ready else "legacy",
+                _v353_validation_ms, _v353_cas_ms, _v359_bids_ms,
+                _v359_audit_ms, _v359_commit_ms, _v353_total_ms,
+            ), flush=True,
+        )
         print(
             "[V359 PERF BID DETAIL] validation={:.0f}ms cas={:.0f}ms "
             "bids={:.0f}ms audit={:.0f}ms commit={:.0f}ms total={:.0f}ms".format(
