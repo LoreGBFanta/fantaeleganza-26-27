@@ -226,6 +226,31 @@ table, th, td,
     white-space:nowrap !important;
 }
 
+/* V348 - ripristina le icone Material anche negli expander Streamlit.
+   Il selettore globale V311 su span/div sostituiva il font delle ligature
+   (es. arrow_right) e sovrapponeva il testo del titolo. */
+[data-testid="stIconMaterial"],
+[data-testid="stIconMaterial"] *,
+[data-testid="stExpander"] summary [data-testid="stIconMaterial"],
+[data-testid="stExpander"] summary span[class*="material-symbol"],
+[data-testid="stExpander"] summary span[class*="material-icon"],
+details > summary [data-testid="stIconMaterial"] {
+    font-family:"Material Symbols Rounded","Material Symbols Outlined","Material Icons" !important;
+    font-feature-settings:"liga" 1 !important;
+    -webkit-font-feature-settings:"liga" 1 !important;
+    font-weight:normal !important;
+    font-style:normal !important;
+    letter-spacing:normal !important;
+    text-transform:none !important;
+    white-space:nowrap !important;
+    direction:ltr !important;
+    -webkit-font-smoothing:antialiased !important;
+}
+[data-testid="stExpander"] summary [data-testid="stIconMaterial"],
+details > summary [data-testid="stIconMaterial"] {
+    flex-shrink:0 !important;
+}
+
 /* Anche i componenti HTML custom sviluppati nelle versioni precedenti */
 .v306-section-text,
 .nav-title,
